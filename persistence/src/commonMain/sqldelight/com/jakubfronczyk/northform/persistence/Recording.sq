@@ -1,0 +1,46 @@
+-- Schema v1 skeleton: the Swift D83 tables restated for SQLDelight (D12). Phase 0 step 6 fills the
+-- queries; lane C owns migrations (.sqm) from then on. Stream chunks are BLOB columns, codec in Kotlin.
+
+CREATE TABLE recording (
+    id TEXT NOT NULL PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'me',
+    type TEXT NOT NULL,                -- run | walk (v1.0)
+    label TEXT,
+    capture TEXT NOT NULL DEFAULT 'live',
+    state TEXT NOT NULL,               -- active | stopping | computing | saved
+    start_utc INTEGER NOT NULL,        -- epoch ms
+    tz_offset_s INTEGER NOT NULL,
+    end_utc INTEGER,
+    last_persisted_at INTEGER
+);
+
+CREATE TABLE event (
+    recording_id TEXT NOT NULL REFERENCES recording(id),
+    t INTEGER NOT NULL,                -- epoch ms
+    kind TEXT NOT NULL,                -- pause | resume | split | hrLost | gpsLost | bluetoothOff | stop | …
+    source TEXT NOT NULL,              -- auto | manual
+    payload BLOB
+);
+
+CREATE TABLE stream_chunk (
+    recording_id TEXT NOT NULL REFERENCES recording(id),
+    kind TEXT NOT NULL,                -- hr | gps
+    seq INTEGER NOT NULL,
+    t0 INTEGER NOT NULL,
+    count INTEGER NOT NULL,
+    codec TEXT NOT NULL,
+    payload BLOB NOT NULL,
+    PRIMARY KEY (recording_id, kind, seq)
+);
+
+CREATE TABLE sensor (
+    peripheral_id TEXT NOT NULL PRIMARY KEY,   -- CBPeripheral.identifier UUID (D8), not Polar's device id
+    name TEXT,
+    firmware TEXT
+);
+
+unfinished:
+SELECT * FROM recording WHERE state = 'active' LIMIT 1;
+
+insertRecording:
+INSERT INTO recording(id, type, state, start_utc, tz_offset_s) VALUES (?, ?, 'active', ?, ?);
