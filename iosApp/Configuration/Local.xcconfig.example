@@ -1,0 +1,3 @@
+// Copy to Local.xcconfig (gitignored) and set your free personal team id (Xcode ▸ Settings ▸ Accounts).
+DEVELOPMENT_TEAM = ABCDE12345
+CODE_SIGN_STYLE = Automatic
