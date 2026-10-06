@@ -1,0 +1,40 @@
+# Private planning (never published)
+docs/plans/
+CLAUDE.md
+.claude/skills/
+docs/agents/
+
+# Kotlin / Gradle
+.gradle/
+build/
+**/build/
+local.properties
+captures/
+.kotlin/
+
+# Compose Multiplatform / Kotlin Native
+*.klib
+
+# Android
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Xcode (the iOS app shell + the KMP framework it embeds)
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+iosApp/iosApp.xcodeproj/project.xcworkspace/
+iosApp/Configuration/Local.xcconfig
+
+# IDE
+.idea/
+*.iml
+.fleet/
+
+# macOS
+.DS_Store
+
+# Raw recorded runs (real places and dates): only anonymized fixtures are committed
+**/fixtures/private/
