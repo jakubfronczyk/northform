@@ -7,6 +7,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
@@ -50,6 +51,10 @@ class GattHeartRateSensor(
     private val discoveries = MutableSharedFlow<DiscoveredSensor>(extraBufferCapacity = 64)
     private val timeouts = MutableSharedFlow<SensorId>(extraBufferCapacity = 8)
     private val unauthorized = MutableStateFlow(false)
+    private val _diagnostics = MutableStateFlow(LinkDiagnostics())
+
+    /** Live view of the link for the spike screen / logs; derived from the state after every reduce. */
+    val diagnostics: StateFlow<LinkDiagnostics> = _diagnostics.asStateFlow()
 
     private var owner: Job? = null
 
@@ -61,10 +66,14 @@ class GattHeartRateSensor(
             launch { samples.subscriptionCount.collect { inbox.send(SensorLink.Input.Listeners(it, wallClock.now())) } }
             launch { while (true) { delay(tickEvery); inbox.send(SensorLink.Input.Tick(wallClock.now())) } }
             var state = SensorLink.State()
+            var radioEvents = 0
+            var lastEvent: String? = null
             for (input in inbox) {
                 val (next, commands) = SensorLink.reduce(state, input)
                 state = next
                 commands.forEach(::execute)
+                if (input is SensorLink.Input.Ble) { radioEvents++; lastEvent = input.event.toString().take(80) }
+                _diagnostics.value = state.toDiagnostics(radioEvents, lastEvent)
             }
         }
     }
@@ -109,10 +118,14 @@ class GattHeartRateSensor(
         samples.collect { send(it) }
     }
 
+    /** Scanning is a link decision (only once poweredOn), so it goes through the mailbox, not straight to the radio. */
     override fun search(): Flow<DiscoveredSensor> = callbackFlow {
-        central.scan(listOf(Gatt.heartRateService))
         val job = launch { discoveries.collect { send(it) } }
-        awaitClose { job.cancel(); central.stopScan() } // awaitClose is mandatory in callbackFlow
+        inbox.send(SensorLink.Input.Search(on = true, at = wallClock.now()))
+        awaitClose { // awaitClose is mandatory in callbackFlow
+            job.cancel()
+            inbox.trySend(SensorLink.Input.Search(on = false, at = wallClock.now()))
+        }
     }
 
     override suspend fun connect(id: SensorId) {
