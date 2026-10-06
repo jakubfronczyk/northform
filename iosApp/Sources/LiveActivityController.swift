@@ -1,4 +1,5 @@
 import ActivityKit
+import Foundation
 import Northform
 
 /// D11: maps the three Kotlin callbacks to ActivityKit. ActivityKit has no Objective-C API, so this is
@@ -26,14 +27,22 @@ final class LiveActivityController: NSObject, LiveActivityListener {
         }
     }
 
+    // Swift 6 strict concurrency: capture locals, not `self`, in the detached Task (the Kotlin bridge
+    // calls these from a background coroutine; ActivityKit's async API is fine from any task).
+    // `Activity` isn't declared Sendable, although Apple's own samples await it from any task;
+    // `nonisolated(unsafe)` records that rather than inventing an actor the seam doesn't need.
     func onUpdate(content: LiveActivityContent) {
-        guard let activity else { return }
-        Task { await activity.update(.init(state: Self.state(content), staleDate: nil)) }
+        guard let current = activity else { return }
+        nonisolated(unsafe) let activity = current
+        let state = Self.state(content)
+        Task { await activity.update(.init(state: state, staleDate: nil)) }
     }
 
     func onEnd(content: LiveActivityContent) {
-        guard let activity else { return }
-        Task { await activity.end(.init(state: Self.state(content), staleDate: nil), dismissalPolicy: .default) }
+        guard let current = activity else { return }
+        nonisolated(unsafe) let activity = current
+        let state = Self.state(content)
+        Task { await activity.end(.init(state: state, staleDate: nil), dismissalPolicy: .default) }
         self.activity = nil
     }
 

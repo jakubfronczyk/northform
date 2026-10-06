@@ -7,7 +7,8 @@ name: Northform
 options:
   bundleIdPrefix: com.jakubfronczyk
   deploymentTarget:
-    iOS: "17.0"            # D15: CBConnectPeripheralOptionEnableAutoReconnect, CLBackgroundActivitySession, CLLocationUpdate
+    iOS: "18.0"            # D15 said 17 for CBConnectPeripheralOptionEnableAutoReconnect / CLBackgroundActivitySession,
+                           # but `CLLocationUpdate.stationary` (D10's whole reason) is iOS 18+. The 16e ships iOS 18+. → amend D15 to 18.
   createIntermediateGroups: true
 configs:
   Debug: debug
@@ -40,6 +41,11 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jakubfronczyk.northform
         TARGETED_DEVICE_FAMILY: "1"
+        # The Kotlin framework's Swift module is `Northform`. If the app target's module had the same
+        # name, `import Northform` would silently resolve to the app itself and every Kotlin type would
+        # fail with "Cannot find type … in scope". Display/product name stays Northform.
+        PRODUCT_NAME: Northform
+        PRODUCT_MODULE_NAME: NorthformIOS
         # Only the APP links the Kotlin framework; the widget must not (it's pure SwiftUI, D16).
         FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../app/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
         OTHER_LDFLAGS: "$(inherited) -framework Northform"

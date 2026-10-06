@@ -10,6 +10,9 @@ final class LocationForwarder: NSObject, LocationUpdates {
 
     func start(sink: any LocationSink) {
         stop()
+        // Swift 6 can't see that the Kotlin sink is thread-safe (it only does a channel `trySend`);
+        // `nonisolated(unsafe)` states that fact instead of adding a lock Kotlin doesn't need.
+        nonisolated(unsafe) let sink = sink
         task = Task { @MainActor in
             do {
                 for try await update in CLLocationUpdate.liveUpdates(.fitness) {
