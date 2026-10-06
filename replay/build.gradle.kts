@@ -1,6 +1,5 @@
-// :replay — fixture codec + ReplaySensor/ReplayLocation + in-memory store. Ships in every build
-// (simulator default). Spike: placeholder module so the graph is real; the codec is Phase 0 step 1 and
-// spike step 3 (fixture replay vs the pinned Swift totals).
+// :replay — the fixture codec (frozen v1 format), replay types, the in-memory store, and the bundled
+// anonymized fixtures (src/commonMain/resources/fixtures). Ships in every build (simulator default).
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
 }
@@ -14,7 +13,11 @@ kotlin {
         commonMain.dependencies {
             api(project(":core"))
             api(project(":engine"))
+            implementation(libs.kotlinx.serialization.json) // JsonElement tree only; no @Serializable plugin needed
         }
-        commonTest.dependencies { implementation(kotlin("test")) }
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(project(":testSupport"))
+        }
     }
 }
