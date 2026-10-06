@@ -16,9 +16,6 @@ settings:
   base:
     ENABLE_USER_SCRIPT_SANDBOXING: NO
     SWIFT_VERSION: "6.0"
-    # Where :app:embedAndSignAppleFrameworkForXcode puts the framework (kotlinlang direct-integration page)
-    FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../app/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
-    OTHER_LDFLAGS: "$(inherited) -framework Northform"
 
 targets:
   Northform:
@@ -43,6 +40,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jakubfronczyk.northform
         TARGETED_DEVICE_FAMILY: "1"
+        # Only the APP links the Kotlin framework; the widget must not (it's pure SwiftUI, D16).
+        FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../app/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
+        OTHER_LDFLAGS: "$(inherited) -framework Northform"
     configFiles:
       Debug: Configuration/Local.xcconfig
       Release: Configuration/Local.xcconfig
