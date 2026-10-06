@@ -13,15 +13,18 @@ value class SensorId(val value: String)
 
 data class DiscoveredSensor(val id: SensorId, val name: String?, val rssi: Int)
 
-/** One heart-rate value. `t` = arrival time (live HR carries no sample time, same as the Swift build). */
+/**
+ * One heart-rate reading (`Core/Model/Samples.swift:6`). `t` is when the phone received it: live
+ * samples carry no sensor time.
+ */
 data class HrSample(val t: Instant, val bpm: Int)
 
-/** Why a sensor is disconnected. `lost` counts as a drop in the reliability log; `user` does not. */
+/** Why a sensor is disconnected (`Sensor.swift:23`). `Lost` counts as a drop in the reliability log; `User` does not. */
 enum class DisconnectReason { User, Lost }
 
 /**
- * What the sensor port reports (D92 of the Swift build, restated). A payload-carrying sealed
- * hierarchy, never an enum class (D4).
+ * What the sensor port reports (`Sensor.swift:51`). A payload-carrying sealed hierarchy, never an
+ * enum class (D4).
  */
 sealed interface SensorState {
     data class Disconnected(val reason: DisconnectReason) : SensorState
@@ -39,13 +42,23 @@ sealed class SensorError(message: String) : Exception(message) {
     data object ConnectTimedOut : SensorError("sensor did not connect within the timeout")
 }
 
-/** A GPS fix as the reducer sees it. `stationary` is Core Location's own judgement (D10 keeps it). */
+/**
+ * One GPS fix (`Samples.swift:17`). `t` is the fix's own timestamp, not receive time, so cached fixes
+ * can be recognised. `stationary` is Core Location's own "not moving" judgement (D10 keeps it; null =
+ * unknown). The four accuracies are recorded only; no rule reads them yet (D114 of the Swift build).
+ */
 data class LocationFix(
     val t: Instant,
     val latitude: Double,
     val longitude: Double,
+    /** Metres, always ≥ 0: fixes with invalid accuracy never leave the adapter. */
     val horizontalAccuracy: Double,
-    val altitude: Double?,
-    val speed: Double?,
-    val stationary: Boolean?,
+    val altitude: Double? = null,
+    /** Metres per second. */
+    val speed: Double? = null,
+    val stationary: Boolean? = null,
+    val speedAccuracy: Double? = null,
+    val course: Double? = null,
+    val courseAccuracy: Double? = null,
+    val verticalAccuracy: Double? = null,
 )
