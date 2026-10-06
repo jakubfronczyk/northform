@@ -39,6 +39,13 @@ object SensorLink {
         val connected: SensorId? = null,
         val ready: Boolean = false,
         val powered: Boolean = true,
+        /** Raw platform state code, diagnostics only (CoreBluetooth: 5 = poweredOn). null until the first callback. */
+        val centralState: Int? = null,
+        /** True only after the platform reported poweredOn; scanning before that is an API misuse CoreBluetooth ignores. */
+        val centralReady: Boolean = false,
+        /** The UI asked to search; honoured as soon as the central is ready. */
+        val scanWanted: Boolean = false,
+        val scanning: Boolean = false,
         val battery: Int? = null,
         val batteryNotifies: Boolean = false,
         val firmware: String? = null,
@@ -55,6 +62,8 @@ object SensorLink {
         data class Ble(val event: BleEvent, val at: Instant) : Input
         data class Connect(val id: SensorId, val at: Instant) : Input
         data class Disconnect(val at: Instant) : Input
+        /** `search()` collectors came (on) or went (off). Scanning starts only once the central is powered on. */
+        data class Search(val on: Boolean, val at: Instant) : Input
         /** Collectors of `heartRate()` came or went. */
         data class Listeners(val count: Int, val at: Instant) : Input
         /** A 1 Hz heartbeat; drives the connect timeout, backoff and battery polling. */
@@ -82,6 +91,7 @@ object SensorLink {
     fun reduce(s: State, input: Input): Result = when (input) {
         is Input.Connect -> connect(s, input.id, input.at)
         is Input.Disconnect -> disconnect(s, input.at)
+        is Input.Search -> search(s, input.on)
         is Input.Listeners -> reconcileNotify(s.copy(listeners = input.count))
         is Input.Tick -> tick(s, input.at)
         is Input.Ble -> ble(s, input.event, input.at)
@@ -108,29 +118,48 @@ object SensorLink {
             Command.CancelConnect(id),
             report(SensorState.Disconnected(DisconnectReason.User), at),
         )
-        return Result(State(powered = s.powered).reported(cmds), cmds)
+        val reset = State(
+            powered = s.powered, centralState = s.centralState, centralReady = s.centralReady,
+            scanWanted = s.scanWanted, scanning = false, listeners = s.listeners,
+        )
+        return Result(reset.reported(cmds), cmds)
+    }
+
+    /** Scan exactly when someone wants it AND the central is powered on; otherwise remember the wish. */
+    private fun search(s: State, on: Boolean): Result {
+        val next = s.copy(scanWanted = on)
+        return when {
+            on && s.centralReady && !s.scanning -> Result(next.copy(scanning = true), listOf(Command.Scan(listOf(Gatt.heartRateService))))
+            !on && s.scanning -> Result(next.copy(scanning = false), listOf(Command.StopScan))
+            else -> Result(next, emptyList())
+        }
     }
 
     // ── radio events ────────────────────────────────────────────────────────────────────────
 
     private fun ble(s: State, e: BleEvent, at: Instant): Result = when (e) {
+        is BleEvent.CentralState -> Result(s.copy(centralState = e.code), emptyList())
         BleEvent.PowerOn -> {
-            val next = s.copy(powered = true)
-            val cmds = when {
-                s.connected != null -> listOf(report(SensorState.Connected(s.battery), at))
-                s.wanted != null -> listOf(report(SensorState.Connecting, at), Command.Connect(s.wanted))
-                else -> listOf(report(SensorState.Disconnected(DisconnectReason.User), at))
+            val next = s.copy(powered = true, centralReady = true)
+            val cmds = buildList {
+                when {
+                    s.connected != null -> add(report(SensorState.Connected(s.battery), at))
+                    s.wanted != null -> { add(report(SensorState.Connecting, at)); add(Command.Connect(s.wanted)) }
+                    else -> add(report(SensorState.Disconnected(DisconnectReason.User), at))
+                }
+                // A search asked for before the radio was ready starts now.
+                if (s.scanWanted && !s.scanning) add(Command.Scan(listOf(Gatt.heartRateService)))
             }
             val rearmed = if (s.connected == null && s.wanted != null) next.copy(attempt = 0, connectRequestedAt = at) else next
-            Result(rearmed.reported(cmds), cmds)
+            Result(rearmed.copy(scanning = s.scanning || s.scanWanted).reported(cmds), cmds)
         }
         BleEvent.PowerOff -> {
             val cmds = listOf(report(SensorState.BluetoothOff, at))
-            Result(s.dropped().copy(powered = false).reported(cmds), cmds)
+            Result(s.dropped().copy(powered = false, centralReady = false, scanning = false).reported(cmds), cmds)
         }
         BleEvent.Unauthorized -> {
             val cmds = listOf(report(SensorState.Unauthorized, at), Command.Unauthorized)
-            Result(s.dropped().reported(cmds), cmds)
+            Result(s.dropped().copy(centralReady = false, scanning = false).reported(cmds), cmds)
         }
         is BleEvent.Restored -> {
             // D9 step 4: adopt the peripheral iOS handed back; do NOT turn HR on until a listener appears.
@@ -147,7 +176,7 @@ object SensorLink {
         is BleEvent.Connected -> {
             if (e.id != s.wanted) Result(s, emptyList())
             else Result(
-                s.copy(connected = e.id, attempt = 0, connectRequestedAt = null, ready = false),
+                s.copy(connected = e.id, attempt = 0, connectRequestedAt = null, ready = false, scanning = false),
                 listOf(Command.StopScan, Command.Discover(e.id, Gatt.servicesUsed)),
             )
         }

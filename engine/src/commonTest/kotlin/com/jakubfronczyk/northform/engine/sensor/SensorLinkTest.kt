@@ -158,6 +158,40 @@ class SensorLinkTest {
     }
 
     @Test
+    fun search_waits_for_powered_on_then_scans_hrs_and_stops_when_released() {
+        // Asked before the radio reported poweredOn: no scan yet (CoreBluetooth would ignore it as API misuse).
+        val (waiting, c1) = run(SensorLink.Input.Search(on = true, at = t0))
+        assertTrue(waiting.scanWanted)
+        assertTrue(c1.none { it is SensorLink.Command.Scan })
+        // poweredOn arrives → scan starts with the HRS filter.
+        val (scanning, c2) = run(SensorLink.Input.Search(on = true, at = t0), SensorLink.Input.Ble(BleEvent.PowerOn, t0 + 1.seconds))
+        assertTrue(scanning.scanning)
+        assertTrue(SensorLink.Command.Scan(listOf(Gatt.heartRateService)) in c2)
+        // Collector leaves → stop.
+        val (_, c3) = run(
+            SensorLink.Input.Search(on = true, at = t0),
+            SensorLink.Input.Ble(BleEvent.PowerOn, t0),
+            SensorLink.Input.Search(on = false, at = t0 + 2.seconds),
+        )
+        assertEquals(1, c3.count { it == SensorLink.Command.StopScan })
+        // Connecting stops the scan too.
+        val (afterConnect, _) = run(
+            SensorLink.Input.Ble(BleEvent.PowerOn, t0),
+            SensorLink.Input.Search(on = true, at = t0),
+            SensorLink.Input.Connect(sensor, t0),
+            SensorLink.Input.Ble(BleEvent.Connected(sensor), t0 + 1.seconds),
+        )
+        assertEquals(false, afterConnect.scanning)
+    }
+
+    @Test
+    fun raw_central_state_is_recorded_without_any_command() {
+        val (s, c) = run(SensorLink.Input.Ble(BleEvent.CentralState(2), t0))
+        assertEquals(2, s.centralState)
+        assertTrue(c.isEmpty())
+    }
+
+    @Test
     fun battery_without_notify_is_polled_every_5_minutes() {
         val (_, c) = run(
             SensorLink.Input.Connect(sensor, t0),

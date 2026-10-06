@@ -179,6 +179,7 @@ class CoreBluetoothCentral(
         // ── CBCentralManagerDelegate ──────────────────────────────────────────────────────────
 
         override fun centralManagerDidUpdateState(central: CBCentralManager) {
+            emit(BleEvent.CentralState(central.state.toInt()))
             when (central.state) {
                 CBManagerStatePoweredOn -> emit(BleEvent.PowerOn)
                 CBManagerStatePoweredOff -> emit(BleEvent.PowerOff)

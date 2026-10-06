@@ -47,6 +47,12 @@ interface BleCentral {
 }
 
 sealed interface BleEvent {
+    /**
+     * Every raw central state change, for diagnostics only (CoreBluetooth `CBManagerState`: 0 unknown,
+     * 1 resetting, 2 unsupported, 3 unauthorized, 4 poweredOff, 5 poweredOn). Decisions use the three
+     * mapped events below; this one is observed on the spike screen.
+     */
+    data class CentralState(val code: Int) : BleEvent
     data object PowerOn : BleEvent
     data object PowerOff : BleEvent
     data object Unauthorized : BleEvent
