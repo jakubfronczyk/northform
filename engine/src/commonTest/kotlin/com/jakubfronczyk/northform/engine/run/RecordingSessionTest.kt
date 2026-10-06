@@ -1,8 +1,23 @@
 package com.jakubfronczyk.northform.engine.run
 
-import app.cash.turbine.test
+import com.jakubfronczyk.northform.core.DiscoveredSensor
+import com.jakubfronczyk.northform.core.HrSample
+import com.jakubfronczyk.northform.core.LocationFix
+import com.jakubfronczyk.northform.core.RecordingState
+import com.jakubfronczyk.northform.core.SensorId
+import com.jakubfronczyk.northform.core.SensorState
+import com.jakubfronczyk.northform.core.SensorStateChange
+import com.jakubfronczyk.northform.core.UserAction
+import com.jakubfronczyk.northform.core.ports.Alert
+import com.jakubfronczyk.northform.core.ports.AlertPlayer
+import com.jakubfronczyk.northform.core.ports.FlushBatch
+import com.jakubfronczyk.northform.core.ports.HeartRateSensor
+import com.jakubfronczyk.northform.core.ports.LocationProvider
+import com.jakubfronczyk.northform.core.ports.RecordingStore
+import com.jakubfronczyk.northform.core.ports.WallClock
+import com.jakubfronczyk.northform.engine.store.InMemoryRecordingStore
+import com.jakubfronczyk.northform.testing.RunHarness
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,31 +27,20 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import com.jakubfronczyk.northform.core.DiscoveredSensor
-import com.jakubfronczyk.northform.core.DisconnectReason
-import com.jakubfronczyk.northform.core.HrSample
-import com.jakubfronczyk.northform.core.SensorId
-import com.jakubfronczyk.northform.core.SensorState
-import com.jakubfronczyk.northform.core.SensorStateChange
-import com.jakubfronczyk.northform.core.ports.HeartRateSensor
-import com.jakubfronczyk.northform.core.ports.WallClock
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 /**
- * The virtual-clock wiring the architect review asked for: ONE clock is both the coroutine
- * scheduler (drives `delay`) and the `WallClock` (stamps inputs), so `advanceTimeBy` moves both —
- * the Kotlin equivalent of the Swift tests' single `VirtualClock`.
- * https://github.com/Kotlin/kotlinx.coroutines/blob/master/kotlinx-coroutines-test/README.md
+ * ONE clock is both the coroutine scheduler (drives `delay`) and the `WallClock` (stamps inputs), so
+ * `advanceTimeBy` moves both — the Kotlin form of the Swift tests' single `VirtualClock`.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RecordingSessionTest {
-
     private val start = Instant.fromEpochSeconds(1_800_000_000)
-
     private fun TestScope.virtualWallClock() = WallClock { start + testScheduler.currentTime.milliseconds }
 
     private class FakeSensor : HeartRateSensor {
@@ -49,72 +53,88 @@ class RecordingSessionTest {
         override suspend fun disconnect() {}
     }
 
-    private class RecordingWriter : RunWriter {
-        val persisted = mutableListOf<Pair<Int, FlushBatch>>()
-        var stoppedAt: Instant? = null
-        override suspend fun persist(seq: Int, batch: FlushBatch) { persisted += seq to batch }
-        override suspend fun stop(at: Instant) { stoppedAt = at }
+    private object NoLocation : LocationProvider {
+        override fun fixes(): Flow<LocationFix> = emptyFlow()
     }
 
+    /** The in-memory store, with a switch to fail the next flush once (Kotlin interface delegation for the rest). */
+    private class Store(val inner: InMemoryRecordingStore = InMemoryRecordingStore()) : RecordingStore by inner {
+        var failNext = false
+        override suspend fun flush(batch: FlushBatch) {
+            if (failNext) { failNext = false; error("disk full") }
+            inner.flush(batch)
+        }
+        fun data() = inner.records.load(RunHarness.config.recordingId)!!
+    }
+
+    private class Alerts : AlertPlayer {
+        val played = ArrayList<Alert>()
+        override suspend fun play(alert: Alert) { played += alert }
+    }
+
+    private fun TestScope.session(sensor: FakeSensor, store: Store, alerts: Alerts = Alerts()) =
+        RecordingSession(RunHarness.config, sensor, NoLocation, store, alerts, virtualWallClock())
+
     @Test
-    fun samples_are_flushed_every_5s_and_the_buffer_clears_only_on_persisted() = runTest {
-        val clock = virtualWallClock()
+    fun countdown_then_samples_flushed_every_5s_and_confirmed_through_the_inbox() = runTest {
         val sensor = FakeSensor()
-        val writer = RecordingWriter()
-        val session = RecordingSession(sensor, writer, clock)
+        val store = Store()
+        val alerts = Alerts()
+        val session = session(sensor, store, alerts)
         val job = launch { session.run() }
-        runCurrent() // let run() subscribe before the first emit (a SharedFlow drops emissions with no subscriber)
+        runCurrent()
 
-        session.send(UserAction.Start)
+        session.send(UserAction.Start) // t = 0: countdown to 5 s
+        advanceTimeBy(5.seconds); runCurrent() // ticks 1..5 → active at 5 s
+        assertEquals(RunPhase.Active, session.snapshots.value.phase)
+        assertEquals(5, alerts.played.count { it == Alert.CountdownTick })
+
+        sensor.hr.emit(HrSample(session.wallClock.now(), 120))
         advanceTimeBy(1.seconds)
-        sensor.hr.emit(HrSample(clock.now(), 120))
-        advanceTimeBy(1.seconds)
-        sensor.hr.emit(HrSample(clock.now(), 122))
-        advanceTimeBy(5.seconds) // tick ≥ 5 s after start → flush
+        sensor.hr.emit(HrSample(session.wallClock.now(), 122))
+        advanceTimeBy(5.seconds); runCurrent() // the 5 s flush
 
-        assertEquals(1, writer.persisted.size)
-        assertEquals(listOf(120, 122), writer.persisted[0].second.hr.map { it.bpm })
-        // Persisted(seq) travelled back through the inbox: buffer cleared, nothing in flight.
-        assertEquals(null, session.snapshot.value.inFlight)
-        assertEquals(emptyList(), session.snapshot.value.unconfirmedHr)
-
+        assertEquals(listOf(120, 122), store.data().hr.map { it.bpm })
+        assertEquals(121, session.snapshots.value.hrAvg)
         job.cancel()
     }
 
     @Test
-    fun hr_lost_after_5s_without_samples() = runTest {
-        val clock = virtualWallClock()
+    fun a_failed_flush_is_retried_without_loss() = runTest {
         val sensor = FakeSensor()
-        val session = RecordingSession(sensor, RecordingWriter(), clock)
+        val store = Store()
+        val session = session(sensor, store)
         val job = launch { session.run() }
         runCurrent()
         session.send(UserAction.Start)
-        runCurrent()
-        sensor.hr.emit(HrSample(clock.now(), 130))
-        advanceTimeBy(1.seconds)
-        assertEquals(130, session.snapshot.value.hrNow)
-        advanceTimeBy(5.seconds)
-        assertEquals(true, session.snapshot.value.hrLost)
+        advanceTimeBy(5.seconds); runCurrent()
+        store.failNext = true
+        sensor.hr.emit(HrSample(session.wallClock.now(), 130))
+        advanceTimeBy(5.seconds); runCurrent() // first flush fails → PersistFailed → buffer kept
+        advanceTimeBy(5.seconds); runCurrent() // next flush carries it
+        assertEquals(listOf(130), store.data().hr.map { it.bpm })
         job.cancel()
     }
 
     @Test
-    fun stop_is_durable_before_the_final_batch_and_run_returns() = runTest {
-        val clock = virtualWallClock()
+    fun stop_then_skip_cooldown_ends_the_run_after_begin_computing() = runTest {
         val sensor = FakeSensor()
-        val writer = RecordingWriter()
-        val session = RecordingSession(sensor, writer, clock)
+        val store = Store()
+        val session = session(sensor, store)
         val job = launch { session.run() }
         runCurrent()
         session.send(UserAction.Start)
-        advanceTimeBy(1.seconds)
-        sensor.hr.emit(HrSample(clock.now(), 140))
-        advanceTimeBy(1.seconds)
+        advanceTimeBy(5.seconds); runCurrent()
+        sensor.hr.emit(HrSample(session.wallClock.now(), 140))
+        advanceTimeBy(2.seconds)
         session.send(UserAction.Stop)
-        advanceTimeBy(1.seconds)
+        runCurrent()
+        session.send(UserAction.SkipCooldown)
+        advanceTimeBy(1.seconds); runCurrent()
 
-        assertEquals(start + 2.seconds, writer.stoppedAt)
-        assertEquals(1, writer.persisted.size)
-        job.join() // "tests never hang": run() ends after the final persist is confirmed
+        val data = store.data()
+        assertEquals(RecordingState.Computing, data.recording.state)
+        assertEquals(start + 7.seconds, data.recording.endUtc)
+        assertTrue(job.isCompleted, "run() ends once BeginComputing is confirmed")
     }
 }

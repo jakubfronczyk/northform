@@ -11,7 +11,7 @@ bootstrap:
 
 # The green bar: pure-module tests on the JVM (what CI runs on ubuntu). Fast, no Xcode.
 test:
-    ./gradlew :core:jvmTest :engine:jvmTest
+    ./gradlew :core:jvmTest :engine:jvmTest :replay:jvmTest
 
 # Kotlin/Native tests in the iOS simulator (the boot-order test lives here, D9).
 test-sim:
