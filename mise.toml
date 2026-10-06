@@ -1,0 +1,8 @@
+# Tool pins (same discipline as northform-ios/mise.toml). `mise install` on a fresh machine.
+# TODO(spike): the JDK and Gradle below were not installed on the authoring machine; run `mise install`
+# then `gradle wrapper` once (see gradle/wrapper/gradle-wrapper.properties).
+[tools]
+java = "temurin-21"
+gradle = "9.2.0"
+just = "1.46.0"
+xcodegen = "2.46.0"

@@ -1,0 +1,30 @@
+# Version pins (D15). The Gradle twin of Package.resolved: one place for every version.
+# Verified current 2026-10-06:
+#   Kotlin 2.4.20       https://kotlinlang.org/docs/releases.html
+#   Compose MP 1.12.1   https://github.com/JetBrains/compose-multiplatform/releases
+#   coroutines 1.11.0   https://github.com/Kotlin/kotlinx.coroutines/releases
+#   SQLDelight 2.4.0    https://github.com/cashapp/sqldelight/releases
+#   Turbine 1.2.1       https://github.com/cashapp/turbine/releases
+# Re-check Kotlin ↔ Compose compatibility before bumping either:
+#   https://kotlinlang.org/docs/multiplatform/compose-compatibility-and-versioning.html
+
+[versions]
+kotlin = "2.4.20"
+compose-multiplatform = "1.12.1"
+kotlinx-coroutines = "1.11.0"
+sqldelight = "2.4.0"
+turbine = "1.2.1"
+
+[libraries]
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
+turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
+sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sqldelight" }
+sqldelight-native-driver = { module = "app.cash.sqldelight:native-driver", version.ref = "sqldelight" }
+sqldelight-sqlite-driver = { module = "app.cash.sqldelight:sqlite-driver", version.ref = "sqldelight" }
+
+[plugins]
+kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
+composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
