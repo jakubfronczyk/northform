@@ -16,6 +16,7 @@ kotlin {
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
+            implementation("org.jetbrains.compose.ui:ui-tooling-preview:1.12.1") // androidx @Preview on the fakes (D110)
             implementation(libs.kotlinx.coroutines.core)
         }
     }
