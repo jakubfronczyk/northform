@@ -17,6 +17,7 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test) // the live session on a virtual clock
             implementation(project(":testSupport"))
         }
     }

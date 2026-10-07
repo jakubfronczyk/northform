@@ -17,3 +17,6 @@ val Duration.inSecondsDouble: Double
  * Where the port rounds (mean heart rate, fixture offsets), use this so ties match the Swift build.
  */
 fun Double.roundedHalfAwayFromZero(): Double = if (this >= 0) floor(this + 0.5) else -floor(-this + 0.5)
+
+/** The fixture format's millisecond offset, rounded the Swift way (`(offset * 1000).rounded()`); the writer and the player share it. */
+fun Duration.roundedToMillis(): Long = (inSecondsDouble * 1000).roundedHalfAwayFromZero().toLong()

@@ -57,6 +57,16 @@ sealed interface ReplayInput {
         is Sensor -> RunInput.Sensor(state, at)
         is User -> RunInput.User(action, at)
     }
+
+    /** `ReplayTimeline.swift:108` — the same input at another time (playback rebasing). */
+    fun at(time: Instant): ReplayInput = when {
+        time == t -> this
+        this is Hr -> Hr(sample.copy(t = time))
+        this is Fix -> Fix(fix.copy(t = time))
+        this is Sensor -> Sensor(state, time)
+        this is User -> User(action, time)
+        else -> error("unreachable")
+    }
 }
 
 /** `ReplayScript.swift:41` — a whole recording to replay: setup plus inputs in time order. */

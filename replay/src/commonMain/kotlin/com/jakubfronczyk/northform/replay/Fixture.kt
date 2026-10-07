@@ -8,8 +8,7 @@ import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.SensorState
 import com.jakubfronczyk.northform.core.Sex
 import com.jakubfronczyk.northform.core.UserAction
-import com.jakubfronczyk.northform.core.inSecondsDouble
-import com.jakubfronczyk.northform.core.roundedHalfAwayFromZero
+import com.jakubfronczyk.northform.core.roundedToMillis
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -161,7 +160,7 @@ object Fixture {
     )
 
     private fun inputLine(input: ReplayInput, start: Instant): JsonObject {
-        val offset = ((input.t - start).inSecondsDouble * 1000).roundedHalfAwayFromZero() / 1000 // Swift `.rounded()`
+        val offset = (input.t - start).roundedToMillis() / 1000.0
         val fields = mutableListOf<Pair<String, JsonElement>>("t" to num(offset))
         when (input) {
             is ReplayInput.Hr -> fields += listOf("k" to JsonPrimitive("hr"), "bpm" to JsonPrimitive(input.sample.bpm))
