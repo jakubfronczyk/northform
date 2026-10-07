@@ -37,6 +37,9 @@ targets:
         NSSupportsLiveActivities: true
         CADisableMinimumFrameDurationOnPhone: true   # D13: lets Compose vote for 120 Hz
         UIBackgroundModes: [bluetooth-central, location]
+        # Documents/Recordings (debug run fixtures) shows up in the Files app under "Northform" and can be copied off.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
     settings:
@@ -49,8 +52,11 @@ targets:
         PRODUCT_NAME: Northform
         PRODUCT_MODULE_NAME: NorthformIOS
         # Only the APP links the Kotlin framework; the widget must not (it's pure SwiftUI, D16).
-        FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../app/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
-        OTHER_LDFLAGS: "$(inherited) -framework Northform"
+        # The framework is linked from a STABLE path (a symlink the run script points at the current
+        # $(CONFIGURATION)/$(SDK_NAME) build) and is listed under `dependencies` below, so it is a real input of
+        # the link step. Linked only via search paths + OTHER_LDFLAGS, Xcode skipped the relink after Kotlin-only
+        # changes and the phone kept running the previous Kotlin (2026-10-07).
+        FRAMEWORK_SEARCH_PATHS: "$(SRCROOT)/../app/build/xcode-frameworks/current $(inherited)"
     configFiles:
       Debug: Configuration/Local.xcconfig
       Release: Configuration/Local.xcconfig
@@ -58,13 +64,20 @@ targets:
       - name: Compile Kotlin framework
         basedOnDependencyAnalysis: false
         script: |
+          set -e
           cd "$SRCROOT/.."
           # JAVA_HOME: Xcode's non-login shell doesn't see your zsh env. mise provides the JDK.
           export PATH="$HOME/.local/share/mise/shims:$PATH"
           ./gradlew :app:embedAndSignAppleFrameworkForXcode
+          # Point the stable link path at this configuration's framework (see FRAMEWORK_SEARCH_PATHS).
+          mkdir -p app/build/xcode-frameworks/current
+          ln -sfn "$SRCROOT/../app/build/xcode-frameworks/$CONFIGURATION/$SDK_NAME/Northform.framework" app/build/xcode-frameworks/current/Northform.framework
     dependencies:
       - target: NorthformWidget
         embed: true
+      # Static Kotlin framework: linked, not embedded. Listed here so the link step depends on it.
+      - framework: ../app/build/xcode-frameworks/current/Northform.framework
+        embed: false
 
   NorthformWidget:
     type: app-extension

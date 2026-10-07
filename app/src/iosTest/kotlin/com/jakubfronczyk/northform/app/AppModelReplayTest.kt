@@ -35,11 +35,12 @@ class AppModelReplayTest {
     private fun straightRun(): ReplayScript = Fixture.parse(BundledFixtureText.STRAIGHT_RUN_3MIN)
 
     /** The simulator wiring: a replay source on the test's virtual clock, an in-memory store. */
-    private fun TestScope.replayDeps(script: ReplayScript, store: InMemoryRecordingStore, alerts: AlertPlayer) = AppDeps(
+    private fun TestScope.replayDeps(script: ReplayScript, store: InMemoryRecordingStore, alerts: AlertPlayer, log: (String) -> Unit = {}) = AppDeps(
         source = RunSource.Replay { script },
         store = store,
         wallClock = virtualWallClock(script.meta.start),
         alerts = alerts,
+        log = log,
         newRecordingId = { "00000000-0000-0000-0000-00000000000a" },
     )
 
@@ -49,7 +50,7 @@ class AppModelReplayTest {
         val store = InMemoryRecordingStore()
         val alerts = RecordedAlerts()
         val phases = ArrayList<String>()
-        val model = AppModel(replayDeps(script, store, alerts), backgroundScope) { line -> phases += line }
+        val model = AppModel(replayDeps(script, store, alerts) { line -> phases += line }, backgroundScope)
 
         assertNull(model.activeRun.value)
         model.startRun()
@@ -77,7 +78,7 @@ class AppModelReplayTest {
         val stored = assertNotNull(store.records.load(run.id))
         assertEquals(RecordingState.Computing, stored.recording.state)
         assertEquals(5, alerts.played.count { it == Alert.CountdownTick })
-        assertTrue(phases.any { "Gate" in it } && phases.any { "Active" in it } && phases.any { "Done" in it }, "lifecycle log: $phases")
+        assertTrue(phases.any { "→ gate" in it } && phases.any { "→ active" in it } && phases.any { "→ done" in it }, "lifecycle log: $phases")
     }
 
     @Test

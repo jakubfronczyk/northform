@@ -22,9 +22,10 @@ import com.jakubfronczyk.northform.ui.run.PrimaryButton
 import com.jakubfronczyk.northform.ui.run.RunFlow
 
 /**
- * Navigation (D77 restated): Today is the root; the run flow is a full-screen cover without swipe
- * dismiss (a `when` on `activeRun`); the Sensor screen is a push with a back action. The composition
- * root supplies the session, the map and the sensor screen; nothing here decides anything about a run.
+ * Navigation (D77 restated, `App/Sources/NorthformApp.swift`): Today is the root; the run flow is a
+ * full-screen cover without swipe dismiss (a `when` on `activeRun`); the Sensor screen is a sheet with
+ * Close. The composition root supplies the session, the map and the sensor screen; nothing here decides
+ * anything about a run.
  */
 @Composable
 fun AppRoot(
@@ -32,16 +33,13 @@ fun AppRoot(
     onStartRun: () -> Unit,
     onCloseRun: () -> Unit,
     map: @Composable (route: Route) -> Unit,
-    sensorScreen: @Composable () -> Unit,
+    sensorScreen: @Composable (close: () -> Unit) -> Unit,
 ) {
     var showSensor by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         when {
             activeRun != null -> RunFlow(activeRun, onClose = onCloseRun, map = map)
-            showSensor -> Column {
-                Text("‹ Back", color = Theme.text2, modifier = Modifier.clickable { showSensor = false }.padding(16.dp))
-                sensorScreen()
-            }
+            showSensor -> sensorScreen { showSensor = false }
             else -> TodayScreen(startRun = onStartRun, openSensor = { showSensor = true })
         }
     }

@@ -8,6 +8,8 @@ import com.jakubfronczyk.northform.core.ports.HeartRateSensor
 import com.jakubfronczyk.northform.core.ports.LocationProvider
 import com.jakubfronczyk.northform.core.ports.RecordingStore
 import com.jakubfronczyk.northform.core.ports.WallClock
+import com.jakubfronczyk.northform.replay.RecordingTap
+import com.jakubfronczyk.northform.replay.ReplayMeta
 import com.jakubfronczyk.northform.replay.ReplayScript
 import platform.Foundation.NSProcessInfo
 import platform.Foundation.NSTimeZone
@@ -35,7 +37,8 @@ sealed interface RunSource {
 
 /**
  * How the app is wired (`App/Sources/AppDeps.swift`): the run source, the one store, the wall clock,
- * alerts and the sample profile. Built once in `boot()`. Walking-skeleton Milestone A: the store is in memory.
+ * alerts, the sample profile, and the debug recording tap. Built once in `boot()`.
+ * Walking-skeleton Milestone A: the store is in memory.
  */
 class AppDeps(
     val source: RunSource,
@@ -44,6 +47,9 @@ class AppDeps(
     val alerts: AlertPlayer,
     /** Removes this run's lock-screen notifications once it closes (`AppModel.swift:131`). */
     val clearAlerts: () -> Unit = {},
+    /** Debug builds: the tap that writes the run as a replay fixture (`AppModel.swift:142`); null in release. */
+    val makeTap: (meta: ReplayMeta, fileName: String) -> RecordingTap? = { _, _ -> null },
+    val log: (String) -> Unit = {},
     val profile: Profile = sampleProfile,
     val newRecordingId: () -> String = { NSUUID().UUIDString },
     val tzOffset: () -> Int = { NSTimeZone.localTimeZone.secondsFromGMT.toInt() },

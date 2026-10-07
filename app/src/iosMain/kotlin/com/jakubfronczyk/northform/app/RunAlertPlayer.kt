@@ -15,11 +15,12 @@ import platform.UIKit.UIImpactFeedbackStyle
  * vibration; in the background (locked) local notifications, repeated so they are felt in a pocket
  * (split ×2, HR lost ×3, D123). The decision is the reducer's; this only fires.
  */
-class RunAlertPlayer(private val notifications: NotificationAlertPlayer) : AlertPlayer {
+class RunAlertPlayer(private val notifications: NotificationAlertPlayer, private val log: (String) -> Unit = {}) : AlertPlayer {
 
     override suspend fun play(alert: Alert) {
         val onScreen = withContext(Dispatchers.Main) { UIApplication.sharedApplication.applicationState != UIApplicationState.UIApplicationStateBackground }
         if (onScreen) vibrate(alert) else notify(alert)
+        log("alert played $alert") // `RecordingSession.swift:287`
     }
 
     private suspend fun vibrate(alert: Alert) = when (alert) {
