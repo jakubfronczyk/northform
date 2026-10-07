@@ -9,14 +9,15 @@ import com.jakubfronczyk.northform.core.SensorState
 import com.jakubfronczyk.northform.core.SensorStateChange
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.ports.Alert
-import com.jakubfronczyk.northform.core.ports.AlertPlayer
 import com.jakubfronczyk.northform.core.ports.FlushBatch
 import com.jakubfronczyk.northform.core.ports.HeartRateSensor
 import com.jakubfronczyk.northform.core.ports.LocationProvider
 import com.jakubfronczyk.northform.core.ports.RecordingStore
-import com.jakubfronczyk.northform.core.ports.WallClock
 import com.jakubfronczyk.northform.engine.store.InMemoryRecordingStore
+import com.jakubfronczyk.northform.testing.RecordedAlerts
 import com.jakubfronczyk.northform.testing.RunHarness
+import com.jakubfronczyk.northform.testing.tap
+import com.jakubfronczyk.northform.testing.virtualWallClock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -30,7 +31,6 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -41,7 +41,6 @@ import kotlin.time.Instant
 @OptIn(ExperimentalCoroutinesApi::class)
 class RecordingSessionTest {
     private val start = Instant.fromEpochSeconds(1_800_000_000)
-    private fun TestScope.virtualWallClock() = WallClock { start + testScheduler.currentTime.milliseconds }
 
     private class FakeSensor : HeartRateSensor {
         val hr = MutableSharedFlow<HrSample>(extraBufferCapacity = 64)
@@ -67,24 +66,20 @@ class RecordingSessionTest {
         fun data() = inner.records.load(RunHarness.config.recordingId)!!
     }
 
-    private class Alerts : AlertPlayer {
-        val played = ArrayList<Alert>()
-        override suspend fun play(alert: Alert) { played += alert }
-    }
 
-    private fun TestScope.session(sensor: FakeSensor, store: Store, alerts: Alerts = Alerts()) =
-        RecordingSession(RunHarness.config, sensor, NoLocation, store, alerts, virtualWallClock())
+    private fun TestScope.session(sensor: FakeSensor, store: Store, alerts: RecordedAlerts = RecordedAlerts()) =
+        RecordingSession(RunHarness.config, sensor, NoLocation, store, alerts, virtualWallClock(start))
 
     @Test
     fun countdown_then_samples_flushed_every_5s_and_confirmed_through_the_inbox() = runTest {
         val sensor = FakeSensor()
         val store = Store()
-        val alerts = Alerts()
+        val alerts = RecordedAlerts()
         val session = session(sensor, store, alerts)
         val job = launch { session.run() }
         runCurrent()
 
-        session.send(UserAction.Start) // t = 0: countdown to 5 s
+        session.tap(UserAction.Start) // t = 0: countdown to 5 s
         advanceTimeBy(5.seconds); runCurrent() // ticks 1..5 → active at 5 s
         assertEquals(RunPhase.Active, session.snapshots.value.phase)
         assertEquals(5, alerts.played.count { it == Alert.CountdownTick })
@@ -106,7 +101,7 @@ class RecordingSessionTest {
         val session = session(sensor, store)
         val job = launch { session.run() }
         runCurrent()
-        session.send(UserAction.Start)
+        session.tap(UserAction.Start)
         advanceTimeBy(5.seconds); runCurrent()
         store.failNext = true
         sensor.hr.emit(HrSample(session.wallClock.now(), 130))
@@ -123,13 +118,13 @@ class RecordingSessionTest {
         val session = session(sensor, store)
         val job = launch { session.run() }
         runCurrent()
-        session.send(UserAction.Start)
+        session.tap(UserAction.Start)
         advanceTimeBy(5.seconds); runCurrent()
         sensor.hr.emit(HrSample(session.wallClock.now(), 140))
         advanceTimeBy(2.seconds)
-        session.send(UserAction.Stop)
+        session.tap(UserAction.Stop)
         runCurrent()
-        session.send(UserAction.SkipCooldown)
+        session.tap(UserAction.SkipCooldown)
         advanceTimeBy(1.seconds); runCurrent()
 
         val data = store.data()

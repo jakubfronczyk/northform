@@ -14,6 +14,7 @@ kotlin {
         commonMain.dependencies {
             api(project(":core"))
             api(project(":engine"))
+            api(libs.kotlinx.coroutines.test) // the one virtual clock for `delay` and the WallClock
         }
     }
 }
