@@ -1,25 +1,29 @@
 package com.jakubfronczyk.northform.app
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.window.ComposeUIViewController
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import com.jakubfronczyk.northform.adapters.alerts.NotificationAlertPlayer
 import com.jakubfronczyk.northform.adapters.ble.CoreBluetoothCentral
 import com.jakubfronczyk.northform.adapters.clock.IosWallClock
-import com.jakubfronczyk.northform.adapters.liveactivity.LiveActivityBridge
+import com.jakubfronczyk.northform.adapters.location.KeepAlive
 import com.jakubfronczyk.northform.adapters.location.LiveLocation
 import com.jakubfronczyk.northform.adapters.location.LocationUpdates
-import com.jakubfronczyk.northform.engine.run.LiveActivityContent
-import com.jakubfronczyk.northform.engine.run.LiveActivityPhase
 import com.jakubfronczyk.northform.engine.sensor.GattHeartRateSensor
+import com.jakubfronczyk.northform.engine.store.InMemoryRecordingStore
+import com.jakubfronczyk.northform.ui.AppRoot
 import com.jakubfronczyk.northform.ui.spike.SpikeScreen
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.Foundation.NSLog
+import platform.Foundation.NSNotificationCenter
+import platform.Foundation.NSOperationQueue
+import platform.UIKit.UIApplicationDidEnterBackgroundNotification
 import platform.UIKit.UIViewController
+import kotlin.coroutines.resume
 import kotlin.time.Clock
-import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
 /**
@@ -46,10 +50,13 @@ object NorthformApp {
         private set
     lateinit var alerts: NotificationAlertPlayer
         private set
+    lateinit var model: AppModel
+        private set
+    private var live = false
 
     private fun log(line: String) {
         val stamped = "${Clock.System.now()} $line"
-        NSLog("northform/boot %s", stamped) // appears in Console.app / `log collect --device`, spike gate 4b proof
+        NSLog("northform/boot %s", stamped) // appears in Console.app / `log collect --device`
         bootLog += stamped
     }
 
@@ -62,7 +69,7 @@ object NorthformApp {
         val started = TimeSource.Monotonic.markNow()
         log("boot() start")
 
-        // 1  graph — no I/O yet (SQLDelight store comes in Phase 0 step 6)
+        // 1  graph — no I/O yet (Milestone A: the store is in memory; SQLDelight is Phase 1)
         val wallClock = IosWallClock
         alerts = NotificationAlertPlayer(scope, ::log)
         location = LiveLocation(locationUpdates, wallClock, ::log)
@@ -75,43 +82,41 @@ object NorthformApp {
         sensor = GattHeartRateSensor(central, wallClock)
         sensor.start(scope)
 
-        // 4  TODO(spike): Phase 0 step 6 — if the store has an unfinished run, hold the link, do NOT resume
-        //    recording (R28: resume is the user's choice on reopen).
+        // 4  the app's wiring: live ports on the phone, replay in the simulator (`AppDeps.swift:27-37`)
+        live = !AppDeps.isSimulator
+        val runAlerts = RunAlertPlayer(alerts)
+        val deps = AppDeps(
+            source = if (live) RunSource.Live(sensor, location, KeepAlive(), ::requestRunPermissions)
+                     else RunSource.Replay { BundleFixtures.script("straight-run-3min") },
+            store = InMemoryRecordingStore(),
+            wallClock = wallClock,
+            alerts = runAlerts,
+            clearAlerts = runAlerts::clear,
+        )
+        model = AppModel(deps, scope, ::log)
+        // Background: save what the run has buffered now (D94). Observed from Kotlin — an Obj-C API, no Swift needed.
+        NSNotificationCenter.defaultCenter.addObserverForName(UIApplicationDidEnterBackgroundNotification, null, NSOperationQueue.mainQueue) {
+            model.appWentToBackground()
+        }
 
         isBooted = true
         log("boot() end in ${started.elapsedNow()}") // 5
     }
 
+    /** Locked-screen alerts are notifications (D105): iOS asks once, the answer never blocks a run. Location is asked by the forwarder's first update. */
+    private suspend fun requestRunPermissions() {
+        suspendCancellableCoroutine { cont -> alerts.requestPermission { cont.resume(Unit) } }
+    }
+
     /** The Compose root. Swift wraps it in a UIViewControllerRepresentable and renders nothing of its own. */
     fun rootViewController(): UIViewController = ComposeUIViewController {
-        SpikeScreen(sensor, bootLog)
+        val activeRun by model.activeRun.collectAsState()
+        AppRoot(
+            activeRun = activeRun?.session,
+            onStartRun = model::startRun,
+            onCloseRun = model::closeRun,
+            map = { route -> RouteMap(route, showsUserLocation = live) },
+            sensorScreen = { SpikeScreen(sensor, bootLog) },
+        )
     }
-
-    /**
-     * Spike step 9 only: drive the Live Activity bridge from a timer so the Swift controller + widget can
-     * be proven independently of the run session. Phase 1 lane G replaces this with session-derived content.
-     */
-    fun startLiveActivityDemo() {
-        val startedAt = Clock.System.now()
-        scope.launch {
-            var ticks = 0L
-            LiveActivityBridge.start(demoContent(startedAt.toEpochMilliseconds(), 0))
-            while (ticks < 24) { // 2 minutes
-                delay(5.seconds); ticks += 5
-                LiveActivityBridge.update(demoContent(startedAt.toEpochMilliseconds(), ticks))
-            }
-            LiveActivityBridge.end(demoContent(startedAt.toEpochMilliseconds(), ticks).copy(phase = LiveActivityPhase.Done))
-        }
-    }
-
-    private fun demoContent(startedAtMs: Long, sec: Long) = LiveActivityContent(
-        phase = LiveActivityPhase.Active,
-        startedAtEpochMs = startedAtMs,
-        totalTimeSec = sec,
-        distanceM = sec * 2.8,
-        splitPaceSecPerKm = if (sec > 20) 360 else null,
-        hrBpm = 140 + (sec % 7).toInt(),
-        hrLost = false,
-        gpsLost = false,
-    )
 }

@@ -7,6 +7,28 @@ plugins {
     alias(libs.plugins.composeCompiler)
 }
 
+// A Kotlin/Native test runs inside the simulator sandbox with no bundle, so the replay fixture the
+// flow test needs is generated into a test-source constant from replay's resources at build time.
+val generateTestFixtureSources = tasks.register("generateTestFixtureSources") {
+    val fixture = rootProject.file("replay/src/commonMain/resources/fixtures/straight-run-3min.jsonl")
+    val out = layout.buildDirectory.dir("generated/testFixtures")
+    inputs.file(fixture)
+    outputs.dir(out)
+    doLast {
+        val quotes = "\"\"\""
+        out.get().asFile.resolve("BundledFixtureText.kt").apply { parentFile.mkdirs() }.writeText(
+            """
+            |package com.jakubfronczyk.northform.app
+            |
+            |/** Generated from replay/src/commonMain/resources/fixtures by :app:generateTestFixtureSources. */
+            |object BundledFixtureText {
+            |    val STRAIGHT_RUN_3MIN: String = $quotes${fixture.readText()}$quotes
+            |}
+            |""".trimMargin(),
+        )
+    }
+}
+
 kotlin {
     listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
         target.binaries.framework {
@@ -26,14 +48,20 @@ kotlin {
             api(project(":core"))
             api(project(":engine"))
             api(project(":adapters"))
+            implementation(project(":replay")) // simulator runs replay a bundled fixture (D3: a runtime choice)
             implementation(project(":composeApp"))
             implementation(compose.runtime)
+            implementation(compose.foundation)
             implementation(compose.ui)
             implementation(libs.kotlinx.coroutines.core)
         }
-        iosTest.dependencies {
-            implementation(kotlin("test"))
-            implementation(libs.kotlinx.coroutines.test)
+        iosTest {
+            kotlin.srcDir(generateTestFixtureSources)
+            dependencies {
+                implementation(kotlin("test"))
+                implementation(libs.kotlinx.coroutines.test)
+                implementation(project(":testSupport")) // RecordedAlerts, virtualWallClock, tap
+            }
         }
     }
 }

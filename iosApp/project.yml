@@ -25,6 +25,8 @@ targets:
     sources:
       - path: Sources
       - path: Widget/NorthformAttributes.swift   # shared with the widget: ActivityAttributes must be identical in both
+      - path: ../replay/src/commonMain/resources/fixtures   # bundled replay fixtures (the simulator's run data); data only
+        buildPhase: resources
     info:
       path: Sources/Info.plist
       properties:
