@@ -1,7 +1,9 @@
 package com.jakubfronczyk.northform.app
 
+import com.jakubfronczyk.northform.app.oslog.nf_log_create
+import com.jakubfronczyk.northform.app.oslog.nf_log_notice
+import com.jakubfronczyk.northform.app.oslog.nf_log_t
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.ptr
 import kotlinx.coroutines.flow.MutableStateFlow
 import platform.CoreLocation.CLAuthorizationStatus
 import platform.CoreLocation.CLLocationManager
@@ -22,27 +24,19 @@ import platform.UIKit.UIApplicationDidReceiveMemoryWarningNotification
 import platform.UIKit.UIApplicationWillEnterForegroundNotification
 import platform.UIKit.UIApplicationWillResignActiveNotification
 import platform.darwin.NSObject
-import platform.darwin.OS_LOG_TYPE_DEFAULT
-import platform.darwin.__dso_handle
-import platform.darwin._os_log_internal
-import platform.darwin.os_log_create
-import platform.darwin.os_log_t
 
 /**
  * Structured logging on the unified log (`App/Sources/DeviceTestLog.swift`): subsystem
  * `com.jakubfronczyk.northform`, categories `app` · `run` · `location` · `polar`, so
  * `log collect --device` and Console.app filter the Kotlin app exactly like the Swift one
- * (`testing/step7-device-tests.md` §6). `os_log` is a C macro, so the exported variadic
- * `_os_log_internal` is called directly, the way Kermit's OSLogWriter does.
+ * (`testing/step7-device-tests.md` §6). `os_log` is a C macro whose format string must be compiled
+ * into the binary, so the call goes through the two C functions in `nativeInterop/cinterop/oslog.def`.
  */
 @OptIn(ExperimentalForeignApi::class)
 class OsLog(category: String) {
-    private val log: os_log_t = os_log_create(SUBSYSTEM, category)
+    private val log: nf_log_t = nf_log_create(SUBSYSTEM, category) ?: error("os_log_create returned null")
 
-    /** `%{public}s`: the unified log redacts `%s` from third-party processes; these lines exist to be read. */
-    fun notice(message: String) {
-        _os_log_internal(__dso_handle.ptr, log, OS_LOG_TYPE_DEFAULT, "%{public}s", message)
-    }
+    fun notice(message: String) = nf_log_notice(log, message)
 
     companion object {
         const val SUBSYSTEM = "com.jakubfronczyk.northform"

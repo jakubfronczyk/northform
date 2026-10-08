@@ -1,0 +1,18 @@
+package = com.jakubfronczyk.northform.app.oslog
+---
+// The unified log resolves an os_log format string by its address inside the binary (clang puts the
+// literal into __TEXT,__oslogstring). A format passed from Kotlin at run time is not in that section,
+// so logd shows "<compose failure>" instead of the message. These two C functions are compiled by
+// clang through cinterop, so the format lives in the framework like it does in the Swift build.
+#include <os/log.h>
+
+typedef struct os_log_s *nf_log_t;
+
+static inline nf_log_t nf_log_create(const char *subsystem, const char *category) {
+    return os_log_create(subsystem, category);
+}
+
+// %{public}s: the unified log redacts %s from third-party processes; these lines exist to be read.
+static inline void nf_log_notice(nf_log_t log, const char *message) {
+    os_log(log, "%{public}s", message);
+}
