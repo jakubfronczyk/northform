@@ -52,10 +52,12 @@ targets:
         PRODUCT_NAME: Northform
         PRODUCT_MODULE_NAME: NorthformIOS
         # Only the APP links the Kotlin framework; the widget must not (it's pure SwiftUI, D16).
-        # The framework is linked from a STABLE path (a symlink the run script points at the current
-        # $(CONFIGURATION)/$(SDK_NAME) build) and is listed under `dependencies` below, so it is a real input of
-        # the link step. Linked only via search paths + OTHER_LDFLAGS, Xcode skipped the relink after Kotlin-only
-        # changes and the phone kept running the previous Kotlin (2026-10-07).
+        # The framework is DYNAMIC (app/build.gradle.kts) and Xcode embeds + signs it like any other
+        # framework (`dependencies` below, via the stable `current` symlink the script maintains). The script
+        # declares the framework as its output, so Xcode's copy + re-sign wait for it and run whenever the Kotlin
+        # changed. Why not the usual static framework + embedAndSign: ld records no dependency on a static
+        # archive, so Xcode never relinked after a Kotlin-only change and the phone kept the previous Kotlin until
+        # the next build; and a dylib swapped in by Gradle leaves the app's seal invalid (2026-10-07).
         FRAMEWORK_SEARCH_PATHS: "$(SRCROOT)/../app/build/xcode-frameworks/current $(inherited)"
     configFiles:
       Debug: Configuration/Local.xcconfig
@@ -63,21 +65,26 @@ targets:
     preBuildScripts:
       - name: Compile Kotlin framework
         basedOnDependencyAnalysis: false
+        outputFiles:
+          - $(SRCROOT)/../app/build/xcode-frameworks/current/Northform.framework/Northform
         script: |
           set -e
           cd "$SRCROOT/.."
           # JAVA_HOME: Xcode's non-login shell doesn't see your zsh env. mise provides the JDK.
           export PATH="$HOME/.local/share/mise/shims:$PATH"
-          ./gradlew :app:embedAndSignAppleFrameworkForXcode
-          # Point the stable link path at this configuration's framework (see FRAMEWORK_SEARCH_PATHS).
-          mkdir -p app/build/xcode-frameworks/current
-          ln -sfn "$SRCROOT/../app/build/xcode-frameworks/$CONFIGURATION/$SDK_NAME/Northform.framework" app/build/xcode-frameworks/current/Northform.framework
+          # Build (not embed) the framework for this configuration and SDK into app/build/xcode-frameworks/<config>/<sdk>.
+          case "$SDK_NAME" in iphonesimulator*) TARGET=IosSimulatorArm64 ;; *) TARGET=IosArm64 ;; esac
+          ./gradlew ":app:assemble${CONFIGURATION}AppleFrameworkForXcode${TARGET}"
+          # Stable path for Xcode to link and embed from (FRAMEWORK_SEARCH_PATHS + dependencies). A real copy, not a
+          # symlink: Xcode pre-creates the declared output's directory, and `ln` into an existing directory nests.
+          mkdir -p app/build/xcode-frameworks/current/Northform.framework
+          rsync -a --delete "app/build/xcode-frameworks/$CONFIGURATION/$SDK_NAME/Northform.framework/" app/build/xcode-frameworks/current/Northform.framework/
     dependencies:
       - target: NorthformWidget
         embed: true
-      # Static Kotlin framework: linked, not embedded. Listed here so the link step depends on it.
+      # The Kotlin framework: linked, embedded and signed by Xcode.
       - framework: ../app/build/xcode-frameworks/current/Northform.framework
-        embed: false
+        embed: true
 
   NorthformWidget:
     type: app-extension

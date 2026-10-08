@@ -31,9 +31,13 @@ val generateTestFixtureSources = tasks.register("generateTestFixtureSources") {
 
 kotlin {
     listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
+        // os_log needs its format string compiled by clang (see the .def); the only C in the build.
+        target.compilations.getByName("main").cinterops.create("oslog") {
+            definitionFile.set(project.file("src/nativeInterop/cinterop/oslog.def"))
+        }
         target.binaries.framework {
             baseName = "Northform"
-            isStatic = true
+            isStatic = false // dynamic: Gradle embeds the fresh dylib each build; a static one is invisible to Xcode's relink (project.yml)
             // Swift may see exactly these (D16): NorthformApp (this module), LocationUpdates/LocationSink and
             // LiveActivityBridge (adapters), LiveActivityContent (engine). Exporting the modules makes their
             // public types appear under the `Northform` module name in Swift.
