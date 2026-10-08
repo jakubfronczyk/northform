@@ -9,6 +9,7 @@ import com.jakubfronczyk.northform.adapters.clock.IosWallClock
 import com.jakubfronczyk.northform.adapters.location.KeepAlive
 import com.jakubfronczyk.northform.adapters.location.LiveLocation
 import com.jakubfronczyk.northform.adapters.location.LocationUpdates
+import com.jakubfronczyk.northform.adapters.location.requestWhenInUseAuthorization
 import com.jakubfronczyk.northform.core.SensorId
 import com.jakubfronczyk.northform.engine.sensor.GattHeartRateSensor
 import com.jakubfronczyk.northform.engine.store.InMemoryRecordingStore
@@ -87,7 +88,7 @@ object NorthformApp {
         live = !AppDeps.isSimulator
         val runAlerts = RunAlertPlayer(alerts, DeviceLog::runTrace)
         val deps = AppDeps(
-            source = if (live) RunSource.Live(sensor, location, KeepAlive(), ::requestRunPermissions)
+            source = if (live) RunSource.Live(sensor, location, KeepAlive(DeviceLog.location::notice), ::requestRunPermissions)
                      else RunSource.Replay { BundleFixtures.script("straight-run-3min") },
             store = LoggingStore(InMemoryRecordingStore(), DeviceLog::runTrace),
             wallClock = wallClock,
@@ -109,8 +110,13 @@ object NorthformApp {
         DeviceLog.app.notice("boot() end in ${started.elapsedNow()}") // 5
     }
 
-    /** Locked-screen alerts are notifications (D105): iOS asks once, the answer never blocks a run. Location is asked by the forwarder's first update. */
+    /**
+     * Asked before the run screen opens, location first (SU4 order, `AppModel.swift:66-74`): the keep-alive
+     * session only becomes active with location authorization. Locked-screen alerts are notifications
+     * (D105): iOS asks once, the answer never blocks a run.
+     */
     private suspend fun requestRunPermissions() {
+        DeviceLog.app.notice("location authorization answered: ${requestWhenInUseAuthorization()}")
         suspendCancellableCoroutine { cont -> alerts.requestPermission { cont.resume(Unit) } }
     }
 
