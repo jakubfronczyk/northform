@@ -2,6 +2,7 @@ package com.jakubfronczyk.northform.app
 
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.window.ComposeUIViewController
 import com.jakubfronczyk.northform.adapters.alerts.NotificationAlertPlayer
 import com.jakubfronczyk.northform.adapters.ble.CoreBluetoothCentral
@@ -17,6 +18,7 @@ import com.jakubfronczyk.northform.persistence.nativeDriver
 import com.jakubfronczyk.northform.replay.RecordingTap
 import com.jakubfronczyk.northform.ui.AppRoot
 import com.jakubfronczyk.northform.ui.sensor.SensorScreen
+import com.jakubfronczyk.northform.ui.sensor.SensorScreenModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -51,6 +53,8 @@ object NorthformApp {
         private set
     lateinit var sensor: GattHeartRateSensor
         private set
+    lateinit var sensorDetails: LinkSensorDetails
+        private set
     lateinit var location: LiveLocation
         private set
     lateinit var alerts: NotificationAlertPlayer
@@ -81,8 +85,9 @@ object NorthformApp {
 
         // 3  the sensor mailbox is alive before any radio event can be delivered (delegate callbacks are
         //    dispatched on the BLE queue only after CBCentralManager's init returns)
-        // SU3: the link decides when a sensor counts as paired (adapters/01); the app only persists it.
-        sensor = GattHeartRateSensor(central, wallClock) { id, name -> PairedSensor.id = id?.value; PairedSensor.name = name ?: PairedSensor.name.takeIf { id != null } }
+        // SU3: the link decides when a sensor counts as paired (adapters/01); the app only persists and shows it.
+        sensor = GattHeartRateSensor(central, wallClock) { id, name -> sensorDetails.remember(id, name) }
+        sensorDetails = LinkSensorDetails(sensor, scope)
         sensor.start(scope)
         scope.launch { sensor.states().collect { DeviceLog.polar.notice("state ${it.state}") } }
 
@@ -136,7 +141,8 @@ object NorthformApp {
             onStartRun = model::startRun,
             onCloseRun = model::closeRun,
             map = { route -> RouteMap(route, showsUserLocation = live) },
-            sensorScreen = { close -> SensorScreen(sensor, onConnected = {}, onClose = close) },
+            // One model per opening (SU10): its collectors and 30 s search live exactly as long as the screen.
+            sensorScreen = { close -> SensorScreen(remember { SensorScreenModel(sensor, sensorDetails) }, onClose = close) },
         )
     }
 }
