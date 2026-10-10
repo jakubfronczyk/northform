@@ -9,3 +9,6 @@ private val parsed = HashMap<String, ReplayScript>()
 fun bundled(name: String): ReplayScript = parsed.getOrPut(name) { Fixture.parse(resourceText("fixtures/$name.jsonl")) }
 
 fun bundledExpected(name: String): String = resourceText("fixtures/$name.expected.json")
+
+/** A Swift-written fixture outside the repo (`NORTHFORM_SWIFT_FIXTURE`), or null when none is given. JVM only. */
+expect fun swiftFixtureText(): String?

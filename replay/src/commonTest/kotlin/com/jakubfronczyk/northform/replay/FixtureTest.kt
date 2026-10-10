@@ -140,4 +140,19 @@ class FixtureTest {
         }
         assertEquals(emptyList(), differing, "fixtures whose re-encoding differs from the Swift-written bytes")
     }
+
+    /**
+     * adapters/04 — the bundled corpus predates `sAcc`/`course`/`cAcc`/`vAcc`; the Swift build's run-3+
+     * recordings carry them but are private (real coordinates, gitignored in `northform-ios`), so this
+     * reads one from `NORTHFORM_SWIFT_FIXTURE` when set and passes vacuously otherwise. Run by hand:
+     * `NORTHFORM_SWIFT_FIXTURE=<path>.jsonl ./gradlew :replay:jvmTest --tests '*swift_written*'`.
+     */
+    @Test
+    fun swift_written_fixture_with_accuracy_fields_re_encodes_byte_identical() {
+        val text = swiftFixtureText() ?: return
+        val script = Fixture.parse(text)
+        val fixes = script.inputs.filterIsInstance<ReplayInput.Fix>().map { it.fix }
+        assertTrue(fixes.any { it.speedAccuracy != null && it.course != null }, "the Swift fixture carries sAcc and course")
+        assertEquals(text, Fixture.encode(script))
+    }
 }

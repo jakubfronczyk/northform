@@ -14,3 +14,6 @@ import platform.Foundation.stringWithContentsOfFile
 actual fun resourceText(path: String): String =
     NSString.stringWithContentsOfFile("src/commonMain/resources/$path", encoding = NSUTF8StringEncoding, error = null)
         ?: error("missing test resource $path (cwd must be the :replay module directory)")
+
+/** The simulator has no environment to point at a private file. */
+actual fun swiftFixtureText(): String? = null

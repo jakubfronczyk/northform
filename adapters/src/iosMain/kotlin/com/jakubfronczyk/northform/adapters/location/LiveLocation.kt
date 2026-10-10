@@ -70,6 +70,7 @@ class LiveLocation(
         }
     }
 
+    /** `CoreLocationSource.swift:100` — Core Location marks an invalid value as negative: it becomes null (Swift D114). */
     private fun CLLocation.toFix(stationary: Boolean): LocationFix? {
         if (horizontalAccuracy < 0) return null // Core Location: negative = invalid
         val (lat, lon) = coordinate.useContents { latitude to longitude }
@@ -82,6 +83,11 @@ class LiveLocation(
             altitude = if (verticalAccuracy >= 0) altitude else null,
             speed = valid(speed),
             stationary = stationary,
+            // Recorded only, read by no rule yet (adapters/04); the fixture writes them as sAcc/course/cAcc/vAcc.
+            speedAccuracy = valid(speedAccuracy),
+            course = valid(course),
+            courseAccuracy = valid(courseAccuracy),
+            verticalAccuracy = valid(verticalAccuracy),
         )
     }
 
