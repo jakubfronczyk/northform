@@ -9,11 +9,16 @@ import com.jakubfronczyk.northform.core.RecordingEvent
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RecordingType
+import com.jakubfronczyk.northform.core.ports.RecordingStoreError
+import com.jakubfronczyk.northform.core.reliability.ReliabilityRecord
 import kotlinx.coroutines.test.runTest
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -54,6 +59,17 @@ class MigrationTest {
             assertEquals(listOf(RecordingEvent(t0 + 1.seconds, EventKind.Split(1), EventSource.Auto)), data.events)
             assertEquals(t0 + 2.seconds, data.lastPersistedAt)
             assertEquals(data.recording, store.unfinished(), "crash resume finds the v1 run after the upgrade")
+
+            // v2 (1.sqm, engine/03): the migrated database takes a reliability row for the v1 run and reads it back.
+            assertNull(store.reliability(id), "no log yet for a v1 run")
+            val record = ReliabilityRecord(drops = 2, reconnects = 1, reconnectTimes = listOf(30.878.seconds), hrLost = 41.seconds, gpsLost = Duration.ZERO, recoveries = 1)
+            store.saveReliability(id, record)
+            assertEquals(record, store.reliability(id))
+            store.saveReliability(id, ReliabilityRecord.none)
+            assertEquals(ReliabilityRecord.none, store.reliability(id), "a second write replaces the row")
+            assertFailsWith<RecordingStoreError.NotFound> { store.saveReliability(RecordingId("nobody"), record) }
+            store.delete(id)
+            assertNull(store.reliability(id), "delete takes the log with the recording")
         } finally {
             driver.close()
         }

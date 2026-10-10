@@ -19,11 +19,13 @@ import com.jakubfronczyk.northform.core.ports.FlushBatch
 import com.jakubfronczyk.northform.core.ports.RecordingData
 import com.jakubfronczyk.northform.core.ports.RecordingStore
 import com.jakubfronczyk.northform.core.ports.RecordingStoreError
+import com.jakubfronczyk.northform.core.reliability.ReliabilityRecord
 import com.jakubfronczyk.northform.core.wire
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Instant
 import com.jakubfronczyk.northform.persistence.Recording as RecordingRow
 
@@ -100,6 +102,7 @@ class SqlRecordingStore(
 
     override suspend fun delete(id: RecordingId): Unit = tx {
         row(id)
+        db.reliabilityQueries.deleteReliability(id.value)
         q.deleteMetrics(id.value)
         q.deleteChunks(id.value)
         q.deleteEvents(id.value)
@@ -118,6 +121,36 @@ class SqlRecordingStore(
      */
     suspend fun exportAll(exportedAt: Instant): Backup = tx {
         Backup(exportedAt, q.selectRecordingIds().executeAsList().map { id -> BackupRecording(loadInTx(RecordingId(id))!!, metricsInTx(id)) })
+    }
+
+    /**
+     * The reliability log row (engine/03, R29): a cache of `ReliabilityRecord.of(load(id))` so History can
+     * show the counts without decoding the streams. Not on the frozen port, like [exportAll]: it is not a step of
+     * the run's state machine. Upsert, any state (summary computing writes it; a rule bump recomputes it);
+     * `NotFound` if the recording does not exist. Durations are stored as nanoseconds, the list as text.
+     */
+    suspend fun saveReliability(id: RecordingId, record: ReliabilityRecord): Unit = tx {
+        row(id)
+        db.reliabilityQueries.upsertReliability(
+            recording_id = id.value, version = ReliabilityRecord.version.toLong(),
+            drops = record.drops.toLong(), reconnects = record.reconnects.toLong(),
+            reconnect_times = record.reconnectTimes.joinToString(",") { it.inWholeNanoseconds.toString() },
+            hr_lost = record.hrLost.inWholeNanoseconds, gps_lost = record.gpsLost.inWholeNanoseconds,
+            recoveries = record.recoveries.toLong(),
+        )
+    }
+
+    /** The stored log, or null when none was written yet (or it was written by another rule version: recompute). */
+    suspend fun reliability(id: RecordingId): ReliabilityRecord? = tx {
+        db.reliabilityQueries.selectReliability(id.value).executeAsOneOrNull()
+            ?.takeIf { it.version == ReliabilityRecord.version.toLong() }
+            ?.let { r ->
+                ReliabilityRecord(
+                    drops = r.drops.toInt(), reconnects = r.reconnects.toInt(),
+                    reconnectTimes = r.reconnect_times.split(',').filter { it.isNotEmpty() }.map { it.toLong().nanoseconds },
+                    hrLost = r.hr_lost.nanoseconds, gpsLost = r.gps_lost.nanoseconds, recoveries = r.recoveries.toInt(),
+                )
+            }
     }
 
     /** The inverse of `saveSummary`'s insert: the metric with the profile it was computed with (D24). */

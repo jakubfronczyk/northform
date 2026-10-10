@@ -1,0 +1,25 @@
+-- Schema v2 (engine/03): the reliability log per recording (R29), a cache of `ReliabilityRecord.of(load(id))`
+-- stamped with the rule version that computed it. Created for an existing database by `migrations/1.sqm`; this
+-- file is the same table for a fresh install (the fresh schema = every .sq file; `verifySqlDelightMigration`
+-- proves the two agree). Durations are nanoseconds like every other time column (Nanos.kt).
+
+CREATE TABLE reliability (
+    recording_id TEXT NOT NULL PRIMARY KEY,
+    version INTEGER NOT NULL,          -- ReliabilityRecord.version
+    drops INTEGER NOT NULL,            -- sensorLost events
+    reconnects INTEGER NOT NULL,       -- sensorReconnected events
+    reconnect_times TEXT NOT NULL,     -- ns per reconnect that followed a drop, comma-separated, run order ('' = none)
+    hr_lost INTEGER NOT NULL,          -- ns
+    gps_lost INTEGER NOT NULL,         -- ns
+    recoveries INTEGER NOT NULL        -- crashRecovered events
+);
+
+upsertReliability:
+INSERT OR REPLACE INTO reliability(recording_id, version, drops, reconnects, reconnect_times, hr_lost, gps_lost, recoveries)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+selectReliability:
+SELECT * FROM reliability WHERE recording_id = ?;
+
+deleteReliability:
+DELETE FROM reliability WHERE recording_id = ?;

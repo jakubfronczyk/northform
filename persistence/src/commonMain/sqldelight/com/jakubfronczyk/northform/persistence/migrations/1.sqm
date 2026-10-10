@@ -1,0 +1,13 @@
+-- v1 → v2 (engine/03): the reliability log table. The number is the version this file migrates FROM;
+-- `Schema.version` becomes 2 by itself. Must end at exactly what `Reliability.sq` creates fresh
+-- (`verifySqlDelightMigration` replays this on `databases/1.db` and diffs). Never edit once shipped.
+CREATE TABLE reliability (
+    recording_id TEXT NOT NULL PRIMARY KEY,
+    version INTEGER NOT NULL,
+    drops INTEGER NOT NULL,
+    reconnects INTEGER NOT NULL,
+    reconnect_times TEXT NOT NULL,
+    hr_lost INTEGER NOT NULL,
+    gps_lost INTEGER NOT NULL,
+    recoveries INTEGER NOT NULL
+);

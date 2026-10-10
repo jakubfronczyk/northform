@@ -8,12 +8,14 @@ import com.jakubfronczyk.northform.core.Recording
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RecordingType
+import com.jakubfronczyk.northform.core.reliability.ReliabilityRecord
 import kotlinx.coroutines.test.runTest
 import java.io.File
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 /**
@@ -34,6 +36,10 @@ class MigrationSnapshotTest {
             val recording = Recording(id = RecordingId("after-upgrade"), type = RecordingType.Walk, state = RecordingState.Active, startUtc = Instant.parse("2026-10-10T06:00:00Z"), tzOffset = 0)
             store.create(recording)
             assertEquals(recording, assertNotNull(store.load(recording.id)).recording)
+            // v2 (1.sqm): the real v1 file, migrated, takes the reliability row too.
+            val record = ReliabilityRecord(drops = 1, reconnects = 1, reconnectTimes = listOf(30.seconds), hrLost = 35.seconds, gpsLost = 0.seconds, recoveries = 0)
+            store.saveReliability(recording.id, record)
+            assertEquals(record, store.reliability(recording.id))
         } finally {
             driver.close()
             copy.delete()
