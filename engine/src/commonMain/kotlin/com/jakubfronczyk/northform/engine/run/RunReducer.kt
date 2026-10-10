@@ -40,6 +40,10 @@ object RunReducer {
     /** Pace is shown only once it means something (D102). */
     const val splitPaceMinDistance = 50.0
     const val splitDistance = 1000.0
+    /** R24: GPS ✓ at the start gate = this many consecutive fixes within [gateFixAccuracy]. */
+    const val gateFixes = 3
+    /** R24: the accuracy a gate fix must have — the same 20 m a fix needs to count for distance (D107). */
+    const val gateFixAccuracy = DistanceTracker.distanceAccuracy
 
     data class Reduced(val state: RunState, val effects: List<RunEffect>)
 
@@ -125,8 +129,13 @@ object RunReducer {
         /** `RunReducer.swift:91`. */
         fun heartRate(sample: HrSample) {
             if (sample.bpm !in validHeartRate) return // invalid: as if it never came (D119)
+            if (p.startedAt == null) { // the start gate (R24): seen, not recorded
+                p.gateHr?.let { if (sample.t < it.t) return }
+                p = p.copy(gateHr = sample)
+                return
+            }
             p.lastHr?.let { if (sample.t < it.t) return } // late input: dropped
-            if (p.startedAt == null || p.phase == RunPhase.Done) return
+            if (p.phase == RunPhase.Done) return
             p = p.copy(
                 lastHr = sample,
                 hrSum = p.hrSum + sample.bpm,
@@ -143,12 +152,8 @@ object RunReducer {
         /** `RunReducer.swift:107`. */
         fun location(fix: LocationFix) {
             p.lastFix?.let { if (fix.t < it.t) return } // late input: dropped
-            if (p.phase is RunPhase.Countdown) {
-                // The runner stands at the start line: the latest good fix is the starting point.
-                if (fix.horizontalAccuracy <= DistanceTracker.distanceAccuracy) p = p.copy(startFix = fix)
-                return
-            }
-            if (p.startedAt == null || p.stoppedAt != null) return
+            if (p.startedAt == null) { gateFix(fix); return }
+            if (p.stoppedAt != null) return
             p = p.copy(lastFix = fix)
             b = b.copy(fixes = b.fixes + fix)
 
@@ -162,6 +167,17 @@ object RunReducer {
                 record(EventKind.GpsBack, fix.t)
             }
             count(trackDistance(fix, counting = p.phase == RunPhase.Active))
+        }
+
+        /**
+         * R24 before the run starts: GPS ✓ after [gateFixes] consecutive fixes within [gateFixAccuracy]; a
+         * poorer one starts the count over. During the countdown the latest good fix is also the
+         * starting point (`RunReducer.swift:109`): the runner stands at the start line.
+         */
+        private fun gateFix(fix: LocationFix) {
+            val good = fix.horizontalAccuracy <= gateFixAccuracy
+            p = p.copy(gateGoodFixes = if (good) p.gateGoodFixes + 1 else 0)
+            if (good && p.phase is RunPhase.Countdown) p = p.copy(startFix = fix)
         }
 
         /** `RunReducer.swift:131` — distance from every fix, with the same GPS-loss thresholds as the screen (D113, D116). */
@@ -255,10 +271,10 @@ object RunReducer {
 
         // ── Helpers ─────────────────────────────────────────────────────────────────────────
 
-        /** `RunReducer.swift:210`. */
+        /** `RunReducer.swift:210` — through the one start path `rebuild` also takes. */
         private fun begin(t: Instant) {
-            p = p.copy(phase = RunPhase.Active, startedAt = t, countdownTicksSent = 0)
-            b = b.copy(lastPersistAt = t)
+            p = p.begun(t)
+            b = b.begun(t)
             p.startFix?.let { startFix ->
                 // Stored like any fix, so a rebuild starts from the same point.
                 p = p.copy(startFix = null, lastFix = startFix)

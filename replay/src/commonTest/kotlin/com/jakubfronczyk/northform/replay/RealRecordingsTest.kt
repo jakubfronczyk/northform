@@ -15,6 +15,7 @@ import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.engine.run.RunReducer
 import com.jakubfronczyk.northform.engine.run.ShownPace
 import com.jakubfronczyk.northform.engine.run.rebuild
+import com.jakubfronczyk.northform.engine.run.time
 import com.jakubfronczyk.northform.testing.RunHarness
 import com.jakubfronczyk.northform.testing.at
 import com.jakubfronczyk.northform.testing.fix
@@ -320,6 +321,47 @@ class RealRecordingsTest {
             assertEquals(expected.splits, trace.splits, "$name splits")
             assertEquals(expected.swiftHash.toString(16), fnv1a(trace.paces).toString(16), "$name: the pace series differs from the Swift series somewhere")
         }
+    }
+
+    // ── R24 start gate on the real recordings (run 1 started in a stairwell: run-start-flow/01) ─
+
+    /**
+     * "HR ✓/✗ GPS ✓/✗" as the gate saw it the moment Start was tapped, and when GPS would have been ready
+     * had the runner waited (the same inputs with the taps left out).
+     */
+    private fun readinessAtStart(name: String): String {
+        val script = bundled(name)
+        val run = RunHarness(RunHarness.config)
+        var atStart = ""
+        for (input in timeline(script)) {
+            if (input is RunInput.User && input.action == UserAction.Start) {
+                val s = run.state.snapshot
+                atStart = "HR ${if (s.hrLost) "✗" else "✓"} GPS ${if (s.gpsLost) "✗" else "✓"}"
+                break
+            }
+            run.send(input)
+        }
+        check(atStart.isNotEmpty()) { "$name has no Start" }
+        val waiting = RunHarness(RunHarness.config)
+        for (input in timeline(script)) {
+            if (input is RunInput.User) continue
+            waiting.send(input)
+            if (!waiting.state.snapshot.gpsLost) return "$atStart; GPS ✓ at +${fmt((input.time!! - script.meta.start).inSecondsDouble, 1)} s"
+        }
+        return "$atStart; GPS never ✓"
+    }
+
+    /** Run 1 (run-start-flow/01): Start was tapped 1 s in, in the stairwell; the gate would have held for GPS. */
+    @Test
+    fun the_gate_was_not_ready_when_run_one_started_indoors() {
+        assertEquals(
+            mapOf(
+                "run-1-park" to "HR ✓ GPS ✗; GPS ✓ at +307.0 s", // 5 min to three fixes ≤ 20 m in a row: the stairwell, then the street
+                "run-2-walk" to "HR ✓ GPS ✗; GPS ✓ at +127.0 s",
+                "straight-run-3min" to "HR ✗ GPS ✗; GPS ✓ at +2.0 s", // synthetic: nothing before the tap
+            ),
+            listOf("run-1-park", "run-2-walk", "straight-run-3min").associateWith { readinessAtStart(it) },
+        )
     }
 
     // ── CurrentPaceTests.swift (run-1) + GPSDistanceTests.swift (run-2 p95) ────────────────────

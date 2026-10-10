@@ -43,6 +43,12 @@ data class RunProgress(
     val hrCount: Int = 0,
     val hrMax: Int? = null,
     val sensorLost: Boolean = false,
+    // Start gate (R24, D20): what the gate has seen BEFORE the run starts. Seen, not recorded: never
+    // stored, never averaged, cleared by `begun`. The snapshot turns it into HR ✓ / GPS ✓.
+    /** Latest valid sample before start: HR ✓ while it is younger than `RunReducer.hrLostAfter` (aged by the tick). */
+    val gateHr: HrSample? = null,
+    /** Consecutive fixes ≤ `RunReducer.gateFixAccuracy` before start: GPS ✓ from `RunReducer.gateFixes` on. */
+    val gateGoodFixes: Int = 0,
     // GPS
     /** Latest good fix during the countdown; becomes the first stored fix at start. */
     val startFix: LocationFix? = null,
@@ -68,13 +74,39 @@ data class RunProgress(
         return maxOf(Duration.ZERO, (end - startedAt) - paused)
     }
 
-    /** `RunState.swift:71`. */
+    /**
+     * `RunReducer.swift:210` — the moment the countdown ends. The ONE start path: the live reducer's
+     * `begin` and `rebuild` both go through here, so a resumed run starts from the same state as a
+     * live one (D94). What the gate saw ends here.
+     */
+    fun begun(at: Instant): RunProgress =
+        copy(phase = RunPhase.Active, startedAt = at, countdownTicksSent = 0, gateHr = null, gateGoodFixes = 0)
+
+    /**
+     * R24 before the run starts (`Gate` and `Countdown`): HR ✓ = a valid sample in the last 5 s (the
+     * same 5 s as HR lost), GPS ✓ = 3 consecutive fixes ≤ 20 m. Aged by `lastTick`; a sample newer
+     * than the last tick is fresh by definition.
+     */
+    val gateHrReady: Boolean
+        get() = gateHr?.let { sample -> maxOf(lastTick ?: sample.t, sample.t) - sample.t < RunReducer.hrLostAfter } ?: false
+    val gateGpsReady: Boolean get() = gateGoodFixes >= RunReducer.gateFixes
+
+    /**
+     * `RunState.swift:71`. Before start the snapshot carries the gate's readiness in the fields the
+     * screens already read: `hrLost`/`gpsLost` = not ready (R24), `hrNow` = the live bpm. After start
+     * they mean what they always meant (R25, R26).
+     */
     fun snapshot(profile: Profile): RunSnapshot {
         val now = lastTick ?: startedAt
         val total = if (startedAt != null && now != null) maxOf(Duration.ZERO, (stoppedAt ?: now) - startedAt) else Duration.ZERO
         val splitDistance = distance - splitStartDistance
         val splitActive = (now?.let { activeTime(it) } ?: Duration.ZERO) - splitStartActive
-        val hrNow = if (hrLost) null else lastHr?.bpm
+        val atTheGate = startedAt == null
+        val hrNow = when {
+            atTheGate -> if (gateHrReady) gateHr?.bpm else null
+            hrLost -> null
+            else -> lastHr?.bpm
+        }
         return RunSnapshot(
             phase = phase,
             startedAt = startedAt,
@@ -86,8 +118,8 @@ data class RunProgress(
             hrAvg = if (hrCount > 0) (hrSum.toDouble() / hrCount.toDouble()).roundedHalfAwayFromZero().toInt() else null,
             hrMax = hrMax,
             zone = hrNow?.let { profile.zone(it) },
-            hrLost = hrLost,
-            gpsLost = gpsLost,
+            hrLost = if (atTheGate) !gateHrReady else hrLost,
+            gpsLost = if (atTheGate) !gateGpsReady else gpsLost,
         )
     }
 }
@@ -109,6 +141,9 @@ data class PersistBuffer(
     val computingRequested: Boolean = false,
 ) {
     data class InFlight(val seq: Int, val hr: Int, val fixes: Int, val events: Int)
+
+    /** The buffer at the moment the run starts (the one start path, see `RunProgress.begun`): the 5 s persist clock starts now. */
+    fun begun(at: Instant): PersistBuffer = copy(lastPersistAt = at)
 
     val isEmpty: Boolean get() = hr.isEmpty() && fixes.isEmpty() && events.isEmpty()
 }

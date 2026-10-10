@@ -17,11 +17,8 @@ import kotlin.time.Instant
  */
 fun RunReducer.rebuild(config: RunConfig, data: RecordingData): RunState {
     val start = data.recording.startUtc
-    var state = RunState(
-        config,
-        progress = RunProgress(phase = RunPhase.Active, startedAt = start),
-        buffer = PersistBuffer(lastPersistAt = start),
-    )
+    // The one start path (`RunProgress.begun`): the same state `RunReducer.begin` produces live, not a copy of it.
+    var state = RunState(config, progress = RunProgress().begun(start), buffer = PersistBuffer().begun(start))
 
     class Item(val t: Instant, val rank: Int, val input: RunInput)
     val inputs = ArrayList<Item>()
