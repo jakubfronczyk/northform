@@ -26,10 +26,22 @@ kotlin {
     }
 }
 
+// The green bar (`jvmTest`) runs the migration verification too, so a schema edit without a `.sqm` is red locally and in CI.
+tasks.named("jvmTest") { dependsOn("verifySqlDelightMigration") }
+
 sqldelight {
     databases {
         create("NorthformDb") {
             packageName.set("com.jakubfronczyk.northform.persistence")
+            // Migrations (persistence/03). The `.sq` files stay the source of truth for a FRESH database; a
+            // `.sqm` (`migrations/<n>.sqm`, "from version n to n+1") carries an existing database forward.
+            // `generateCommonMainNorthformDbSchema` snapshots the current schema as `databases/<version>.db`
+            // (committed); `verifySqlDelightMigration` replays the `.sqm` chain on every snapshot and fails
+            // the build when the result differs from the `.sq` end state — the CI migration test.
+            // `deriveSchemaFromMigrations` is left off: with it the `.sq` CREATEs would be ignored and the
+            // schema read from the migration chain alone, which hides the end state from the reader.
+            schemaOutputDirectory.set(file("src/commonMain/sqldelight/databases"))
+            verifyMigrations.set(true)
         }
     }
 }

@@ -1,6 +1,8 @@
 package com.jakubfronczyk.northform.persistence
 
+import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlDriver
+import app.cash.sqldelight.db.SqlSchema
 import app.cash.sqldelight.driver.native.NativeSqliteDriver
 import co.touchlab.sqliter.SynchronousFlag
 
@@ -22,8 +24,8 @@ fun nativeDriver(name: String = "northform.db"): SqlDriver = NativeSqliteDriver(
 )
 
 /** SQLiter opens a shared-cache in-memory database for `inMemory = true`, so one reader pool sees one database. */
-actual fun inMemoryDriver(name: String): SqlDriver = NativeSqliteDriver(
-    schema = NorthformDb.Schema,
+actual fun inMemoryDriver(name: String, schema: SqlSchema<QueryResult.Value<Unit>>): SqlDriver = NativeSqliteDriver(
+    schema = schema,
     name = name,
     maxReaderConnections = 1,
     onConfiguration = { it.copy(inMemory = true) },
