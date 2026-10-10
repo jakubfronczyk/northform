@@ -56,21 +56,21 @@ class AppModelReplayTest {
         model.startRun()
         runCurrent()
         val run = assertNotNull(model.activeRun.value, "the run screen opens on the replay session")
-        assertEquals(RunPhase.Gate, run.session.snapshot.phase)
+        assertEquals(RunPhase.Gate, run.session.snapshots.value.phase)
 
         run.session.tap(UserAction.Start) // the Start tap
         advanceTimeBy(6.seconds); runCurrent()
-        assertEquals(RunPhase.Active, run.session.snapshot.phase, "countdown over")
+        assertEquals(RunPhase.Active, run.session.snapshots.value.phase, "countdown over")
         advanceTimeBy(120.seconds); runCurrent()
-        val live = run.session.snapshot
+        val live = run.session.snapshots.value
         assertTrue(live.distance > 200, "distance climbs on replay GPS: ${live.distance} m")
         assertNotNull(live.hrNow, "live heart rate from the replay sensor")
 
         run.session.tap(UserAction.Stop) // hold-to-stop
         runCurrent()
-        assertTrue(run.session.snapshot.phase is RunPhase.Cooldown)
+        assertTrue(run.session.snapshots.value.phase is RunPhase.Cooldown)
         advanceTimeBy(61.seconds); runCurrent()
-        assertEquals(RunPhase.Done, run.session.snapshot.phase, "the Summary screen")
+        assertEquals(RunPhase.Done, run.session.snapshots.value.phase, "the Summary screen")
 
         model.closeRun() // Done tapped
         advanceTimeBy(1.seconds); runCurrent()

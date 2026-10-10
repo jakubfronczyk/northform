@@ -88,7 +88,7 @@ object NorthformApp {
         live = !AppDeps.isSimulator
         val runAlerts = RunAlertPlayer(alerts, DeviceLog::runTrace)
         val deps = AppDeps(
-            source = if (live) RunSource.Live(sensor, location, KeepAlive(DeviceLog.location::notice), ::requestRunPermissions)
+            source = if (live) RunSource.Live(sensor, location, KeepAlive(DeviceLog.location::notice).asRunKeepAlive(), ::requestRunPermissions)
                      else RunSource.Replay { BundleFixtures.script("straight-run-3min") },
             store = LoggingStore(InMemoryRecordingStore(), DeviceLog::runTrace),
             wallClock = wallClock,
@@ -118,6 +118,12 @@ object NorthformApp {
     private suspend fun requestRunPermissions() {
         DeviceLog.app.notice("location authorization answered: ${requestWhenInUseAuthorization()}")
         suspendCancellableCoroutine { cont -> alerts.requestPermission { cont.resume(Unit) } }
+    }
+
+    /** `KeepAlive` is an `:adapters` class; `RunKeepAlive` is the app's seam for it (a fake in tests). */
+    private fun KeepAlive.asRunKeepAlive() = object : RunKeepAlive {
+        override fun hold() = this@asRunKeepAlive.hold()
+        override fun release() = this@asRunKeepAlive.release()
     }
 
     /** The Compose root. Swift wraps it in a UIViewControllerRepresentable and renders nothing of its own. */

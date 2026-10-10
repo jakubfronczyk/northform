@@ -1,6 +1,5 @@
 package com.jakubfronczyk.northform.app
 
-import com.jakubfronczyk.northform.adapters.location.KeepAlive
 import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.Sex
 import com.jakubfronczyk.northform.core.ports.AlertPlayer
@@ -9,8 +8,14 @@ import com.jakubfronczyk.northform.core.ports.LocationProvider
 import com.jakubfronczyk.northform.core.ports.RecordingStore
 import com.jakubfronczyk.northform.core.ports.WallClock
 import com.jakubfronczyk.northform.replay.RecordingTap
+import com.jakubfronczyk.northform.replay.ReplayLocation
 import com.jakubfronczyk.northform.replay.ReplayMeta
 import com.jakubfronczyk.northform.replay.ReplayScript
+import com.jakubfronczyk.northform.replay.ReplaySensor
+import com.jakubfronczyk.northform.replay.ReplayTimeline
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import platform.Foundation.NSProcessInfo
 import platform.Foundation.NSTimeZone
 import platform.Foundation.NSUUID
@@ -18,21 +23,59 @@ import platform.Foundation.localTimeZone
 import platform.Foundation.secondsFromGMT
 import kotlin.time.Instant
 
+/** Keeps the process alive while locked during a run (D14): `KeepAlive` on the phone, a fake in tests. */
+interface RunKeepAlive {
+    fun hold()
+    fun release()
+}
+
+/**
+ * What a source hands one run: its two input ports, a hook for the moment the session is running
+ * (hold the keep-alive, start the playback) and the matching release when the run is over.
+ */
+class RunInputs(
+    val sensor: HeartRateSensor,
+    val location: LocationProvider,
+    val onRunning: () -> Unit = {},
+    val release: () -> Unit = {},
+)
+
 /**
  * Where a run's samples come from (`AppDeps.swift:14-16`, `AppModel.swift:64-83`): the real sensor and
  * GPS on the phone, a bundled fixture in the simulator. Chosen once at boot; illegal mixes can't be built.
+ * Each source knows how to open itself, so nothing else branches on which one it is.
  */
 sealed interface RunSource {
+    /** Opens the inputs for one run; called once per run, before its session exists. */
+    suspend fun open(wallClock: WallClock, scope: CoroutineScope): RunInputs
+
     class Live(
         val sensor: HeartRateSensor,
         val location: LocationProvider,
-        /** Keeps the process alive while locked during a run (D14). */
-        val keepAlive: KeepAlive,
+        val keepAlive: RunKeepAlive,
         /** Asks for the permissions a live run needs before the run screen opens (`AppModel.swift:64-74`). */
         val requestPermissions: suspend () -> Unit,
-    ) : RunSource
+    ) : RunSource {
+        // Asked here, before the run screen opens, so the prompt never covers a running clock (`AppModel.swift:66-74`);
+        // the keep-alive is held only after that, because it needs the location answer (`KeepAlive`).
+        override suspend fun open(wallClock: WallClock, scope: CoroutineScope): RunInputs {
+            requestPermissions()
+            return RunInputs(sensor, location, onRunning = keepAlive::hold, release = keepAlive::release)
+        }
+    }
 
-    class Replay(val script: () -> ReplayScript) : RunSource
+    class Replay(val script: () -> ReplayScript) : RunSource {
+        // Playback starts from `onRunning`, after the session is collecting, so the first inputs are never missed.
+        override suspend fun open(wallClock: WallClock, scope: CoroutineScope): RunInputs {
+            val timeline = ReplayTimeline(script(), wallClock)
+            var playback: Job? = null
+            return RunInputs(
+                ReplaySensor(timeline), ReplayLocation(timeline),
+                onRunning = { playback = scope.launch { timeline.play() } },
+                release = { playback?.cancel() },
+            )
+        }
+    }
 }
 
 /**
