@@ -30,7 +30,10 @@ private fun previewRun(snapshot: RunSnapshot) {
 @Preview @Composable fun CountdownPreview() = previewRun(RunSnapshot(RunPhase.Countdown(Clock.System.now() + 4.seconds)))
 @Preview @Composable fun ActivePreview() = previewRun(FakeRunSession.running)
 @Preview @Composable fun PausedPreview() = previewRun(FakeRunSession.running.copy(phase = RunPhase.Paused(Clock.System.now()), currentPace = null))
+/** Sensor dropped mid-run: HR now is "—", the averages so far stay (H1). */
 @Preview @Composable fun HrLostPreview() = previewRun(FakeRunSession.running.copy(hrLost = true, hrNow = null, zone = null))
+/** No sample yet in this run: all three HR numbers are "—". */
+@Preview @Composable fun NoHrYetPreview() = previewRun(FakeRunSession.running.copy(hrLost = true, hrNow = null, hrAvg = null, hrMax = null, zone = null))
 @Preview @Composable fun GpsLostPreview() = previewRun(FakeRunSession.running.copy(gpsLost = true))
 @Preview @Composable fun CooldownPreview() = previewRun(FakeRunSession.running.copy(phase = RunPhase.Cooldown(Clock.System.now() + 45.seconds)))
 @Preview @Composable fun DonePreview() = previewRun(FakeRunSession.running.copy(phase = RunPhase.Done))

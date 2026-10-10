@@ -19,5 +19,11 @@ kotlin {
             implementation("org.jetbrains.compose.ui:ui-tooling-preview:1.12.1") // androidx @Preview on the fakes (D110)
             implementation(libs.kotlinx.coroutines.core)
         }
+        // Screen models are pure functions (table tests); the scripted FakeRunSession runs on runTest's
+        // virtual clock. No Compose UI-test dependency: the screens are tested through their models.
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
+        }
     }
 }

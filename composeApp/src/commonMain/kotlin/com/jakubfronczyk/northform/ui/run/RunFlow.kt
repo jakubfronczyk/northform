@@ -58,7 +58,7 @@ fun RunFlow(session: RunSessionHandle, onClose: () -> Unit, map: @Composable (ro
         when (val phase = snapshot.phase) {
             RunPhase.Gate -> GateScreen(start = { send(UserAction.Start) }, close = onClose)
             is RunPhase.Countdown -> CountdownScreen(phase.endsAt, session.wallClock)
-            RunPhase.Active, is RunPhase.Paused -> LiveRunScreen(snapshot, route, send, map)
+            RunPhase.Active, is RunPhase.Paused -> LiveRunScreen(snapshot, route, session.wallClock, send, map)
             is RunPhase.Cooldown -> StoppedScreen(snapshot, skip = { send(UserAction.SkipCooldown) })
             RunPhase.Done -> DoneScreen(snapshot, close = onClose)
         }
