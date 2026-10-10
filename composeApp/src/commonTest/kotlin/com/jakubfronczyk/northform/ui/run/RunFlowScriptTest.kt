@@ -1,6 +1,8 @@
 package com.jakubfronczyk.northform.ui.run
 
+import com.jakubfronczyk.northform.core.HRZones
 import com.jakubfronczyk.northform.core.UserAction
+import com.jakubfronczyk.northform.core.metrics.zone
 import com.jakubfronczyk.northform.core.ports.WallClock
 import com.jakubfronczyk.northform.engine.run.EndResult
 import com.jakubfronczyk.northform.engine.run.RunPhase
@@ -56,11 +58,11 @@ class RunFlowScriptTest {
         assertEquals(t0 + 5.seconds, session.snapshots.value.startedAt)
 
         // One minute in, with a reading: the live model shows it.
-        fake.script { copy(hrNow = 152, hrAvg = 148, hrMax = 171, zone = 3, currentPace = 304.0, splitPace = 312.0, distance = 200.0) }
+        fake.script { copy(hrNow = 152, hrAvg = 148, hrMax = 171, zone = HRZones.standard.zone(3), currentPace = 304.0, splitPace = 312.0, distance = 200.0) }
         advanceTimeBy(60_000); fake.advanceTo(clock.now())
         val live = LiveRunModel.from(session.snapshots.value, clock.now())
         assertEquals("1:00", live.time)
-        assertEquals(LiveRunModel.Hr.Reading("152", 3), live.hr)
+        assertEquals(LiveRunModel.Hr.Reading("152", HRZones.standard.zone(3)), live.hr)
         assertEquals("5:05", live.pace)
 
         // Pause: the pill counts on the run's clock; Resume returns to Active.
