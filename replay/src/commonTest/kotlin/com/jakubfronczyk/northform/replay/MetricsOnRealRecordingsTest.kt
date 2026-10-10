@@ -6,6 +6,7 @@ import com.jakubfronczyk.northform.core.Sex
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.metrics.HrStream
 import com.jakubfronczyk.northform.core.metrics.TimeInZone
+import com.jakubfronczyk.northform.core.metrics.Trimp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -57,6 +58,26 @@ class MetricsOnRealRecordingsTest {
         val run2 = TimeInZone.compute(run("run-2-walk").samples, run("run-2-walk").profile).values.map { it.inWholeMilliseconds }
         assertEquals(listOf<Long>(308_954, 278_106, 580_272, 1_086_670, 190_918, 0), run1, "run-1-park Z0…Z5 ms")
         assertEquals(listOf<Long>(2_417_981, 3_000, 0, 0, 0, 0), run2, "run-2-walk Z0…Z5 ms")
+    }
+
+    // ── metrics/02 ─────────────────────────────────────────────────────────────────────────────
+
+    /** The pinned TRIMP of the real recordings (characterisation, no Swift reference; male constants, the fixture profile). */
+    @Test
+    fun trimp_on_the_real_recordings_stays_put() {
+        val run1 = Trimp.compute(run("run-1-park").samples, run("run-1-park").profile)
+        val run2 = Trimp.compute(run("run-2-walk").samples, run("run-2-walk").profile)
+        assertEquals("64.535", fmt(run1, 3), "run-1-park")
+        assertEquals("16.483", fmt(run2, 3), "run-2-walk")
+        assertTrue(run1 > 3 * run2, "a 42 min Z3 run loads far more than a 41 min Z0 walk (64.5 vs 16.5)")
+    }
+
+    /** `String(format: "%.<d>f")` for a non-negative value. */
+    private fun fmt(value: Double, decimals: Int): String {
+        var scale = 1L
+        repeat(decimals) { scale *= 10 }
+        val scaled = kotlin.math.round(value * scale).toLong()
+        return "${scaled / scale}.${(scaled % scale).toString().padStart(decimals, '0')}"
     }
 
     @Test
