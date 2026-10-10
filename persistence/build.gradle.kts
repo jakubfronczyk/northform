@@ -15,6 +15,9 @@ kotlin {
             api(project(":core"))
             implementation(libs.sqldelight.runtime)
             implementation(libs.kotlinx.coroutines.core)
+            // The backup file (persistence/04, D26): the JsonElement tree only, no @Serializable plugin — the same
+            // artifact and the same use `:replay` already has for the fixture format, so no new dependency enters the build.
+            implementation(libs.kotlinx.serialization.json)
         }
         iosMain.dependencies { implementation(libs.sqldelight.native.driver) }
         jvmMain.dependencies { implementation(libs.sqldelight.sqlite.driver) } // in-memory tests on the JVM

@@ -63,6 +63,9 @@ SELECT * FROM recording WHERE id = ?;
 unfinished:
 SELECT * FROM recording WHERE state != 'saved' ORDER BY start_utc LIMIT 1;
 
+selectRecordingIds:
+SELECT id FROM recording ORDER BY start_utc, id;
+
 insertRecording:
 INSERT INTO recording(id, user_id, type, tag, state, start_utc, tz_offset_s, end_utc, rpe, notes)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
@@ -111,6 +114,9 @@ DELETE FROM stream_chunk WHERE recording_id = ?;
 insertMetric:
 INSERT INTO metric(recording_id, metric_id, version, value, profile_birth_date, profile_sex, profile_weight_kg, profile_height_cm, profile_hr_max, profile_hr_rest, profile_zones)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectMetrics:
+SELECT * FROM metric WHERE recording_id = ? ORDER BY metric_id;
 
 deleteMetrics:
 DELETE FROM metric WHERE recording_id = ?;

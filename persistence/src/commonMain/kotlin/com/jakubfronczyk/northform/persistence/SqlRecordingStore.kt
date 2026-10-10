@@ -3,15 +3,17 @@ package com.jakubfronczyk.northform.persistence
 import app.cash.sqldelight.db.SqlDriver
 import com.jakubfronczyk.northform.core.EventKind
 import com.jakubfronczyk.northform.core.EventSource
-import com.jakubfronczyk.northform.core.HrSample
-import com.jakubfronczyk.northform.core.LocationFix
+import com.jakubfronczyk.northform.core.HRZones
+import com.jakubfronczyk.northform.core.MetricId
 import com.jakubfronczyk.northform.core.MetricResult
+import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.Recording
 import com.jakubfronczyk.northform.core.RecordingEvent
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.RunTag
+import com.jakubfronczyk.northform.core.Sex
 import com.jakubfronczyk.northform.core.UserId
 import com.jakubfronczyk.northform.core.ports.FlushBatch
 import com.jakubfronczyk.northform.core.ports.RecordingData
@@ -106,9 +108,33 @@ class SqlRecordingStore(
 
     override suspend fun unfinished(): Recording? = tx { q.unfinished().executeAsOneOrNull()?.toRecording() }
 
-    override suspend fun load(id: RecordingId): RecordingData? = tx {
-        val row = q.selectRecording(id.value).executeAsOneOrNull() ?: return@tx null
-        RecordingData(
+    override suspend fun load(id: RecordingId): RecordingData? = tx { loadInTx(id) }
+
+    /**
+     * Everything in the database as one [Backup] (persistence/04, D26), read in ONE transaction so the
+     * file is a consistent snapshot even while a run is being flushed. Not on the port: a backup is a
+     * feature of this store, not a step of the run's state machine. The Settings export (app-ui/04)
+     * calls `BackupCodec.encode(store.exportAll(clock.now()))` and writes the string to `Documents/`.
+     */
+    suspend fun exportAll(exportedAt: Instant): Backup = tx {
+        Backup(exportedAt, q.selectRecordingIds().executeAsList().map { id -> BackupRecording(loadInTx(RecordingId(id))!!, metricsInTx(id)) })
+    }
+
+    /** The inverse of `saveSummary`'s insert: the metric with the profile it was computed with (D24). */
+    private fun metricsInTx(id: String): List<MetricResult> = q.selectMetrics(id).executeAsList().map { m ->
+        MetricResult(
+            metricId = MetricId(m.metric_id), version = m.version.toInt(), value = m.value_, // `value` is a SQL keyword: SQLDelight suffixes the property
+            profile = Profile(
+                birthDate = instantOfNanos(m.profile_birth_date), sex = wire(Sex.entries, m.profile_sex) { it.wire },
+                weightKg = m.profile_weight_kg, heightCm = m.profile_height_cm, hrMax = m.profile_hr_max.toInt(), hrRest = m.profile_hr_rest.toInt(),
+                zones = HRZones(m.profile_zones.split(',').map(String::toDouble)),
+            ),
+        )
+    }
+
+    private fun loadInTx(id: RecordingId): RecordingData? {
+        val row = q.selectRecording(id.value).executeAsOneOrNull() ?: return null
+        return RecordingData(
             recording = row.toRecording(),
             hr = q.selectChunks(id.value, KIND_HR).executeAsList().flatMap { c ->
                 check(c.codec == StreamCodec.HR) { "unknown hr codec ${c.codec}" }
