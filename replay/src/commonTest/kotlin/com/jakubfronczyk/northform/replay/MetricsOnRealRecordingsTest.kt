@@ -4,7 +4,9 @@ import com.jakubfronczyk.northform.core.HrSample
 import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.Sex
 import com.jakubfronczyk.northform.core.UserAction
+import com.jakubfronczyk.northform.core.RunTag
 import com.jakubfronczyk.northform.core.metrics.HrStream
+import com.jakubfronczyk.northform.core.metrics.RunTagSuggestion
 import com.jakubfronczyk.northform.core.metrics.TimeInZone
 import com.jakubfronczyk.northform.core.metrics.Trimp
 import kotlin.test.Test
@@ -20,7 +22,7 @@ import kotlin.time.Instant
  */
 class MetricsOnRealRecordingsTest {
 
-    private class Run(val samples: List<HrSample>, val stoppedAt: Instant, val profile: Profile)
+    private class Run(val samples: List<HrSample>, val startedAt: Instant, val stoppedAt: Instant, val profile: Profile, val type: com.jakubfronczyk.northform.core.RecordingType)
 
     /** The samples between start and stop (what the store holds for the run), and the fixture's profile. */
     private fun run(name: String): Run {
@@ -30,7 +32,7 @@ class MetricsOnRealRecordingsTest {
         val stoppedAt = users.first { it.action == UserAction.Stop }.t
         val samples = script.inputs.filterIsInstance<ReplayInput.Hr>().map { it.sample }.filter { it.t >= startedAt && it.t <= stoppedAt }
         val profile = Profile(Instant.fromEpochSeconds(0), script.meta.sex, weightKg = 75.0, heightCm = 180.0, hrMax = script.meta.hrMax, hrRest = script.meta.hrRest)
-        return Run(samples, stoppedAt, profile)
+        return Run(samples, startedAt, stoppedAt, profile, script.meta.type)
     }
 
     private fun Map<*, Duration>.total() = values.fold(Duration.ZERO) { a, b -> a + b }
@@ -71,6 +73,22 @@ class MetricsOnRealRecordingsTest {
         assertEquals("16.483", fmt(run2, 3), "run-2-walk")
         assertTrue(run1 > 3 * run2, "a 42 min Z3 run loads far more than a 41 min Z0 walk (64.5 vs 16.5)")
     }
+
+    // ── metrics/05 ─────────────────────────────────────────────────────────────────────────────
+
+    /** Run 1 spent 21.3 min in Z3–Z4 (the metrics/01 pins) and swung above Z4 too rarely for intervals: tempo. Run 2 is a walk: no tag. */
+    @Test
+    fun run_tag_on_the_real_recordings_stays_put() {
+        val run1 = run("run-1-park")
+        assertEquals(RunTag.Tempo, RunTagSuggestion.suggest(run1.type, run1.samples, run1.profile, run1.stoppedAt - run1.startedAt, 4829.7))
+        assertEquals(SWINGS_RUN1, RunTagSuggestion.countSwings(run1.samples, run1.profile), "run-1-park swings")
+        // The fixture was recorded before the app had a walk type (`meta.type` says run): tag it as what it was.
+        val run2 = run("run-2-walk")
+        assertEquals(null, RunTagSuggestion.suggest(com.jakubfronczyk.northform.core.RecordingType.Walk, run2.samples, run2.profile, run2.stoppedAt - run2.startedAt, 2987.5))
+        assertEquals(RunTag.Easy, RunTagSuggestion.suggest(run2.type, run2.samples, run2.profile, run2.stoppedAt - run2.startedAt, 2987.5), "the same stream as a run would be easy")
+    }
+
+    private val SWINGS_RUN1 = 0
 
     /** `String(format: "%.<d>f")` for a non-negative value. */
     private fun fmt(value: Double, decimals: Int): String {
