@@ -1,10 +1,11 @@
 package com.jakubfronczyk.northform.engine.run
 
 /**
- * The ONE rule for inputs that share an instant, used wherever inputs are replayed rather than
- * received live: by [rebuild] (store → inputs, crash resume) and by the test harness (script + ticks).
- * Samples go first, then the user's and the sensor's events, ticks last; otherwise time, then the
- * order given. One rule, so "rebuild = live" cannot pass because two copies happen to agree (D94).
+ * The rule for inputs that share an instant when the store is folded back into inputs ([rebuild],
+ * crash resume, D94): the store keeps no arrival order across its tables. Samples go first, then the
+ * user's and the sensor's events, ticks last; otherwise time, then the order given. The live stream
+ * and the test harness do NOT use it: they deliver inputs as they arrived, and "rebuild = live" is
+ * the test that this rule reconstructs that order well enough.
  */
 object InputOrder {
     /** Equal-time rank. Store confirmations carry no time and are never replayed, so ranking one is a bug. */

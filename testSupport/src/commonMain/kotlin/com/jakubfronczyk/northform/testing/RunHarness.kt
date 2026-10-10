@@ -9,7 +9,6 @@ import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.Sex
 import com.jakubfronczyk.northform.core.ports.Alert
 import com.jakubfronczyk.northform.core.ports.RecordingData
-import com.jakubfronczyk.northform.engine.run.InputOrder
 import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.RunConfig
 import com.jakubfronczyk.northform.engine.run.RunEffect
@@ -26,7 +25,8 @@ import kotlin.time.Instant
 
 /**
  * `Tests/EngineTests/RunHarness.swift` — plays the session's part with no coroutines and no clock:
- * merges inputs with 1 s ticks ([InputOrder], the rule `rebuild` uses), runs store effects in order
+ * merges inputs with 1 s ticks in LIVE order (the script's order, ticks after same-time inputs: what
+ * `ReplayTimeline` delivers; `rebuild`'s [InputOrder] is the thing under test, never the oracle), runs store effects in order
  * through the production [StoreEffectInterpreter] over the production [InMemoryRecordingStore], and
  * feeds its confirmations back. Nothing of the session is re-implemented here: the harness only
  * decides WHEN a store effect runs ([confirmAfter]) and cuts a [Checkpoint] after each flush.
@@ -114,17 +114,21 @@ class RunHarness(config: RunConfig, var confirmAfter: Int = 0) {
 
         /**
          * `RunHarness.swift:58` — script inputs plus a tick every second from `start` (shifted by
-         * `tickOffset`) until `tail` after the last input, in [InputOrder] (the rule `rebuild` uses).
+         * `tickOffset`) until `tail` after the last input. Sort key (t, rank): ticks after same-time
+         * inputs, script order otherwise (`sortedWith` is stable). Deliberately NOT [InputOrder]: the
+         * harness stands in for the live stream, and "rebuild = live" must be able to fail when the
+         * rebuild's equal-time rule disagrees with what live saw.
          */
         fun timeline(start: Instant, inputs: List<RunInput>, tail: Duration = 65.seconds, tickOffset: Duration = Duration.ZERO): List<RunInput> {
-            val items = ArrayList(inputs)
+            class Item(val t: Instant, val rank: Int, val input: RunInput)
+            val items = inputs.mapTo(ArrayList()) { Item(it.time!!, 0, it) }
             val end = (inputs.lastOrNull()?.time ?: start) + tail
             var tick = start + tickOffset
             while (tick <= end) {
-                items += RunInput.Tick(tick)
+                items += Item(tick, 1, RunInput.Tick(tick))
                 tick += 1.seconds
             }
-            return InputOrder.sorted(items)
+            return items.sortedWith(compareBy({ it.t }, { it.rank })).map { it.input }
         }
 
         fun play(

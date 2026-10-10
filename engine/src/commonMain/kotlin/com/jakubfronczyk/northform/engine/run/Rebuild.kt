@@ -12,7 +12,7 @@ import kotlin.time.Duration.Companion.seconds
  * `Engine/Rebuild.swift` — rebuilds the run from what the store holds, for crash resume (D94).
  * Persisted samples and the user's own events are fed back through `reduce`, with 1 s ticks up to
  * the last flush. Derived events (splits, HR/GPS lost and back) are not fed: the reducer derives them.
- * Equal instants are ordered by [InputOrder], the same rule the test harness replays with.
+ * Equal instants are ordered by [InputOrder]; the live stream keeps arrival order, so the "rebuild = live" tests judge this rule.
  */
 fun RunReducer.rebuild(config: RunConfig, data: RecordingData): RunState {
     val start = data.recording.startUtc
