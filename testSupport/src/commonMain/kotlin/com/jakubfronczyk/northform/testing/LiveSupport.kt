@@ -3,10 +3,16 @@ package com.jakubfronczyk.northform.testing
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.ports.Alert
 import com.jakubfronczyk.northform.core.ports.AlertPlayer
+import com.jakubfronczyk.northform.core.ports.FlushBatch
+import com.jakubfronczyk.northform.core.ports.RecordingStore
 import com.jakubfronczyk.northform.core.ports.WallClock
 import com.jakubfronczyk.northform.engine.run.RunSessionHandle
+import com.jakubfronczyk.northform.engine.store.InMemoryRecordingStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
+import kotlin.coroutines.Continuation
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.coroutines.startCoroutine
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
 
@@ -28,3 +34,30 @@ class RecordedAlerts : AlertPlayer {
 
 /** A tap stamped with the run's own clock, as the screens do (D100). */
 suspend fun RunSessionHandle.tap(action: UserAction) = send(action, wallClock.now())
+
+/**
+ * The production in-memory store with a switch that fails the next flush once ("disk full"). Kotlin
+ * interface delegation (`by inner`) forwards every other port method untouched.
+ */
+class FlakyStore(val inner: InMemoryRecordingStore = InMemoryRecordingStore()) : RecordingStore by inner {
+    var failNext = false
+    override suspend fun flush(batch: FlushBatch) {
+        if (failNext) {
+            failNext = false
+            error("disk full")
+        }
+        inner.flush(batch)
+    }
+}
+
+/**
+ * Runs a `suspend` call that never actually suspends (the in-memory store takes an uncontended
+ * `Mutex`) to its end with no dispatcher and no clock: `startCoroutine` on an empty context, the
+ * continuation captures the result. Keeps the reducer harness synchronous while it runs the
+ * production effect interpreter; a call that did suspend is a bug and fails here.
+ */
+fun <T> runSynchronously(block: suspend () -> T): T {
+    var outcome: Result<T>? = null
+    block.startCoroutine(Continuation(EmptyCoroutineContext) { outcome = it })
+    return checkNotNull(outcome) { "the call suspended: the harness is synchronous" }.getOrThrow()
+}

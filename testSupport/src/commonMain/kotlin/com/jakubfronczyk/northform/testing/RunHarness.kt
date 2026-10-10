@@ -9,13 +9,16 @@ import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.Sex
 import com.jakubfronczyk.northform.core.ports.Alert
 import com.jakubfronczyk.northform.core.ports.RecordingData
+import com.jakubfronczyk.northform.engine.run.InputOrder
 import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.RunConfig
 import com.jakubfronczyk.northform.engine.run.RunEffect
 import com.jakubfronczyk.northform.engine.run.RunInput
 import com.jakubfronczyk.northform.engine.run.RunReducer
 import com.jakubfronczyk.northform.engine.run.RunState
+import com.jakubfronczyk.northform.engine.run.StoreEffectInterpreter
 import com.jakubfronczyk.northform.engine.run.time
+import com.jakubfronczyk.northform.engine.store.InMemoryRecordingStore
 import com.jakubfronczyk.northform.engine.store.MemoryRecords
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -23,8 +26,10 @@ import kotlin.time.Instant
 
 /**
  * `Tests/EngineTests/RunHarness.swift` — plays the session's part with no coroutines and no clock:
- * merges inputs with 1 s ticks, runs store effects in order against [MemoryRecords], and feeds
- * confirmations back.
+ * merges inputs with 1 s ticks ([InputOrder], the rule `rebuild` uses), runs store effects in order
+ * through the production [StoreEffectInterpreter] over the production [InMemoryRecordingStore], and
+ * feeds its confirmations back. Nothing of the session is re-implemented here: the harness only
+ * decides WHEN a store effect runs ([confirmAfter]) and cuts a [Checkpoint] after each flush.
  *
  * `confirmAfter` models a slow store: store effects wait in a FIFO queue and run `confirmAfter`
  * inputs later, so new inputs arrive while a batch is in flight, as live. 0 = each store effect runs
@@ -38,8 +43,11 @@ class RunHarness(config: RunConfig, var confirmAfter: Int = 0) {
 
     var state: RunState = RunState(config)
         private set
-    var store = MemoryRecords()
-        private set
+    /** The production store, with a switch to fail a flush (`failing`); a store error in anything else fails the test. */
+    private val flaky = FlakyStore()
+    private val interpreter = StoreEffectInterpreter(flaky, config.recordingId, onFailure = { _, e -> throw e })
+    /** What the store holds now; checkpoints copy it. */
+    val store: MemoryRecords get() = flaky.inner.records
     val alerts = ArrayList<Alert>()
     var route = Route()
         private set
@@ -81,18 +89,11 @@ class RunHarness(config: RunConfig, var confirmAfter: Int = 0) {
             val next = pending.firstOrNull() ?: return
             if (next.due > dueBy) return
             pending.removeFirst()
-            when (val effect = next.effect) {
-                is RunEffect.Create -> store.create(effect.recording)
-                is RunEffect.Persist -> if (failing.remove(effect.seq)) {
-                    queue(reduce(RunInput.PersistFailed(effect.seq)))
-                } else {
-                    store.flush(effect.batch)
-                    checkpoints += Checkpoint(next.cut!!, store.copy())
-                    queue(reduce(RunInput.Persisted(effect.seq)))
-                }
-                is RunEffect.Stop -> store.stop(state.config.recordingId, effect.at)
-                RunEffect.BeginComputing -> store.beginComputing(state.config.recordingId)
-            }
+            val effect = next.effect
+            if (effect is RunEffect.Persist) flaky.failNext = failing.remove(effect.seq)
+            val reply = runSynchronously { interpreter.perform(effect) }
+            if (reply is RunInput.Persisted) checkpoints += Checkpoint(next.cut!!, store.copy())
+            reply?.let { queue(reduce(it)) }
         }
     }
 
@@ -113,19 +114,17 @@ class RunHarness(config: RunConfig, var confirmAfter: Int = 0) {
 
         /**
          * `RunHarness.swift:58` — script inputs plus a tick every second from `start` (shifted by
-         * `tickOffset`) until `tail` after the last input. Sort key (t, rank, offset): ticks after
-         * same-time inputs, input order otherwise — `sortedWith` is stable.
+         * `tickOffset`) until `tail` after the last input, in [InputOrder] (the rule `rebuild` uses).
          */
         fun timeline(start: Instant, inputs: List<RunInput>, tail: Duration = 65.seconds, tickOffset: Duration = Duration.ZERO): List<RunInput> {
-            class Item(val t: Instant, val rank: Int, val input: RunInput)
-            val items = inputs.mapTo(ArrayList()) { Item(it.time!!, 0, it) }
+            val items = ArrayList(inputs)
             val end = (inputs.lastOrNull()?.time ?: start) + tail
             var tick = start + tickOffset
             while (tick <= end) {
-                items += Item(tick, 1, RunInput.Tick(tick))
+                items += RunInput.Tick(tick)
                 tick += 1.seconds
             }
-            return items.sortedWith(compareBy({ it.t }, { it.rank })).map { it.input }
+            return InputOrder.sorted(items)
         }
 
         fun play(

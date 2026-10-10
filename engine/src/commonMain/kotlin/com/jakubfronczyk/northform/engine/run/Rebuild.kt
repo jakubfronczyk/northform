@@ -7,23 +7,21 @@ import com.jakubfronczyk.northform.core.SensorState
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.ports.RecordingData
 import kotlin.time.Duration.Companion.seconds
-import kotlin.time.Instant
 
 /**
  * `Engine/Rebuild.swift` — rebuilds the run from what the store holds, for crash resume (D94).
  * Persisted samples and the user's own events are fed back through `reduce`, with 1 s ticks up to
  * the last flush. Derived events (splits, HR/GPS lost and back) are not fed: the reducer derives them.
- * At equal times, samples go before events (rank 0 < 1 < ticks 2), then input order.
+ * Equal instants are ordered by [InputOrder], the same rule the test harness replays with.
  */
 fun RunReducer.rebuild(config: RunConfig, data: RecordingData): RunState {
     val start = data.recording.startUtc
     // The one start path (`RunProgress.begun`): the same state `RunReducer.begin` produces live, not a copy of it.
     var state = RunState(config, progress = RunProgress().begun(start), buffer = PersistBuffer().begun(start))
 
-    class Item(val t: Instant, val rank: Int, val input: RunInput)
-    val inputs = ArrayList<Item>()
-    data.hr.forEach { inputs += Item(it.t, 0, RunInput.Hr(it)) }
-    data.fixes.forEach { inputs += Item(it.t, 0, RunInput.Fix(it)) }
+    val inputs = ArrayList<RunInput>()
+    data.hr.forEach { inputs += RunInput.Hr(it) }
+    data.fixes.forEach { inputs += RunInput.Fix(it) }
     for (event in data.events) {
         val input: RunInput? = when (val kind = event.kind) {
             EventKind.Pause -> RunInput.User(UserAction.Pause, event.t)
@@ -34,19 +32,18 @@ fun RunReducer.rebuild(config: RunConfig, data: RecordingData): RunState {
             EventKind.SensorReconnected -> RunInput.Sensor(SensorState.Connected(battery = null), event.t)
             is EventKind.Split, EventKind.HrLost, EventKind.HrBack, EventKind.GpsLost, EventKind.GpsBack, EventKind.CrashRecovered -> null
         }
-        if (input != null) inputs += Item(event.t, 1, input)
+        if (input != null) inputs += input
     }
     data.lastPersistedAt?.let { end ->
         var tick = start + 1.seconds
         while (tick < end) {
-            inputs += Item(tick, 2, RunInput.Tick(tick))
+            inputs += RunInput.Tick(tick)
             tick += 1.seconds
         }
-        inputs += Item(end, 2, RunInput.Tick(end))
+        inputs += RunInput.Tick(end)
     }
-    // sortedWith is stable, so equal (t, rank) keep input order — the Swift sort keyed on the offset too.
-    for (item in inputs.sortedWith(compareBy({ it.t }, { it.rank }))) {
-        state = reduce(state, item.input).state
+    for (input in InputOrder.sorted(inputs)) {
+        state = reduce(state, input).state
     }
     return state.copy(buffer = PersistBuffer(lastPersistAt = data.lastPersistedAt ?: start))
 }

@@ -71,6 +71,8 @@ class RecordingSession(
     private val _routes = MutableStateFlow(Route())
     /** `run()` is single-shot (D112): the first caller takes this and never gives it back. */
     private val runOnce = Mutex()
+    /** The one store-effect interpreter (also what the test harness runs); a failed create/stop/computing is only logged, as in Swift. */
+    private val storeEffects = StoreEffectInterpreter(store, config.recordingId)
 
     /** Every change of what the run screen shows (`RecordingSession.swift:67`). */
     override val snapshots: StateFlow<RunSnapshot> = _snapshots.asStateFlow()
@@ -178,24 +180,12 @@ class RecordingSession(
     // ── Loops (`RecordingSession.swift:242-325`) ────────────────────────────────────────────
 
     private suspend fun writeLoop() {
-        val id = config.recordingId
         for (effect in writes) {
             if (!currentCoroutineContext().isActive) return
             // "On cancel the writer finishes the effect it is on and returns" (D112): the store call
             // itself is not interruptible; the check above is where cancellation takes effect.
-            withContext(NonCancellable) {
-                when (effect) {
-                    is RunEffect.Create -> runCatching { store.create(effect.recording) } // the catch only logged in Swift
-                    is RunEffect.Persist -> try {
-                        store.flush(effect.batch)
-                        receive(RunInput.Persisted(effect.seq))
-                    } catch (e: Exception) {
-                        receive(RunInput.PersistFailed(effect.seq))
-                    }
-                    is RunEffect.Stop -> runCatching { store.stop(id, effect.at) }
-                    RunEffect.BeginComputing -> runCatching { store.beginComputing(id) }
-                }
-            }
+            // The writer reporting back (`Persisted`/`PersistFailed`) is just another mail (D5).
+            withContext(NonCancellable) { storeEffects.perform(effect)?.let(::receive) }
             if (effect == RunEffect.BeginComputing) return // the last store effect: the run is over (`:277`)
         }
     }
