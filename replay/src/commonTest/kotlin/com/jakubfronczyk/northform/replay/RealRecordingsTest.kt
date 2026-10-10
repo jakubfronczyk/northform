@@ -13,6 +13,7 @@ import com.jakubfronczyk.northform.core.wire
 import com.jakubfronczyk.northform.engine.run.RunInput
 import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.engine.run.RunReducer
+import com.jakubfronczyk.northform.engine.run.ShownPace
 import com.jakubfronczyk.northform.engine.run.rebuild
 import com.jakubfronczyk.northform.testing.RunHarness
 import com.jakubfronczyk.northform.testing.at
@@ -369,6 +370,36 @@ class RealRecordingsTest {
     fun run_two_current_pace_is_steady_at_a_constant_walk() {
         val changes = paceChanges(paceSeries(bundled("run-2-walk")))
         assertTrue(changes.p95() <= 28, "p95 ${changes.p95()} s/km per tick")
+    }
+
+    /** Of the ticks that show a pace right after a tick that did, how many show a different number. */
+    private fun changeRate(pace: List<Double?>): Double {
+        var pairs = 0
+        var changed = 0
+        for (i in 1 until pace.size) {
+            val a = pace[i - 1] ?: continue
+            val b = pace[i] ?: continue
+            pairs += 1
+            if (a != b) changed += 1
+        }
+        return changed.toDouble() / pairs
+    }
+
+    /**
+     * D22 (Swift D122): the SHOWN pace steps in 5 s/km, so it changes on far fewer ticks than the raw D106
+     * pace behind it. Pinned on runs 1–2 (`ShownPace.step = 5`); the raw rate is pinned too, so a change in
+     * either side of the rule is seen.
+     */
+    @Test
+    fun shown_pace_changes_on_fewer_ticks_than_the_raw_pace() {
+        val measured = listOf("run-1-park", "run-2-walk").associateWith { name ->
+            val raw = paceSeries(bundled(name)).pace
+            val shown = raw.map { ShownPace.round(it) }
+            fun rate(pace: List<Double?>) = (changeRate(pace) * 1000).toInt() / 1000.0
+            "raw ${rate(raw)} shown ${rate(shown)}"
+        }
+        // Run 1 (park run): the shown number changes on 45 % of ticks instead of 99 %. Run 2 (walk) is noisier: 70 % instead of 97 %.
+        assertEquals(mapOf("run-1-park" to "raw 0.99 shown 0.451", "run-2-walk" to "raw 0.967 shown 0.703"), measured, "changes per tick")
     }
 
     @Test

@@ -34,6 +34,7 @@ import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
+import com.jakubfronczyk.northform.engine.run.ShownPace
 import com.jakubfronczyk.northform.ui.RunFormat
 import com.jakubfronczyk.northform.ui.Theme
 import com.jakubfronczyk.northform.ui.Type
@@ -67,7 +68,7 @@ fun LiveRunScreen(
                 Column {
                     Text("Pace", style = Type.rowLabel, color = Theme.text2)
                     Row(verticalAlignment = Alignment.Bottom) {
-                        Text(RunFormat.pace(snapshot.currentPace), style = Type.number54Black, color = if (paused) Theme.dim else Theme.text)
+                        Text(RunFormat.pace(ShownPace.round(snapshot.currentPace)), style = Type.number54Black, color = if (paused) Theme.dim else Theme.text)
                         Spacer(Modifier.width(4.dp))
                         Text("/km", style = Type.unitLabel, color = Theme.text2, modifier = Modifier.padding(bottom = 10.dp))
                     }
