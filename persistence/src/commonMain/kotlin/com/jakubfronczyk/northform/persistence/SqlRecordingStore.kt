@@ -153,6 +153,13 @@ class SqlRecordingStore(
             }
     }
 
+    /**
+     * The metric rows `saveSummary` stored for one recording (engine/04's read seam, D24: each with the
+     * profile it was computed with). Not on the frozen port: history screens and "recompute with the
+     * stored profile" read it through `:persistence`, as `exportAll` does. Empty when none were saved.
+     */
+    suspend fun metrics(id: RecordingId): List<MetricResult> = tx { metricsInTx(id.value) }
+
     /** The inverse of `saveSummary`'s insert: the metric with the profile it was computed with (D24). */
     private fun metricsInTx(id: String): List<MetricResult> = q.selectMetrics(id).executeAsList().map { m ->
         MetricResult(

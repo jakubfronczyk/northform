@@ -1,9 +1,12 @@
 package com.jakubfronczyk.northform.testing
 
+import com.jakubfronczyk.northform.core.EventKind
+import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.ports.Alert
 import com.jakubfronczyk.northform.core.ports.AlertPlayer
 import com.jakubfronczyk.northform.core.ports.FlushBatch
+import com.jakubfronczyk.northform.core.ports.RecordingData
 import com.jakubfronczyk.northform.core.ports.RecordingStore
 import com.jakubfronczyk.northform.core.ports.WallClock
 import com.jakubfronczyk.northform.engine.run.RunSessionHandle
@@ -60,4 +63,18 @@ fun <T> runSynchronously(block: suspend () -> T): T {
     var outcome: Result<T>? = null
     block.startCoroutine(Continuation(EmptyCoroutineContext) { outcome = it })
     return checkNotNull(outcome) { "the call suspended: the harness is synchronous" }.getOrThrow()
+}
+
+/**
+ * Loads a finished recording into a fresh store through the port's own steps (create → one flush →
+ * stop → beginComputing), so a summary test can start from `computing` on any store without replaying
+ * the run again. [data] must be stopped; its events are flushed without the `Stop` one, which `stop` writes.
+ */
+suspend fun RecordingStore.seedComputing(data: RecordingData) {
+    val recording = data.recording
+    val endUtc = requireNotNull(recording.endUtc) { "seedComputing needs a stopped recording" }
+    create(recording.copy(state = RecordingState.Active, endUtc = null, tag = null, rpe = null, notes = null))
+    flush(FlushBatch(recording.id, data.hr, data.fixes, data.events.filter { it.kind != EventKind.Stop }, persistedAt = data.lastPersistedAt ?: endUtc))
+    stop(recording.id, endUtc)
+    beginComputing(recording.id)
 }

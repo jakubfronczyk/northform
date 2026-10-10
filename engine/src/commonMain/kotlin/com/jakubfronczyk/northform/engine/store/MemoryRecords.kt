@@ -93,6 +93,9 @@ class MemoryRecords private constructor(
         RecordingData(it.recording, it.hr, it.fixes, it.events, it.lastPersistedAt)
     }
 
+    /** The metric rows `saveSummary` stored (the in-memory twin of `SqlRecordingStore.metrics`); empty when none or unknown. */
+    fun metrics(id: RecordingId): List<MetricResult> = entries[id]?.metrics ?: emptyList()
+
     private fun entry(id: RecordingId): Entry = entries[id] ?: throw RecordingStoreError.NotFound(id)
 
     private fun check(entry: Entry, from: RecordingState, to: RecordingState) {
