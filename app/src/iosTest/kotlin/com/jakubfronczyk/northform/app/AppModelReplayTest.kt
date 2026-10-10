@@ -5,7 +5,11 @@ import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.ports.Alert
 import com.jakubfronczyk.northform.core.ports.AlertPlayer
 import com.jakubfronczyk.northform.engine.run.RunPhase
+import com.jakubfronczyk.northform.core.ports.RecordingStore
 import com.jakubfronczyk.northform.engine.store.InMemoryRecordingStore
+import com.jakubfronczyk.northform.persistence.SqlRecordingStore
+import com.jakubfronczyk.northform.persistence.nativeDriver
+import co.touchlab.sqliter.DatabaseFileContext
 import com.jakubfronczyk.northform.replay.Fixture
 import com.jakubfronczyk.northform.replay.ReplayScript
 import com.jakubfronczyk.northform.testing.RecordedAlerts
@@ -21,6 +25,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -35,7 +40,7 @@ class AppModelReplayTest {
     private fun straightRun(): ReplayScript = Fixture.parse(BundledFixtureText.STRAIGHT_RUN_3MIN)
 
     /** The simulator wiring: a replay source on the test's virtual clock, an in-memory store. */
-    private fun TestScope.replayDeps(script: ReplayScript, store: InMemoryRecordingStore, alerts: AlertPlayer, log: (String) -> Unit = {}) = AppDeps(
+    private fun TestScope.replayDeps(script: ReplayScript, store: RecordingStore, alerts: AlertPlayer, log: (String) -> Unit = {}) = AppDeps(
         source = RunSource.Replay { script },
         store = store,
         wallClock = virtualWallClock(script.meta.start),
@@ -79,6 +84,41 @@ class AppModelReplayTest {
         assertEquals(RecordingState.Computing, stored.recording.state)
         assertEquals(5, alerts.played.count { it == Alert.CountdownTick })
         assertTrue(phases.any { "→ gate" in it } && phases.any { "→ active" in it } && phases.any { "→ done" in it }, "lifecycle log: $phases")
+    }
+
+    /**
+     * persistence/01: the same replay run on the store the phone boots with — `SqlRecordingStore` over
+     * the on-disk `nativeDriver()` (schema created on first open, synchronous=FULL), inside the
+     * simulator sandbox. The file is deleted first, so a rerun never meets an old recording, and after.
+     */
+    @Test
+    fun a_replay_run_is_stored_by_the_sqldelight_store_the_phone_uses() = runTest {
+        val script = straightRun()
+        val name = "replay-test.db"
+        DatabaseFileContext.deleteDatabase(name)
+        val driver = nativeDriver(name)
+        try {
+            val store = SqlRecordingStore(driver, io = EmptyCoroutineContext)
+            val model = AppModel(replayDeps(script, store, RecordedAlerts()), backgroundScope)
+            model.startRun()
+            runCurrent()
+            val run = assertNotNull(model.activeRun.value)
+            run.session.tap(UserAction.Start)
+            advanceTimeBy(126.seconds); runCurrent()
+            run.session.tap(UserAction.Stop)
+            advanceTimeBy(61.seconds); runCurrent()
+            assertEquals(RunPhase.Done, run.session.snapshots.value.phase)
+            model.closeRun()
+            advanceTimeBy(1.seconds); runCurrent()
+
+            val stored = assertNotNull(store.load(run.id), "the run is in SQLite")
+            assertEquals(RecordingState.Computing, stored.recording.state)
+            assertTrue(stored.hr.size > 100 && stored.fixes.size > 100, "${stored.hr.size} hr, ${stored.fixes.size} fixes")
+            assertEquals(stored.recording, store.unfinished(), "a crash here would find it (R28)")
+        } finally {
+            driver.close()
+            DatabaseFileContext.deleteDatabase(name)
+        }
     }
 
     @Test

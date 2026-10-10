@@ -7,13 +7,17 @@ import com.jakubfronczyk.northform.core.SensorState
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.ports.Alert
 import com.jakubfronczyk.northform.core.ports.RecordingData
+import com.jakubfronczyk.northform.core.ports.RecordingStore
 import com.jakubfronczyk.northform.engine.run.RecordingSession
 import com.jakubfronczyk.northform.engine.run.EndResult
 import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.engine.run.RunReducer
+import com.jakubfronczyk.northform.engine.run.RunSnapshot
 import com.jakubfronczyk.northform.engine.run.RunSessionHandle
 import com.jakubfronczyk.northform.engine.run.rebuild
 import com.jakubfronczyk.northform.engine.store.InMemoryRecordingStore
+import com.jakubfronczyk.northform.persistence.SqlRecordingStore
+import com.jakubfronczyk.northform.persistence.inMemoryDriver
 import com.jakubfronczyk.northform.testing.RecordedAlerts
 import com.jakubfronczyk.northform.testing.RunHarness
 import com.jakubfronczyk.northform.testing.tap
@@ -26,6 +30,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -45,10 +50,9 @@ class RecordingSessionLiveTest {
 
 
     /** `RecordingSessionTests.swift:47` — a live session on one virtual clock with the replay of `script`. */
-    private inner class LiveRun(val scope: TestScope, script: ReplayScript) {
+    private inner class LiveRun(val scope: TestScope, script: ReplayScript, val store: RecordingStore = InMemoryRecordingStore()) {
         val wallClock = scope.virtualWallClock(script.meta.start)
         val timeline = ReplayTimeline(script, wallClock)
-        val store = InMemoryRecordingStore()
         val alerts = RecordedAlerts()
         val session = RecordingSession(RunHarness.config, ReplaySensor(timeline), ReplayLocation(timeline), store, alerts, wallClock)
         lateinit var running: Job
@@ -67,7 +71,7 @@ class RecordingSessionLiveTest {
             playing.cancel()
         }
 
-        val stored: RecordingData? get() = store.records.load(RunHarness.config.recordingId)
+        suspend fun stored(): RecordingData? = store.load(RunHarness.config.recordingId)
     }
 
     private fun straightRun() = bundled("straight-run-3min")
@@ -87,7 +91,7 @@ class RecordingSessionLiveTest {
         assertEquals(harness.state.snapshot.totalTime, snapshot.totalTime)
         assertEquals(harness.state.snapshot.hrAvg, snapshot.hrAvg)
 
-        val stored = assertNotNull(live.stored)
+        val stored = assertNotNull(live.stored())
         assertEquals(RecordingState.Computing, stored.recording.state)
         assertEquals(harness.stored.events, stored.events)
         assertEquals(harness.stored.hr, stored.hr)
@@ -99,12 +103,56 @@ class RecordingSessionLiveTest {
     fun rebuild_from_what_the_live_session_persisted_matches_what_it_showed() = runTest {
         val live = LiveRun(this, straightRun())
         live.play(260)
-        val rebuilt = RunReducer.rebuild(RunHarness.config, assertNotNull(live.stored)).snapshot
+        val rebuilt = RunReducer.rebuild(RunHarness.config, assertNotNull(live.stored())).snapshot
         val shown = live.session.snapshot
         assertEquals(shown.distance, rebuilt.distance)
         assertEquals(shown.hrAvg, rebuilt.hrAvg)
         assertEquals(shown.hrMax, rebuilt.hrMax)
         assertEquals(shown.totalTime, rebuilt.totalTime)
+    }
+
+    /**
+     * persistence/01: the real runs through the live session on SQLDelight. What the SQL store gives
+     * back is exactly what the in-memory store holds after the same run (every sample, fix field and
+     * event, with its time), and the rebuild from it shows what the session showed. Rebuild at every
+     * flush is `RealRecordingsTest` on the harness; this closes the loop on the real adapter.
+     * Each run gets its own `runTest`: one virtual clock per run, so both start at the fixture's start.
+     */
+    @Test
+    fun sqldelight_stores_the_real_runs_losslessly_and_rebuilds_them() {
+        class Outcome(val stored: RecordingData, val shown: RunSnapshot)
+        fun play(script: ReplayScript, store: RecordingStore): Outcome {
+            var outcome: Outcome? = null
+            runTest {
+                val live = LiveRun(this, script, store)
+                live.play(((script.inputs.last().t - script.meta.start) + 120.seconds).inWholeSeconds.toInt())
+                outcome = Outcome(assertNotNull(live.stored()), live.session.snapshot)
+            }
+            return outcome!!
+        }
+        for (name in listOf("run-1-park", "run-2-walk")) {
+            val script = bundled(name)
+            val driver = inMemoryDriver()
+            try {
+                val sql = play(script, SqlRecordingStore(driver, io = EmptyCoroutineContext))
+                val memory = play(script, InMemoryRecordingStore())
+
+                assertEquals(memory.stored.recording, sql.stored.recording, name)
+                assertEquals(memory.stored.hr, sql.stored.hr, name)
+                assertEquals(memory.stored.fixes, sql.stored.fixes, name)
+                assertEquals(memory.stored.events, sql.stored.events, name)
+                assertEquals(memory.stored.lastPersistedAt, sql.stored.lastPersistedAt, name)
+                assertTrue(sql.stored.fixes.size > 500 && sql.stored.hr.size > 500, "$name: a real run, ${sql.stored.fixes.size} fixes, ${sql.stored.hr.size} hr")
+
+                val rebuilt = RunReducer.rebuild(RunHarness.config, sql.stored).snapshot
+                assertEquals(RunPhase.Done, sql.shown.phase, name)
+                assertEquals(sql.shown.distance, rebuilt.distance, name)
+                assertEquals(sql.shown.hrAvg, rebuilt.hrAvg, name)
+                assertEquals(sql.shown.totalTime, rebuilt.totalTime, name)
+            } finally {
+                driver.close()
+            }
+        }
     }
 
     // ── Session lifetime (D112) ──────────────────────────────────────────────────────────────
@@ -118,7 +166,7 @@ class RecordingSessionLiveTest {
         val live = LiveRun(this, ReplayScript(base.meta, inputs.sortedBy { it.t }))
         live.play(260)
 
-        val stored = assertNotNull(live.stored)
+        val stored = assertNotNull(live.stored())
         assertEquals(RecordingState.Computing, stored.recording.state)
         assertTrue(stored.fixes.any { it.t > base.meta.start + 170.seconds }, "GPS kept counting")
         assertTrue(stored.events.any { it.kind == EventKind.CooldownEnd })
@@ -134,7 +182,7 @@ class RecordingSessionLiveTest {
         live.play(260) {
             launch { live.session.snapshots.first { it.phase is RunPhase.Cooldown } } // the screen's follower goes away here
         }
-        val stored = assertNotNull(live.stored)
+        val stored = assertNotNull(live.stored())
         val stop = assertNotNull(stored.recording.endUtc)
         assertEquals(RecordingState.Computing, stored.recording.state)
         assertTrue(stored.events.any { it.kind == EventKind.CooldownEnd })
@@ -151,7 +199,7 @@ class RecordingSessionLiveTest {
             runCurrent()
             assertTrue(secondReturned, "returned before any time passed")
         }
-        val stored = assertNotNull(live.stored)
+        val stored = assertNotNull(live.stored())
         assertEquals(RecordingState.Computing, stored.recording.state)
         assertTrue(stored.events.any { it.kind == EventKind.CooldownEnd })
     }
@@ -164,7 +212,7 @@ class RecordingSessionLiveTest {
         runCurrent()
         running.cancel()
         running.join()
-        assertNull(live.stored)
+        assertNull(live.stored())
     }
 
     // ── Features seam (D110) ─────────────────────────────────────────────────────────────────
@@ -204,7 +252,7 @@ class RecordingSessionLiveTest {
         var result: EndResult? = null
         val live = atTheGate { result = it.end() }
         assertEquals(EndResult.Discarded, result)
-        assertNull(live.stored)
+        assertNull(live.stored())
     }
 
     /** `:229` — the race D116 closes: closing during the countdown, at the instant the tick that ends it fires. */
@@ -223,7 +271,7 @@ class RecordingSessionLiveTest {
                     session.tap(UserAction.SkipCooldown)
                 }
             }
-            val stored = live.stored
+            val stored = live.stored()
             when (result) {
                 EndResult.Discarded -> assertNull(stored, "discarded at $seconds s but a recording exists")
                 EndResult.Finishing -> assertEquals(RecordingState.Computing, stored?.recording?.state)
@@ -244,7 +292,7 @@ class RecordingSessionLiveTest {
             results = listOf(live.session.end(), live.session.end())
         }
         assertEquals(listOf(EndResult.Finishing, EndResult.Finishing), results, "a second end() gives the same answer")
-        val stored = assertNotNull(live.stored)
+        val stored = assertNotNull(live.stored())
         assertEquals(RecordingState.Computing, stored.recording.state)
         assertTrue(stored.events.any { it.kind == EventKind.Stop })
         assertTrue(stored.events.any { it.kind == EventKind.CooldownEnd })
@@ -260,7 +308,7 @@ class RecordingSessionLiveTest {
             results = listOf(first, session.end())
         }
         assertEquals(listOf(EndResult.Discarded, EndResult.Discarded), results)
-        assertNull(live.stored)
+        assertNull(live.stored())
         assertEquals(RunPhase.Gate, live.session.snapshot.phase, "a dropped run takes no more input")
     }
 }

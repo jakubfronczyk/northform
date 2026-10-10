@@ -1,0 +1,180 @@
+package com.jakubfronczyk.northform.persistence
+
+import app.cash.sqldelight.db.SqlDriver
+import com.jakubfronczyk.northform.core.EventKind
+import com.jakubfronczyk.northform.core.EventSource
+import com.jakubfronczyk.northform.core.HrSample
+import com.jakubfronczyk.northform.core.LocationFix
+import com.jakubfronczyk.northform.core.MetricResult
+import com.jakubfronczyk.northform.core.Recording
+import com.jakubfronczyk.northform.core.RecordingEvent
+import com.jakubfronczyk.northform.core.RecordingId
+import com.jakubfronczyk.northform.core.RecordingState
+import com.jakubfronczyk.northform.core.RecordingType
+import com.jakubfronczyk.northform.core.RunTag
+import com.jakubfronczyk.northform.core.UserId
+import com.jakubfronczyk.northform.core.ports.FlushBatch
+import com.jakubfronczyk.northform.core.ports.RecordingData
+import com.jakubfronczyk.northform.core.ports.RecordingStore
+import com.jakubfronczyk.northform.core.ports.RecordingStoreError
+import com.jakubfronczyk.northform.core.wire
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.CoroutineContext
+import kotlin.time.Instant
+import com.jakubfronczyk.northform.persistence.Recording as RecordingRow
+
+/**
+ * `RecordingStore` on SQLDelight (D7/D12). Each port method is one SQLite transaction and one legal
+ * step of active → stopping → computing → saved; an illegal step throws before anything is written,
+ * and a throw inside the transaction rolls it back. The rules are the ones `MemoryRecords` keeps, so
+ * both pass the same `RecordingStoreContract`.
+ *
+ * The driver is blocking and `synchronous=FULL` fsyncs every commit, so every call hops to [io]
+ * (`Dispatchers.IO` on the phone; tests pass `EmptyCoroutineContext` to stay on the virtual clock's
+ * thread). `withContext` is the idiom: the caller's coroutine moves to that dispatcher and comes back,
+ * no second scope. The transaction never suspends, so it stays on one thread and one connection.
+ */
+class SqlRecordingStore(
+    driver: SqlDriver,
+    private val io: CoroutineContext = Dispatchers.IO,
+) : RecordingStore {
+    private val db = NorthformDb(driver)
+    private val q get() = db.recordingQueries
+
+    override suspend fun create(recording: Recording): Unit = tx {
+        if (q.selectRecording(recording.id.value).executeAsOneOrNull() != null) throw RecordingStoreError.AlreadyExists(recording.id)
+        if (recording.state != RecordingState.Active) throw RecordingStoreError.IllegalTransition(recording.state, RecordingState.Active)
+        q.insertRecording(
+            id = recording.id.value, user_id = recording.userId.value.toLong(), type = recording.type.wire, tag = recording.tag?.wire,
+            state = recording.state.wire, start_utc = recording.startUtc.toNanos(), tz_offset_s = recording.tzOffset.toLong(),
+            end_utc = recording.endUtc?.toNanos(), rpe = recording.rpe?.toLong(), notes = recording.notes,
+        )
+    }
+
+    override suspend fun flush(batch: FlushBatch): Unit = tx {
+        val row = row(batch.recordingId)
+        val state = row.recordingState()
+        if (state != RecordingState.Active && state != RecordingState.Stopping) throw RecordingStoreError.IllegalTransition(state, state)
+        val id = batch.recordingId.value
+        if (batch.hr.isNotEmpty()) {
+            val t0 = batch.hr.first().t
+            q.insertChunk(id, KIND_HR, id, KIND_HR, t0.toNanos(), batch.hr.size.toLong(), StreamCodec.HR, StreamCodec.encodeHr(batch.hr, t0))
+        }
+        if (batch.fixes.isNotEmpty()) {
+            val t0 = batch.fixes.first().t
+            q.insertChunk(id, KIND_GPS, id, KIND_GPS, t0.toNanos(), batch.fixes.size.toLong(), StreamCodec.GPS, StreamCodec.encodeGps(batch.fixes, t0))
+        }
+        batch.events.forEach { insertEvent(id, it) }
+        q.setLastPersistedAt(batch.persistedAt.toNanos(), id)
+    }
+
+    override suspend fun stop(id: RecordingId, endUtc: Instant): Unit = tx {
+        step(row(id), from = RecordingState.Active, to = RecordingState.Stopping)
+        q.setStopping(endUtc.toNanos(), id.value)
+        insertEvent(id.value, RecordingEvent(endUtc, EventKind.Stop, EventSource.Manual))
+    }
+
+    override suspend fun beginComputing(id: RecordingId): Unit = tx {
+        step(row(id), from = RecordingState.Stopping, to = RecordingState.Computing)
+        q.setState(RecordingState.Computing.wire, id.value)
+    }
+
+    override suspend fun saveSummary(id: RecordingId, tag: RunTag?, rpe: Int?, notes: String?, metrics: List<MetricResult>): Unit = tx {
+        step(row(id), from = RecordingState.Computing, to = RecordingState.Saved)
+        q.setSaved(tag?.wire, rpe?.toLong(), notes, id.value)
+        q.deleteMetrics(id.value)
+        for (m in metrics) {
+            require(!m.value.isNaN()) { "metric ${m.metricId.value} is NaN: a metric that cannot be computed is left out, not stored" } // SQLite binds NaN as NULL
+            val p = m.profile
+            q.insertMetric(
+                id.value, m.metricId.value, m.version.toLong(), m.value,
+                p.birthDate.toNanos(), p.sex.wire, p.weightKg, p.heightCm, p.hrMax.toLong(), p.hrRest.toLong(),
+                p.zones.lowerBounds.joinToString(","),
+            )
+        }
+    }
+
+    override suspend fun delete(id: RecordingId): Unit = tx {
+        row(id)
+        q.deleteMetrics(id.value)
+        q.deleteChunks(id.value)
+        q.deleteEvents(id.value)
+        q.deleteRecording(id.value)
+    }
+
+    override suspend fun unfinished(): Recording? = tx { q.unfinished().executeAsOneOrNull()?.toRecording() }
+
+    override suspend fun load(id: RecordingId): RecordingData? = tx {
+        val row = q.selectRecording(id.value).executeAsOneOrNull() ?: return@tx null
+        RecordingData(
+            recording = row.toRecording(),
+            hr = q.selectChunks(id.value, KIND_HR).executeAsList().flatMap { c ->
+                check(c.codec == StreamCodec.HR) { "unknown hr codec ${c.codec}" }
+                StreamCodec.decodeHr(c.payload, instantOfNanos(c.t0), c.count.toInt())
+            },
+            fixes = q.selectChunks(id.value, KIND_GPS).executeAsList().flatMap { c ->
+                check(c.codec == StreamCodec.GPS) { "unknown gps codec ${c.codec}" }
+                StreamCodec.decodeGps(c.payload, instantOfNanos(c.t0), c.count.toInt())
+            },
+            events = q.selectEvents(id.value).executeAsList().map { e ->
+                RecordingEvent(instantOfNanos(e.t), eventKind(e.kind, e.split_index), wire(EventSource.entries, e.source) { it.wire })
+            },
+            lastPersistedAt = row.last_persisted_at?.let(::instantOfNanos),
+        )
+    }
+
+    // ── inside a transaction ─────────────────────────────────────────────────────────────────
+
+    private suspend fun <T> tx(body: () -> T): T = withContext(io) { db.transactionWithResult { body() } }
+
+    private fun row(id: RecordingId): RecordingRow = q.selectRecording(id.value).executeAsOneOrNull() ?: throw RecordingStoreError.NotFound(id)
+
+    private fun step(row: RecordingRow, from: RecordingState, to: RecordingState) {
+        val state = row.recordingState()
+        if (state != from) throw RecordingStoreError.IllegalTransition(state, to)
+    }
+
+    private fun insertEvent(id: String, e: RecordingEvent) =
+        q.insertEvent(id, id, e.t.toNanos(), e.kind.wire, e.source.wire, (e.kind as? EventKind.Split)?.index?.toLong())
+
+    private fun RecordingRow.recordingState() = wire(RecordingState.entries, state) { it.wire }
+
+    private fun <E : Enum<E>> wire(entries: List<E>, value: String, wire: (E) -> String): E =
+        entries.firstOrNull { wire(it) == value } ?: error("unknown ${entries.first()::class.simpleName} '$value' in the database")
+
+    private fun RecordingRow.toRecording() = Recording(
+        id = RecordingId(id),
+        userId = UserId(user_id.toInt()),
+        type = wire(RecordingType.entries, type) { it.wire },
+        tag = tag?.let { wire(RunTag.entries, it) { t -> t.wire } },
+        state = recordingState(),
+        startUtc = instantOfNanos(start_utc),
+        tzOffset = tz_offset_s.toInt(),
+        endUtc = end_utc?.let(::instantOfNanos),
+        rpe = rpe?.toInt(),
+        notes = notes,
+    )
+
+    private fun eventKind(wire: String, splitIndex: Long?): EventKind = when (wire) {
+        "pause" -> EventKind.Pause
+        "resume" -> EventKind.Resume
+        "split" -> EventKind.Split(splitIndex?.toInt() ?: error("split without index"))
+        "hrLost" -> EventKind.HrLost
+        "hrBack" -> EventKind.HrBack
+        "gpsLost" -> EventKind.GpsLost
+        "gpsBack" -> EventKind.GpsBack
+        "sensorLost" -> EventKind.SensorLost
+        "sensorReconnected" -> EventKind.SensorReconnected
+        "stop" -> EventKind.Stop
+        "cooldownEnd" -> EventKind.CooldownEnd
+        "crashRecovered" -> EventKind.CrashRecovered
+        else -> error("unknown event kind $wire")
+    }
+
+    private companion object {
+        const val KIND_HR = "hr"
+        const val KIND_GPS = "gps"
+    }
+}

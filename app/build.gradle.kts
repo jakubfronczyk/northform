@@ -31,6 +31,9 @@ val generateTestFixtureSources = tasks.register("generateTestFixtureSources") {
 
 kotlin {
     listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
+        // SQLite is a system library the SQLiter driver calls into; the iOS klibs carry no linker flag for it,
+        // so every binary that runs the driver links it by hand (SQLDelight's documented requirement).
+        target.binaries.all { linkerOpts("-lsqlite3") }
         // os_log needs its format string compiled by clang (see the .def); the only C in the build.
         target.compilations.getByName("main").cinterops.create("oslog") {
             definitionFile.set(project.file("src/nativeInterop/cinterop/oslog.def"))
@@ -53,6 +56,7 @@ kotlin {
             api(project(":engine"))
             api(project(":adapters"))
             implementation(project(":replay")) // simulator runs replay a bundled fixture (D3: a runtime choice)
+            implementation(project(":persistence")) // SqlRecordingStore + the native driver (D7/D12)
             implementation(project(":composeApp"))
             implementation(compose.runtime)
             implementation(compose.foundation)

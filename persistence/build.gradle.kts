@@ -1,5 +1,5 @@
-// :persistence — SQLDelight (D7, D12). Spike: schema skeleton + the native-driver factory with
-// synchronous=FULL. The store implementation and crash-resume parity are Phase 0 step 6.
+// :persistence — SQLDelight (D7, D12): schema v1, the chunk codec and `SqlRecordingStore`. Lane C owns
+// migrations (.sqm) from here on.
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.sqldelight)
@@ -14,10 +14,15 @@ kotlin {
         commonMain.dependencies {
             api(project(":core"))
             implementation(libs.sqldelight.runtime)
+            implementation(libs.kotlinx.coroutines.core)
         }
         iosMain.dependencies { implementation(libs.sqldelight.native.driver) }
         jvmMain.dependencies { implementation(libs.sqldelight.sqlite.driver) } // in-memory tests on the JVM
-        commonTest.dependencies { implementation(kotlin("test")) }
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
+            implementation(project(":testSupport")) // RecordingStoreContract
+        }
     }
 }
 

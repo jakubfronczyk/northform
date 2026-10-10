@@ -1,46 +1,116 @@
--- Schema v1 skeleton: the Swift D83 tables restated for SQLDelight (D12). Phase 0 step 6 fills the
--- queries; lane C owns migrations (.sqm) from then on. Stream chunks are BLOB columns, codec in Kotlin.
+-- Schema v1 (D7/D12; the Swift D83 tables restated). From here on the schema changes only through .sqm
+-- migrations. Times are epoch NANOseconds (exactly what `Instant` carries, see Nanos.kt). Raw samples live in
+-- `stream_chunk` BLOBs, one chunk per kind per flush, encoded by `StreamCodec` (`codec` names the layout, so
+-- a v2 layout can coexist with v1 rows). Child rows belong to a recording by `recording_id`; foreign keys are
+-- not enforced (SQLite's default), `SqlRecordingStore.delete` removes the children itself.
 
 CREATE TABLE recording (
     id TEXT NOT NULL PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT 'me',
-    type TEXT NOT NULL,                -- run | walk (v1.0)
-    label TEXT,
-    capture TEXT NOT NULL DEFAULT 'live',
-    state TEXT NOT NULL,               -- active | stopping | computing | saved
-    start_utc INTEGER NOT NULL,        -- epoch ms
+    user_id INTEGER NOT NULL DEFAULT 1,
+    type TEXT NOT NULL,                -- run | walk (RecordingType.wire)
+    tag TEXT,                          -- RunTag.wire, written by saveSummary
+    state TEXT NOT NULL CHECK (state IN ('active', 'stopping', 'computing', 'saved')), -- RecordingState.wire
+    start_utc INTEGER NOT NULL,        -- epoch ns
     tz_offset_s INTEGER NOT NULL,
-    end_utc INTEGER,
-    last_persisted_at INTEGER
+    end_utc INTEGER,                   -- epoch ns, written by stop
+    rpe INTEGER,
+    notes TEXT,
+    last_persisted_at INTEGER          -- epoch ns, the heartbeat (R28), written by flush
 );
 
 CREATE TABLE event (
-    recording_id TEXT NOT NULL REFERENCES recording(id),
-    t INTEGER NOT NULL,                -- epoch ms
-    kind TEXT NOT NULL,                -- pause | resume | split | hrLost | gpsLost | bluetoothOff | stop | …
+    recording_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,              -- insertion order within the recording
+    t INTEGER NOT NULL,                -- epoch ns
+    kind TEXT NOT NULL,                -- EventKind.wire
     source TEXT NOT NULL,              -- auto | manual
-    payload BLOB
+    split_index INTEGER,               -- only for kind = 'split'
+    PRIMARY KEY (recording_id, seq)
 );
 
 CREATE TABLE stream_chunk (
-    recording_id TEXT NOT NULL REFERENCES recording(id),
+    recording_id TEXT NOT NULL,
     kind TEXT NOT NULL,                -- hr | gps
-    seq INTEGER NOT NULL,
-    t0 INTEGER NOT NULL,
+    seq INTEGER NOT NULL,              -- flush order within the recording and kind
+    t0 INTEGER NOT NULL,               -- epoch ns of the first sample
     count INTEGER NOT NULL,
-    codec TEXT NOT NULL,
+    codec TEXT NOT NULL,               -- hr.v1 | gps.v1
     payload BLOB NOT NULL,
     PRIMARY KEY (recording_id, kind, seq)
 );
 
-CREATE TABLE sensor (
-    peripheral_id TEXT NOT NULL PRIMARY KEY,   -- CBPeripheral.identifier UUID (D8), not Polar's device id
-    name TEXT,
-    firmware TEXT
+CREATE TABLE metric (
+    recording_id TEXT NOT NULL,
+    metric_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    value REAL NOT NULL,
+    -- the profile the value was computed with (MetricResult.profile), so a later profile edit never changes history
+    profile_birth_date INTEGER NOT NULL,
+    profile_sex TEXT NOT NULL,
+    profile_weight_kg REAL NOT NULL,
+    profile_height_cm REAL NOT NULL,
+    profile_hr_max INTEGER NOT NULL,
+    profile_hr_rest INTEGER NOT NULL,
+    profile_zones TEXT NOT NULL,       -- the five lower bounds, comma-separated
+    PRIMARY KEY (recording_id, metric_id)
 );
 
+-- recording
+
+selectRecording:
+SELECT * FROM recording WHERE id = ?;
+
 unfinished:
-SELECT * FROM recording WHERE state = 'active' LIMIT 1;
+SELECT * FROM recording WHERE state != 'saved' ORDER BY start_utc LIMIT 1;
 
 insertRecording:
-INSERT INTO recording(id, type, state, start_utc, tz_offset_s) VALUES (?, ?, 'active', ?, ?);
+INSERT INTO recording(id, user_id, type, tag, state, start_utc, tz_offset_s, end_utc, rpe, notes)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+setStopping:
+UPDATE recording SET state = 'stopping', end_utc = ? WHERE id = ?;
+
+setState:
+UPDATE recording SET state = ? WHERE id = ?;
+
+setSaved:
+UPDATE recording SET state = 'saved', tag = ?, rpe = ?, notes = ? WHERE id = ?;
+
+setLastPersistedAt:
+UPDATE recording SET last_persisted_at = ? WHERE id = ?;
+
+deleteRecording:
+DELETE FROM recording WHERE id = ?;
+
+-- event
+
+insertEvent:
+INSERT INTO event(recording_id, seq, t, kind, source, split_index)
+VALUES (?, (SELECT COALESCE(MAX(seq), -1) + 1 FROM event WHERE recording_id = ?), ?, ?, ?, ?);
+
+selectEvents:
+SELECT * FROM event WHERE recording_id = ? ORDER BY seq;
+
+deleteEvents:
+DELETE FROM event WHERE recording_id = ?;
+
+-- stream_chunk
+
+insertChunk:
+INSERT INTO stream_chunk(recording_id, kind, seq, t0, count, codec, payload)
+VALUES (?, ?, (SELECT COALESCE(MAX(seq), -1) + 1 FROM stream_chunk WHERE recording_id = ? AND kind = ?), ?, ?, ?, ?);
+
+selectChunks:
+SELECT * FROM stream_chunk WHERE recording_id = ? AND kind = ? ORDER BY seq;
+
+deleteChunks:
+DELETE FROM stream_chunk WHERE recording_id = ?;
+
+-- metric
+
+insertMetric:
+INSERT INTO metric(recording_id, metric_id, version, value, profile_birth_date, profile_sex, profile_weight_kg, profile_height_cm, profile_hr_max, profile_hr_rest, profile_zones)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteMetrics:
+DELETE FROM metric WHERE recording_id = ?;

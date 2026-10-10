@@ -12,7 +12,8 @@ import com.jakubfronczyk.northform.adapters.location.LocationUpdates
 import com.jakubfronczyk.northform.adapters.location.requestWhenInUseAuthorization
 import com.jakubfronczyk.northform.core.SensorId
 import com.jakubfronczyk.northform.engine.sensor.GattHeartRateSensor
-import com.jakubfronczyk.northform.engine.store.InMemoryRecordingStore
+import com.jakubfronczyk.northform.persistence.SqlRecordingStore
+import com.jakubfronczyk.northform.persistence.nativeDriver
 import com.jakubfronczyk.northform.replay.RecordingTap
 import com.jakubfronczyk.northform.ui.AppRoot
 import com.jakubfronczyk.northform.ui.sensor.SensorScreen
@@ -69,7 +70,7 @@ object NorthformApp {
         deviceTestLog.start() // "launch", then scene phases, memory warnings, power mode, location authorization
         DeviceLog.app.notice("boot() start")
 
-        // 1  graph — no I/O yet (Milestone A: the store is in memory; SQLDelight is Phase 1)
+        // 1  graph — no I/O awaited. Opening the database is the one file touch (schema v1 is created on the first launch; D7/D12).
         val wallClock = IosWallClock
         alerts = NotificationAlertPlayer(scope, DeviceLog.run::notice)
         location = LiveLocation(locationUpdates, wallClock, DeviceLog.location::notice)
@@ -90,7 +91,7 @@ object NorthformApp {
         val deps = AppDeps(
             source = if (live) RunSource.Live(sensor, location, KeepAlive(DeviceLog.location::notice).asRunKeepAlive(), ::requestRunPermissions)
                      else RunSource.Replay { BundleFixtures.script("straight-run-3min") },
-            store = LoggingStore(InMemoryRecordingStore(), DeviceLog::runTrace),
+            store = LoggingStore(SqlRecordingStore(nativeDriver()), DeviceLog::runTrace),
             wallClock = wallClock,
             alerts = runAlerts,
             clearAlerts = runAlerts::clear,

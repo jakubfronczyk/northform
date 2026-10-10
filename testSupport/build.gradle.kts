@@ -15,6 +15,7 @@ kotlin {
             api(project(":core"))
             api(project(":engine"))
             api(libs.kotlinx.coroutines.test) // the one virtual clock for `delay` and the WallClock
+            api(kotlin("test")) // the port contracts assert
         }
     }
 }

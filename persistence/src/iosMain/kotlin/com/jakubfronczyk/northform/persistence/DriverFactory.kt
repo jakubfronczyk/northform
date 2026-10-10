@@ -5,12 +5,13 @@ import app.cash.sqldelight.driver.native.NativeSqliteDriver
 import co.touchlab.sqliter.SynchronousFlag
 
 /**
- * The one `expect/actual`-style leaf (D3) — a plain factory the composition root calls. D12:
- *  - WAL: SQLiter's default `journalMode` (DatabaseConfiguration.kt: `journalMode: JournalMode = JournalMode.WAL`)
+ * The on-disk driver the composition root uses (D3: a leaf factory, not a port). D12:
+ *  - WAL: SQLiter's default `journalMode`
  *  - file protection: iOS default for a file created without an explicit class is
  *    `completeUntilFirstUserAuthentication` (Apple, "Encrypting Your App's Files") — the class GRDB set
  *  - synchronous=FULL: the ONE thing set by hand, via `onConfiguration`
- *    (SQLDelight: NativeSqliteDriver(schema, name, maxReaderConnections, onConfiguration, …)).
+ * The file lands in Application Support (SQLiter's default base path). The schema is created on first
+ * open and migrated by version from then on (SQLDelight `.sqm`, lane C).
  */
 fun nativeDriver(name: String = "northform.db"): SqlDriver = NativeSqliteDriver(
     schema = NorthformDb.Schema,
@@ -19,4 +20,11 @@ fun nativeDriver(name: String = "northform.db"): SqlDriver = NativeSqliteDriver(
         config.copy(extendedConfig = config.extendedConfig.copy(synchronousFlag = SynchronousFlag.FULL))
     },
 )
-// TODO(spike): compile-check the exact `NorthformDb.Schema` type against SQLDelight 2.4.0 (sync vs async schema).
+
+/** SQLiter opens a shared-cache in-memory database for `inMemory = true`, so one reader pool sees one database. */
+actual fun inMemoryDriver(name: String): SqlDriver = NativeSqliteDriver(
+    schema = NorthformDb.Schema,
+    name = name,
+    maxReaderConnections = 1,
+    onConfiguration = { it.copy(inMemory = true) },
+)
