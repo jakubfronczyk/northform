@@ -1,0 +1,93 @@
+package com.jakubfronczyk.northform.ui.run
+
+import com.jakubfronczyk.northform.engine.run.RunSnapshot
+
+/**
+ * What the gate knows about the sensor beyond the snapshot (E1): whether one is connected and its
+ * battery. Not on `RunSessionHandle` today — the composition root passes it when it has it; null
+ * means "unknown", which hides the battery row and assumes a sensor (the snapshot's `hrLost` still rules).
+ */
+data class GateSensor(val connected: Boolean, val batteryPercent: Int?)
+
+/**
+ * The Gate artboard's copy and states as one pure function of the snapshot at `RunPhase.Gate`
+ * (R24 readiness per engine/01: `hrLost == false` is HR ✓, `gpsLost == false` is GPS ✓, `hrNow` the
+ * live bpm) and the optional [GateSensor] (E1, E13). Option A: the screen holds Start until both are
+ * ✓; "Start anyway" sends the same `UserAction.Start`. Table-tested in `GateModelTest`.
+ */
+data class GateModel(
+    val title: String,
+    val subtitle: String,
+    val hr: HrRow,
+    val gpsReady: Boolean,
+    val gpsTitle: String,
+    val gpsSub: String,
+    /** "3 of 3 fixes" — the snapshot gives only ready/not, so the bars are all lit or none. */
+    val fixesLit: Int,
+    val battery: Battery?,
+    /** The E1 line under the card, or null. */
+    val warning: String?,
+    val startLabel: String,
+    val startEnabled: Boolean,
+    val showStartAnyway: Boolean,
+) {
+    sealed interface HrRow {
+        data class Ready(val bpm: String) : HrRow
+        data object Waiting : HrRow
+        data object NoSensor : HrRow
+    }
+
+    data class Battery(val percent: Int, val low: Boolean)
+
+    val fixLabel: String get() = "$fixesLit of $FIXES_NEEDED fixes"
+
+    companion object {
+        /** R24: three consecutive fixes ≤ 20 m. */
+        const val FIXES_NEEDED = 3
+        /** E1: warn below 20 %. */
+        const val LOW_BATTERY_BELOW = 20
+
+        fun from(snapshot: RunSnapshot, sensor: GateSensor? = null): GateModel {
+            val noSensor = sensor?.connected == false
+            val hrReady = !noSensor && !snapshot.hrLost
+            val gpsReady = !snapshot.gpsLost
+            val battery = sensor?.batteryPercent?.takeIf { !noSensor }?.let { Battery(it, low = it < LOW_BATTERY_BELOW) }
+            val lowBattery = battery?.low == true
+            val startOk = hrReady && gpsReady
+            return GateModel(
+                title = when {
+                    noSensor -> "No heart rate yet"
+                    startOk -> "Ready to run"
+                    else -> "Getting ready"
+                },
+                subtitle = when {
+                    noSensor -> "Connect the sensor, or start a GPS only run."
+                    startOk && lowBattery -> "GPS is locked in. Sensor battery is low."
+                    startOk -> "Heart rate and GPS are locked in"
+                    !hrReady && !gpsReady -> "Waiting for heart rate and GPS."
+                    !gpsReady -> "Waiting for GPS. Heart rate is ready."
+                    else -> "Waiting for heart rate. GPS is ready."
+                },
+                hr = when {
+                    noSensor -> HrRow.NoSensor
+                    hrReady -> HrRow.Ready(snapshot.hrNow?.toString() ?: NO_VALUE)
+                    else -> HrRow.Waiting
+                },
+                gpsReady = gpsReady,
+                gpsTitle = if (gpsReady) "GPS" else "GPS · finding signal…",
+                gpsSub = if (gpsReady) "Locked in" else "Needs $FIXES_NEEDED fixes within 20 m",
+                fixesLit = if (gpsReady) FIXES_NEEDED else 0,
+                battery = battery,
+                warning = battery?.takeIf { it.low }?.let { "Sensor battery ${it.percent} % · may not last the run" },
+                startLabel = when {
+                    noSensor -> "Start · sensor not connected"
+                    startOk -> "Start run"
+                    !gpsReady -> "Start · waiting for GPS"
+                    else -> "Start · waiting for heart rate"
+                },
+                startEnabled = startOk,
+                showStartAnyway = !startOk,
+            )
+        }
+    }
+}

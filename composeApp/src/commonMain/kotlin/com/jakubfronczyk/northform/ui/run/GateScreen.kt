@@ -1,0 +1,204 @@
+package com.jakubfronczyk.northform.ui.run
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.jakubfronczyk.northform.engine.run.Route
+import com.jakubfronczyk.northform.engine.run.RunSnapshot
+import com.jakubfronczyk.northform.ui.Theme
+import com.jakubfronczyk.northform.ui.Type
+
+/**
+ * The start gate (Gate artboard; R24, E1, E13; `RunView.swift:38` was the bare version): the map
+ * with a back button and the type chip on top, a card with the heart-rate, GPS and battery rows,
+ * the E1 warning, then Start (held until HR ✓ + GPS ✓) with "Start anyway" under it. Both send the
+ * same `Start` (option A of engine/01). Every string comes from [GateModel].
+ */
+@Composable
+fun GateScreen(
+    snapshot: RunSnapshot,
+    route: Route,
+    map: @Composable (route: Route) -> Unit,
+    start: () -> Unit,
+    close: () -> Unit,
+    sensor: GateSensor? = null,
+    connectSensor: (() -> Unit)? = null,
+) {
+    val model = GateModel.from(snapshot, sensor)
+    Column(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxWidth().height(290.dp)) {
+            map(route)
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 64.dp),
+                horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.size(44.dp).background(Theme.bg.copy(alpha = 0.85f), CircleShape).clip(CircleShape).clickable(onClick = close),
+                    contentAlignment = Alignment.Center,
+                ) { Text("‹", style = Type.number22, color = Theme.text) }
+                Chip("Run", Theme.accent)
+            }
+        }
+        Column(
+            Modifier.fillMaxWidth().weight(1f)
+                .offset(y = (-22).dp) // the sheet overlaps the map by 22 dp (artboard margin-top: -22px)
+                .background(Theme.bg, RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
+                .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 50.dp - 22.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(model.title, style = GateType.title, color = Theme.text)
+                Text(model.subtitle, style = Type.rowLabel, color = Theme.text2)
+            }
+            ReadinessCard(model, connectSensor)
+            model.warning?.let { WarningLine(it) }
+            Spacer(Modifier.weight(1f))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                StartButton(model.startLabel, model.startEnabled, start)
+                if (model.showStartAnyway) {
+                    Box(Modifier.fillMaxWidth().height(44.dp).clickable(onClick = start), contentAlignment = Alignment.Center) {
+                        Text("Start anyway", style = Type.statusLabel.copy(fontSize = 16.sp), color = Theme.text)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The three rows: heart rate · GPS · sensor battery, dashed lines between them. */
+@Composable
+private fun ReadinessCard(model: GateModel, connectSensor: (() -> Unit)?) {
+    Column(Modifier.fillMaxWidth().background(Theme.card, RoundedCornerShape(22.dp)).padding(horizontal = 16.dp, vertical = 4.dp)) {
+        when (val hr = model.hr) {
+            is GateModel.HrRow.Ready -> CardRow(icon = { CheckBadge() }, title = "Heart rate", sub = "Reading from sensor") {
+                BigValue(hr.bpm, "bpm")
+            }
+            GateModel.HrRow.Waiting -> CardRow(icon = { Spinner() }, title = "Heart rate · waiting…", sub = "No reading in the last 5 s") {}
+            GateModel.HrRow.NoSensor -> CardRow(
+                icon = { Text("♥", style = Type.number22, color = Theme.warn) },
+                title = "Heart rate", sub = "Sensor not connected", subColor = Theme.warn, minHeight = 68.dp,
+            ) {
+                if (connectSensor != null) {
+                    Box(
+                        Modifier.height(44.dp).background(Theme.primary, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp))
+                            .clickable(onClick = connectSensor).padding(horizontal = 18.dp),
+                        contentAlignment = Alignment.Center,
+                    ) { Text("Connect", style = Type.statusLabel.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = Color.White) }
+                }
+            }
+        }
+        DashedLine()
+        CardRow(icon = { if (model.gpsReady) CheckBadge() else Spinner() }, title = model.gpsTitle, sub = model.gpsSub, minHeight = 72.dp) {
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(model.fixLabel, style = Type.statusLabel.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = Theme.text)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    for (i in 0 until GateModel.FIXES_NEEDED) {
+                        Box(Modifier.size(18.dp, 6.dp).background(if (i < model.fixesLit) Theme.ok else RunPalette.unlit, RoundedCornerShape(3.dp)))
+                    }
+                }
+            }
+        }
+        model.battery?.let { battery ->
+            DashedLine()
+            CardRow(icon = { Text("▭", style = Type.number22, color = if (battery.low) Theme.warn else Theme.text2) }, title = "Sensor battery", sub = null, minHeight = 60.dp) {
+                BigValue(battery.percent.toString(), "%", if (battery.low) Theme.warn else Theme.text)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CardRow(
+    icon: @Composable () -> Unit,
+    title: String,
+    sub: String?,
+    subColor: Color = Theme.text2,
+    minHeight: androidx.compose.ui.unit.Dp = 64.dp,
+    trailing: @Composable () -> Unit,
+) {
+    Row(Modifier.fillMaxWidth().heightIn(min = minHeight), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) { icon() }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = Type.statusLabel.copy(fontSize = 16.sp), color = Theme.text)
+            if (sub != null) Text(sub, style = Type.tertiaryText, color = subColor)
+        }
+        trailing()
+    }
+}
+
+@Composable
+private fun BigValue(value: String, unit: String, color: Color = Theme.text) {
+    Row(verticalAlignment = Alignment.Bottom) {
+        Text(value, style = RunType.number24, color = color)
+        Spacer(Modifier.width(3.dp))
+        Text(unit, style = Type.tertiaryText, color = Theme.text2, modifier = Modifier.padding(bottom = 3.dp))
+    }
+}
+
+/** The green check disc. */
+@Composable
+private fun CheckBadge() {
+    Box(Modifier.size(32.dp).background(Theme.ok, CircleShape), contentAlignment = Alignment.Center) {
+        Text("✓", style = Type.pillLabel.copy(fontSize = 16.sp), color = Theme.bg)
+    }
+}
+
+/** A static ring standing in for the artboard's spinner (no animation needed to read the state). */
+@Composable
+private fun Spinner() {
+    Box(Modifier.size(28.dp).border(2.4.dp, Theme.track, CircleShape))
+    Box(Modifier.size(28.dp).border(2.4.dp, Theme.text.copy(alpha = 0.6f), RoundedCornerShape(topStartPercent = 50, topEndPercent = 50, bottomEndPercent = 0, bottomStartPercent = 0)))
+}
+
+@Composable
+private fun DashedLine() = Box(Modifier.fillMaxWidth().height(1.dp).background(Theme.line))
+
+@Composable
+private fun WarningLine(text: String) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp).heightIn(min = 24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("△", style = Type.statusLabel, color = Theme.warn)
+        Text(text, style = Type.statusLabel.copy(fontSize = 15.sp), color = Theme.warn)
+    }
+}
+
+/** Start: primary when ready, the disabled grey block otherwise (still a real button: nothing to tap). */
+@Composable
+private fun StartButton(label: String, enabled: Boolean, start: () -> Unit) {
+    Box(
+        Modifier.fillMaxWidth().height(68.dp)
+            .background(if (enabled) Theme.primary else RunPalette.held, RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(enabled = enabled, onClick = start),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("▶  $label", style = Type.sheetTitle, color = if (enabled) Color.White else Theme.dim)
+    }
+}
+
+private object GateType {
+    val title = androidx.compose.ui.text.TextStyle(fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+}

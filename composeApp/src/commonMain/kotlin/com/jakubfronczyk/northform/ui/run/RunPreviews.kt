@@ -15,7 +15,18 @@ private fun previewRun(snapshot: RunSnapshot) {
     RunFlow(FakeRunSession(snapshot, FakeRunSession.previewRoute), onClose = {}, map = { r -> RouteCanvas(r) })
 }
 
-@Preview @Composable fun GatePreview() = previewRun(RunSnapshot(RunPhase.Gate))
+// Gate (R24/E1): one preview per artboard state. The initial snapshot has nothing seen yet.
+private val gate = RunSnapshot(RunPhase.Gate, hrLost = true, gpsLost = true)
+@Composable
+private fun previewGate(snapshot: RunSnapshot, sensor: GateSensor? = null) {
+    RunFlow(FakeRunSession(snapshot), onClose = {}, map = { r -> RouteCanvas(r) }, gateSensor = sensor)
+}
+@Preview @Composable fun GateWaitingPreview() = previewGate(gate.copy(hrLost = false, hrNow = 74), GateSensor(true, 82))
+@Preview @Composable fun GateWaitingForHrPreview() = previewGate(gate.copy(gpsLost = false))
+@Preview @Composable fun GateNothingYetPreview() = previewGate(gate)
+@Preview @Composable fun GateReadyPreview() = previewGate(gate.copy(hrLost = false, hrNow = 74, gpsLost = false), GateSensor(true, 82))
+@Preview @Composable fun GateNoSensorPreview() = previewGate(gate.copy(gpsLost = false), GateSensor(false, null))
+@Preview @Composable fun GateLowBatteryPreview() = previewGate(gate.copy(hrLost = false, hrNow = 74, gpsLost = false), GateSensor(true, 14))
 @Preview @Composable fun CountdownPreview() = previewRun(RunSnapshot(RunPhase.Countdown(Clock.System.now() + 4.seconds)))
 @Preview @Composable fun ActivePreview() = previewRun(FakeRunSession.running)
 @Preview @Composable fun PausedPreview() = previewRun(FakeRunSession.running.copy(phase = RunPhase.Paused(Clock.System.now()), currentPace = null))

@@ -46,7 +46,13 @@ import kotlin.time.Instant
  * clock (`RunViewModel.swift:49-52`, D100). The map is injected because it is a platform view (D13).
  */
 @Composable
-fun RunFlow(session: RunSessionHandle, onClose: () -> Unit, map: @Composable (route: Route) -> Unit) {
+fun RunFlow(
+    session: RunSessionHandle,
+    onClose: () -> Unit,
+    map: @Composable (route: Route) -> Unit,
+    /** E1: the sensor's connection + battery for the gate; null until the composition root supplies it. */
+    gateSensor: GateSensor? = null,
+) {
     val scope = rememberCoroutineScope()
     val snapshot by session.snapshots.collectAsState()
     val route by session.routes.collectAsState()
@@ -60,7 +66,7 @@ fun RunFlow(session: RunSessionHandle, onClose: () -> Unit, map: @Composable (ro
     CompositionLocalProvider(LocalMapCamera provides camera) {
         Box(Modifier.fillMaxSize().background(Theme.bg)) {
             when (val phase = snapshot.phase) {
-                RunPhase.Gate -> GateScreen(start = { send(UserAction.Start) }, close = onClose)
+                RunPhase.Gate -> GateScreen(snapshot, route, map, start = { send(UserAction.Start) }, close = onClose, sensor = gateSensor)
                 is RunPhase.Countdown -> CountdownScreen(phase.endsAt, session.wallClock)
                 RunPhase.Active, is RunPhase.Paused -> LiveRunScreen(snapshot, route, session.wallClock, send, map)
                 is RunPhase.Cooldown -> StoppedScreen(snapshot, skip = { send(UserAction.SkipCooldown) })
@@ -78,17 +84,6 @@ private fun BareScreen(content: @Composable ColumnScope.() -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         content = content,
     )
-}
-
-/** `RunView.swift:38`. */
-@Composable
-fun GateScreen(start: () -> Unit, close: () -> Unit) = BareScreen {
-    Spacer(Modifier.weight(1f))
-    Text("Ready to run", style = Type.screenTitle, color = Theme.text)
-    Spacer(Modifier.weight(1f))
-    PrimaryButton("Start", start)
-    Spacer(Modifier.height(8.dp))
-    Text("Cancel", color = Theme.text2, modifier = Modifier.clickable(onClick = close).padding(12.dp))
 }
 
 /** `RunView.swift:56` — counts down on the run's clock, ten times a second; never shows 0. */
