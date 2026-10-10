@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -54,13 +55,17 @@ fun RunFlow(session: RunSessionHandle, onClose: () -> Unit, map: @Composable (ro
         scope.launch { session.send(action, tappedAt) }
     }
 
-    Box(Modifier.fillMaxSize().background(Theme.bg)) {
-        when (val phase = snapshot.phase) {
-            RunPhase.Gate -> GateScreen(start = { send(UserAction.Start) }, close = onClose)
-            is RunPhase.Countdown -> CountdownScreen(phase.endsAt, session.wallClock)
-            RunPhase.Active, is RunPhase.Paused -> LiveRunScreen(snapshot, route, session.wallClock, send, map)
-            is RunPhase.Cooldown -> StoppedScreen(snapshot, skip = { send(UserAction.SkipCooldown) })
-            RunPhase.Done -> DoneScreen(snapshot, close = onClose)
+    // One camera for the whole run (survives phase switches); the map and the re-center button share it.
+    val camera = remember { MapCamera() }
+    CompositionLocalProvider(LocalMapCamera provides camera) {
+        Box(Modifier.fillMaxSize().background(Theme.bg)) {
+            when (val phase = snapshot.phase) {
+                RunPhase.Gate -> GateScreen(start = { send(UserAction.Start) }, close = onClose)
+                is RunPhase.Countdown -> CountdownScreen(phase.endsAt, session.wallClock)
+                RunPhase.Active, is RunPhase.Paused -> LiveRunScreen(snapshot, route, session.wallClock, send, map)
+                is RunPhase.Cooldown -> StoppedScreen(snapshot, skip = { send(UserAction.SkipCooldown) })
+                RunPhase.Done -> DoneScreen(snapshot, close = onClose)
+            }
         }
     }
 }

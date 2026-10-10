@@ -81,6 +81,7 @@ fun LiveRunScreen(
                 Chip("Run", Theme.accent)
                 Chip(if (model.gpsLost) "GPS lost" else "GPS", if (model.gpsLost) Theme.warn else Theme.ok)
             }
+            RecenterButton(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 22.dp + 16.dp))
         }
         Column(
             Modifier.fillMaxWidth()
@@ -95,6 +96,26 @@ fun LiveRunScreen(
             SmallRow(model)
             if (model.paused) PausedControls(send) else RunningControls(send)
         }
+    }
+}
+
+/**
+ * Shown only after a drag took the map off the route end (U5): one tap puts the camera back to following.
+ * Reads the shared [LocalMapCamera]; whatever draws the map reports the drag to the same camera.
+ */
+@Composable
+private fun RecenterButton(modifier: Modifier = Modifier) {
+    val camera = LocalMapCamera.current
+    if (camera.following) return
+    Row(
+        modifier.background(Theme.bg.copy(alpha = 0.85f), RoundedCornerShape(50))
+            .clip(RoundedCornerShape(50)).clickable(onClick = camera::recenter)
+            .padding(vertical = 10.dp, horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(10.dp).border(1.5.dp, Theme.text, CircleShape))
+        Spacer(Modifier.width(8.dp))
+        Text("Re-center", style = Type.statusLabel, color = Theme.text)
     }
 }
 
