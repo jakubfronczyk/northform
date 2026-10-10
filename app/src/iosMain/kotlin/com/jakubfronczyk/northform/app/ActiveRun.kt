@@ -9,7 +9,6 @@ import com.jakubfronczyk.northform.engine.run.RunInput
 import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.engine.run.RunSessionHandle
 import com.jakubfronczyk.northform.replay.RecordingTap
-import com.jakubfronczyk.northform.replay.ReplayInput
 import com.jakubfronczyk.northform.replay.ReplayMeta
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -60,7 +59,7 @@ class ActiveRun private constructor(
                 ReplayMeta(config.type, start, config.profile.hrMax, config.profile.hrRest, config.profile.sex),
                 fileName(start, config.type),
             )
-            val observer: ((RunInput) -> Unit)? = tap?.let { t -> { input -> record(input, t) } }
+            val observer: ((RunInput) -> Unit)? = tap?.let { it::observe } // bound reference: the tap owns the RunInput → fixture mapping (replay/01)
             val inputs = deps.source.open(deps.wallClock, scope)
             val session = RecordingSession(config, inputs.sensor, inputs.location, deps.store, deps.alerts, deps.wallClock, observer)
             deps.log("session start ${config.type.wire}")
@@ -77,17 +76,6 @@ class ActiveRun private constructor(
         fun fileName(start: Instant, type: RecordingType) =
             Instant.fromEpochSeconds(start.epochSeconds).toString().replace(":", "-") + "-${type.wire}.jsonl"
 
-        /** `AppModel.swift:157` — what the reducer saw, as fixture lines. Ticks only drive the 30 s rewrite. */
-        fun record(input: RunInput, tap: RecordingTap) {
-            when (input) {
-                is RunInput.Hr -> tap.record(ReplayInput.Hr(input.sample))
-                is RunInput.Fix -> tap.record(ReplayInput.Fix(input.fix))
-                is RunInput.Sensor -> tap.record(ReplayInput.Sensor(input.state, input.at))
-                is RunInput.User -> tap.record(ReplayInput.User(input.action, input.at))
-                is RunInput.Tick -> tap.tick(input.t)
-                is RunInput.Backgrounded, is RunInput.Persisted, is RunInput.PersistFailed -> Unit
-            }
-        }
 
         /** The run's trace lines (`RecordingSession.swift:143-198`, DEVTEST): every phase change, and a summary once a minute. */
         private suspend fun logProgress(id: RecordingId, session: RunSessionHandle, log: (String) -> Unit) {

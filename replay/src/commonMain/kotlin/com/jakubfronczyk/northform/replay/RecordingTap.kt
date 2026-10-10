@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.replay
 
+import com.jakubfronczyk.northform.engine.run.RunInput
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlin.time.Duration
@@ -28,6 +29,15 @@ class RecordingTap(val meta: ReplayMeta, private val sink: (jsonl: String) -> Un
     fun record(input: ReplayInput) {
         if (input.t < meta.start) return
         state.update { State(it.inputs + input, it.lastWrite) }
+    }
+
+    /**
+     * The session's observer (`RecordingSession(observer = tap::observe)`): everything the reducer saw,
+     * as fixture lines. Ticks are not stored; they only drive the 30 s rewrite ([tick]). The one entry
+     * point the app calls, so the `RunInput` → fixture mapping never leaves `:replay` (replay/01).
+     */
+    fun observe(input: RunInput) {
+        if (input is RunInput.Tick) tick(input.t) else ReplayInput.from(input)?.let(::record)
     }
 
     /** Called with the run's time (each tick): rewrites the file when [rewriteEvery] has passed. */

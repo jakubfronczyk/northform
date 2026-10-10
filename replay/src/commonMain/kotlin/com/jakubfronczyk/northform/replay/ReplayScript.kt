@@ -58,6 +58,21 @@ sealed interface ReplayInput {
         is User -> RunInput.User(action, at)
     }
 
+    companion object {
+        /**
+         * The reverse of [toRunInput] (`AppModel.swift:157`): the reducer's input as a fixture stores it,
+         * or null for the inputs the format has no line for (ticks, backgrounding, store confirmations).
+         * Both directions live here so a fixture → run → tap → fixture round trip is one module's contract.
+         */
+        fun from(input: RunInput): ReplayInput? = when (input) {
+            is RunInput.Hr -> Hr(input.sample)
+            is RunInput.Fix -> Fix(input.fix)
+            is RunInput.Sensor -> Sensor(input.state, input.at)
+            is RunInput.User -> User(input.action, input.at)
+            is RunInput.Tick, is RunInput.Backgrounded, is RunInput.Persisted, is RunInput.PersistFailed -> null
+        }
+    }
+
     /** `ReplayTimeline.swift:108` — the same input at another time (playback rebasing). */
     fun at(time: Instant): ReplayInput = when {
         time == t -> this

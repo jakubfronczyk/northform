@@ -77,7 +77,7 @@ class ReplayTimeline(val script: ReplayScript, val wallClock: WallClock) {
         }
     }
 
-    /** The fixture's user actions (pause, stop …), for driving a recording in tests. */
+    /** The fixture's user actions (pause, stop …). Test-only by design (replay/01): the app has no tapper to drive, so `RecordingSessionLiveTest` and the tap round trip feed these to `session.send`. */
     fun userActions(): Flow<ReplayInput.User> = _userActions
 
     internal fun setSensorState(state: SensorState) {
