@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.core
 
+import com.jakubfronczyk.northform.core.metrics.HeartRate
 import kotlin.time.Instant
 
 // Ported from northform-ios `Core/Model/Profile.swift` + `Core/Metrics/Zones.swift`. Swift typed
@@ -71,17 +72,25 @@ data class Profile(
     /** `Zones.swift:3` — heart-rate reserve fraction: (HR − HRrest) / (HRmax − HRrest) (Karvonen). */
     fun reserveFraction(bpm: Int): Double = (bpm - hrRest).toDouble() / (hrMax - hrRest).toDouble()
 
-    /** `Zones.swift:8` — zone 0–5: the number of zone lower bounds at or below the reserve fraction. */
+    /**
+     * `Zones.swift:8` — zone 0–5: the number of zone lower bounds at or below the reserve fraction.
+     * Kept for `RunSnapshot.zone: Int?` until the engine lane applies D23; new code uses
+     * [com.jakubfronczyk.northform.core.metrics.zoneOf], which returns the `Zone` value.
+     */
     fun zone(bpm: Int): Int {
         val fraction = reserveFraction(bpm)
         return zones.lowerBounds.count { fraction >= it }
     }
 
     companion object {
-        /** `Profile.swift:101` — the one definition of valid profile heart rates, shared with replay fixtures. */
+        /**
+         * `Profile.swift:101` — the one definition of valid profile heart rates, shared with replay
+         * fixtures. The bounds are the valid-sample range ([HeartRate.valid], metrics/06): a resting HR
+         * below a valid sample or a max above one could never be measured.
+         */
         fun checkHeartRates(max: Int, rest: Int) {
-            if (rest !in 30..120) throw Invalid.HrRest(rest)
-            if (max <= rest || max > 230) throw Invalid.HrMax(max)
+            if (rest !in HeartRate.valid.first..120) throw Invalid.HrRest(rest)
+            if (max <= rest || max > HeartRate.valid.last) throw Invalid.HrMax(max)
         }
     }
 }
