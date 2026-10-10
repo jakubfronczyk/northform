@@ -7,7 +7,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.channelFlow
@@ -48,7 +47,15 @@ class GattHeartRateSensor(
 ) : HeartRateSensor {
 
     private val inbox = Channel<SensorLink.Input>(Channel.UNLIMITED)
-    private val states = MutableStateFlow(SensorStateChange(SensorState.Disconnected(DisconnectReason.User), wallClock.now()))
+    /**
+     * Every state change, none skipped: a drop is `Disconnected(Lost)` immediately followed by `Connecting`
+     * in ONE reduce, and a `StateFlow` (conflating by design) handed collectors only the `Connecting`, so
+     * the run never recorded `SensorLost` from the real sensor (adapters/02, R29). `replay = 1` keeps the
+     * port's "starts with the current value"; the unbounded extra buffer keeps `tryEmit` from ever
+     * dropping a change on a slow collector. [latest] is what D100's "same state twice = one change" compares against.
+     */
+    private val states = MutableSharedFlow<SensorStateChange>(replay = 1, extraBufferCapacity = Int.MAX_VALUE)
+    private var latest = SensorStateChange(SensorState.Disconnected(DisconnectReason.User), wallClock.now()).also { states.tryEmit(it) }
     /** Unbounded so a slow collector can never drop a sample (samples are persisted downstream). */
     private val samples = MutableSharedFlow<HrSample>(extraBufferCapacity = Int.MAX_VALUE)
     private val discoveries = MutableSharedFlow<DiscoveredSensor>(extraBufferCapacity = 64)
@@ -95,7 +102,10 @@ class GattHeartRateSensor(
             is SensorLink.Command.Read -> central.read(c.id, c.characteristic)
             is SensorLink.Command.Report -> {
                 // D100: the same state twice in a row is one change and keeps its first time.
-                if (states.value.state != c.state) states.value = SensorStateChange(c.state, c.at)
+                if (latest.state != c.state) {
+                    latest = SensorStateChange(c.state, c.at)
+                    check(states.tryEmit(latest)) { "unbounded state buffer refused an emit" }
+                }
             }
             is SensorLink.Command.Emit -> check(samples.tryEmit(c.sample)) { "unbounded sample buffer refused an emit" }
             is SensorLink.Command.Discovered -> {
@@ -113,7 +123,7 @@ class GattHeartRateSensor(
 
     // ── HeartRateSensor ─────────────────────────────────────────────────────────────────────
 
-    override fun states(): Flow<SensorStateChange> = states.asStateFlow()
+    override fun states(): Flow<SensorStateChange> = states
 
     /**
      * Live samples only; stays open through drops and Bluetooth off/on; ends on cancel; throws

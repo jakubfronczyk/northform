@@ -1,8 +1,10 @@
 package com.jakubfronczyk.northform.engine.sensor
 
+import com.jakubfronczyk.northform.core.DisconnectReason
 import com.jakubfronczyk.northform.core.SensorError
 import com.jakubfronczyk.northform.core.SensorId
 import com.jakubfronczyk.northform.core.SensorState
+import com.jakubfronczyk.northform.core.SensorStateChange
 import com.jakubfronczyk.northform.core.gatt.Gatt
 import com.jakubfronczyk.northform.core.ports.BleCentral
 import com.jakubfronczyk.northform.core.ports.BleEvent
@@ -139,5 +141,73 @@ class HeartRateSensorContractTest {
         assertEquals(listOf(72), bpm)
         collector.cancel(); runCurrent()
         assertTrue("notify 2A37 false" in central.calls, "last listener left → notify off")
+    }
+
+    // ── adapters/02: the facts the reliability log counts (R29) cross this port ─────────────
+
+    /** A connected sensor with every state change recorded as it is delivered, the way the run session collects it. */
+    private fun TestScope.connected(central: ScriptedCentral, seen: MutableList<SensorStateChange>): GattHeartRateSensor {
+        val sensor = sensor(central)
+        central.radio(BleEvent.PowerOn)
+        launch { sensor.connect(polar) }
+        runCurrent(); central.linkUp(polar); runCurrent()
+        backgroundScope.launch { sensor.states().collect { seen += it } }
+        runCurrent()
+        assertEquals(listOf(SensorState.Connected(null)), seen.map { it.state })
+        return sensor
+    }
+
+    @Test
+    fun a_drop_the_system_reconnects_is_delivered_as_lost_then_connecting_then_connected_with_its_times() = runTest {
+        val central = ScriptedCentral().apply { known += polar }
+        val seen = ArrayList<SensorStateChange>()
+        connected(central, seen)
+        advanceTimeBy(10.seconds)
+        central.radio(BleEvent.Disconnected(polar, isReconnecting = true, message = "The connection has timed out unexpectedly.")); runCurrent()
+        assertEquals(
+            listOf(SensorState.Connected(null), SensorState.Disconnected(DisconnectReason.Lost), SensorState.Connecting),
+            seen.map { it.state },
+            "Lost must reach the collector even though Connecting follows in the same reduce: it is the drop the log counts",
+        )
+        assertEquals(start + 10.seconds, seen[1].at, "the drop is stamped when the radio reported it")
+        assertEquals(1, central.calls.count { it.startsWith("connect") }, "the system re-links by itself; no second connect: ${central.calls}")
+        advanceTimeBy(30.seconds)
+        central.linkUp(polar); runCurrent()
+        assertEquals(SensorState.Connected(null), seen.last().state)
+        assertEquals(30.seconds, seen.last().at - seen[1].at, "reconnect time = Connected.at − Lost.at")
+    }
+
+    @Test
+    fun a_final_drop_is_lost_and_the_link_reissues_the_connect_itself() = runTest {
+        val central = ScriptedCentral().apply { known += polar }
+        val seen = ArrayList<SensorStateChange>()
+        connected(central, seen)
+        central.radio(BleEvent.Disconnected(polar, isReconnecting = false, message = null)); runCurrent()
+        assertEquals(listOf(SensorState.Disconnected(DisconnectReason.Lost), SensorState.Connecting), seen.drop(1).map { it.state })
+        assertEquals(2, central.calls.count { it.startsWith("connect") }, "${central.calls}")
+    }
+
+    @Test
+    fun a_user_disconnect_is_not_a_drop() = runTest {
+        val central = ScriptedCentral().apply { known += polar }
+        val seen = ArrayList<SensorStateChange>()
+        val sensor = connected(central, seen)
+        sensor.disconnect(); runCurrent()
+        assertEquals(listOf(SensorState.Disconnected(DisconnectReason.User)), seen.drop(1).map { it.state })
+        central.radio(BleEvent.Disconnected(polar, isReconnecting = false, message = null)); runCurrent()
+        assertEquals(1, seen.size - 1, "the radio's own disconnect after ours adds nothing: ${seen.map { it.state }}")
+    }
+
+    @Test
+    fun bluetooth_off_is_reported_apart_from_a_drop_and_power_on_relinks() = runTest {
+        val central = ScriptedCentral().apply { known += polar }
+        val seen = ArrayList<SensorStateChange>()
+        connected(central, seen)
+        central.radio(BleEvent.PowerOff); runCurrent()
+        central.radio(BleEvent.Disconnected(polar, isReconnecting = false, message = "powered off")); runCurrent()
+        assertEquals(listOf(SensorState.BluetoothOff), seen.drop(1).map { it.state }, "no Lost while the radio is off (D120 of the Swift build)")
+        central.radio(BleEvent.PowerOn); runCurrent()
+        central.linkUp(polar); runCurrent()
+        assertEquals(listOf(SensorState.BluetoothOff, SensorState.Connecting, SensorState.Connected(null)), seen.drop(1).map { it.state })
     }
 }
