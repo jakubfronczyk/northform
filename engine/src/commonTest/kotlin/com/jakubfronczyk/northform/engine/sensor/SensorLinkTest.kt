@@ -7,6 +7,8 @@ import com.jakubfronczyk.northform.core.gatt.Gatt
 import com.jakubfronczyk.northform.core.ports.BleEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -31,7 +33,7 @@ class SensorLinkTest {
     fun connect_reports_connecting_and_issues_connect() {
         val (s, c) = run(SensorLink.Input.Connect(sensor, t0))
         assertEquals(sensor, s.wanted)
-        assertEquals(listOf(SensorLink.Command.Report(SensorState.Connecting, t0), SensorLink.Command.Connect(sensor)), c)
+        assertEquals(listOf(SensorLink.Command.Remember(sensor, null), SensorLink.Command.Report(SensorState.Connecting, t0), SensorLink.Command.Connect(sensor)), c)
     }
 
     @Test
@@ -201,5 +203,69 @@ class SensorLinkTest {
             SensorLink.Input.Tick(t0 + 300.seconds),
         )
         assertEquals(2, c.count { it == SensorLink.Command.Read(sensor, Gatt.batteryLevel) }) // on ready + at 300 s
+    }
+
+    // ── SU3 pairing rules (adapters/01) ──────────────────────────────────────────────────────
+
+    private val stranger = SensorId("9B2E0B20-7E0A-4C5B-8A2E-0D3B2C4F5A61")
+
+    @Test
+    fun connect_remembers_the_sensor_once_and_the_pairing_survives_disconnect() {
+        val (s, c) = run(
+            SensorLink.Input.Ble(BleEvent.Discovered(sensor, "Polar Sense ABC123", -60), t0),
+            SensorLink.Input.Connect(sensor, t0),
+            SensorLink.Input.Ble(BleEvent.Connected(sensor), t0),
+            SensorLink.Input.Disconnect(t0 + 5.seconds),
+            SensorLink.Input.Connect(sensor, t0 + 6.seconds),
+        )
+        assertEquals(1, c.count { it is SensorLink.Command.Remember }, "remembered once, not on every connect: $c")
+        assertEquals(SensorLink.Command.Remember(sensor, "Polar Sense ABC123"), c.first { it is SensorLink.Command.Remember }, "with the advertised name")
+        assertEquals(sensor, s.paired)
+        assertTrue(c.none { it == SensorLink.Command.Forget })
+    }
+
+    @Test
+    fun a_connect_that_times_out_still_leaves_the_sensor_paired() {
+        val (s, c) = run(
+            SensorLink.Input.Ble(BleEvent.PowerOn, t0),
+            SensorLink.Input.Connect(sensor, t0),
+            SensorLink.Input.Tick(t0 + SensorLink.connectTimeout),
+        )
+        assertTrue(SensorLink.Command.ConnectTimedOut(sensor) in c)
+        assertEquals(sensor, s.paired)
+        assertEquals(sensor, s.wanted, "the link keeps trying")
+    }
+
+    @Test
+    fun forget_disconnects_and_drops_the_pairing() {
+        val (s, c) = run(
+            SensorLink.Input.Connect(sensor, t0),
+            SensorLink.Input.Ble(BleEvent.Connected(sensor), t0),
+            SensorLink.Input.Forget(t0 + 5.seconds),
+        )
+        assertNull(s.paired)
+        assertNull(s.wanted)
+        assertEquals(listOf(SensorLink.Command.CancelConnect(sensor), SensorLink.Command.Report(SensorState.Disconnected(DisconnectReason.User), t0 + 5.seconds), SensorLink.Command.Forget), c.takeLast(3))
+    }
+
+    @Test
+    fun only_polar_adverts_are_discovered_unless_the_sensor_is_the_wanted_one() {
+        val (_, c) = run(
+            SensorLink.Input.Ble(BleEvent.Discovered(stranger, "Garmin HRM", -60), t0),
+            SensorLink.Input.Ble(BleEvent.Discovered(stranger, null, -60), t0),
+            SensorLink.Input.Ble(BleEvent.Discovered(sensor, "Polar Sense ABC123", -62), t0),
+        )
+        assertEquals(listOf(SensorLink.Command.Discovered(sensor, "Polar Sense ABC123", -62)), c)
+        val (_, wanted) = run(
+            SensorLink.Input.Connect(stranger, t0),
+            SensorLink.Input.Ble(BleEvent.Discovered(stranger, null, -60), t0),
+        )
+        assertTrue(SensorLink.Command.Discovered(stranger, null, -60) in wanted, "the id we asked for passes without a name: $wanted")
+    }
+
+    @Test
+    fun firmware_below_2_1_0_is_too_old() {
+        for (old in listOf("2.0.4", "1.9.9", "2.0", "2.0.99")) assertTrue(SensorLink.firmwareTooOld(old), old)
+        for (ok in listOf("2.1.0", "2.1.1", "2.2.1", "2.10.0", "3.0.0", "", "beta", "2.x")) assertFalse(SensorLink.firmwareTooOld(ok), ok)
     }
 }

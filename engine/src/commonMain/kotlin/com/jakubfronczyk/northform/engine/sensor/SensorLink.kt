@@ -33,9 +33,19 @@ object SensorLink {
     val connectTimeout: Duration = 15.seconds
     val backoffSteps: List<Duration> = listOf(2, 4, 8, 16, 30).map { it.seconds }
     val batteryPoll: Duration = 300.seconds
+    /** SU3/E16: older firmware records nothing without the phone; live runs still work. */
+    const val minimumFirmware = "2.1.0"
 
     data class State(
         val wanted: SensorId? = null,
+        /**
+         * The sensor the user chose (SU3, D52: one paired sensor). Set by `Connect`, kept through
+         * `Disconnect`, drops and a connect timeout; cleared only by `Forget`. The app persists it
+         * through [Command.Remember]/[Command.Forget] and reconnects it at launch.
+         */
+        val paired: SensorId? = null,
+        /** Advertised names seen this process, so `Remember` can carry one ("Polar Sense ABC123"). */
+        val knownNames: Map<SensorId, String> = emptyMap(),
         val connected: SensorId? = null,
         val ready: Boolean = false,
         val powered: Boolean = true,
@@ -62,6 +72,8 @@ object SensorLink {
         data class Ble(val event: BleEvent, val at: Instant) : Input
         data class Connect(val id: SensorId, val at: Instant) : Input
         data class Disconnect(val at: Instant) : Input
+        /** SU3 "forget": disconnect and stop remembering the sensor. */
+        data class Forget(val at: Instant) : Input
         /** `search()` collectors came (on) or went (off). Scanning starts only once the central is powered on. */
         data class Search(val on: Boolean, val at: Instant) : Input
         /** Collectors of `heartRate()` came or went. */
@@ -84,13 +96,36 @@ object SensorLink {
         /** The connect attempt timed out (15 s); `connect()` callers throw. */
         data class ConnectTimedOut(val id: SensorId) : Command
         data object Unauthorized : Command
+        /** Persist this id as the paired sensor (idempotent: emitted only when it changes). */
+        data class Remember(val id: SensorId, val name: String?) : Command
+        data object Forget : Command
     }
+
+    /**
+     * E16: `true` when `version` sorts below [minimumFirmware] numerically ("2.0.4" < "2.1.0", "2.10.0" ≥).
+     * A version that does not parse (empty, text) is not called old: no warning on unknown.
+     */
+    fun firmwareTooOld(version: String): Boolean {
+        val parsed = version.trim().split('.').map { it.toIntOrNull() ?: return false }
+        if (parsed.isEmpty()) return false
+        val min = minimumFirmware.split('.').map { it.toInt() }
+        for (i in 0 until maxOf(parsed.size, min.size)) {
+            val a = parsed.getOrElse(i) { 0 }
+            val b = min.getOrElse(i) { 0 }
+            if (a != b) return a < b
+        }
+        return false
+    }
+
+    /** SU3: Polar only. The advertised name carries the model ("Polar Sense ABC123", "Polar H10 …"). */
+    fun isPolar(name: String?): Boolean = name?.trimStart()?.startsWith("Polar", ignoreCase = true) == true
 
     data class Result(val state: State, val commands: List<Command>)
 
     fun reduce(s: State, input: Input): Result = when (input) {
         is Input.Connect -> connect(s, input.id, input.at)
         is Input.Disconnect -> disconnect(s, input.at)
+        is Input.Forget -> forget(s, input.at)
         is Input.Search -> search(s, input.on)
         is Input.Listeners -> reconcileNotify(s.copy(listeners = input.count))
         is Input.Tick -> tick(s, input.at)
@@ -101,8 +136,11 @@ object SensorLink {
 
     private fun connect(s: State, id: SensorId, at: Instant): Result {
         if (s.connected == id) return Result(s, emptyList())
-        val next = s.copy(wanted = id, attempt = 0, connectRequestedAt = at)
+        val next = s.copy(wanted = id, paired = id, attempt = 0, connectRequestedAt = at)
         val cmds = buildList {
+            // Remembered at the moment of choosing, so a first connect that times out still leaves the
+            // sensor paired (the link keeps trying; the next launch reconnects it).
+            if (s.paired != id) add(Command.Remember(id, s.knownNames[id]))
             if (s.powered) add(report(SensorState.Connecting, at))
             // The transport decides scan-vs-direct: `isKnown` is answered by the adapter when it
             // executes Connect (iOS: retrievePeripherals(withIdentifiers:) → connect; else scan).
@@ -119,10 +157,16 @@ object SensorLink {
             report(SensorState.Disconnected(DisconnectReason.User), at),
         )
         val reset = State(
-            powered = s.powered, centralState = s.centralState, centralReady = s.centralReady,
+            paired = s.paired, powered = s.powered, centralState = s.centralState, centralReady = s.centralReady,
             scanWanted = s.scanWanted, scanning = false, listeners = s.listeners,
         )
         return Result(reset.reported(cmds), cmds)
+    }
+
+    /** Forget = disconnect (if linked) + drop the pairing; `Command.Forget` even when nothing was linked. */
+    private fun forget(s: State, at: Instant): Result {
+        val (afterDisconnect, cmds) = disconnect(s, at)
+        return Result(afterDisconnect.copy(paired = null), cmds + Command.Forget)
     }
 
     /** Scan exactly when someone wants it AND the central is powered on; otherwise remember the wish. */
@@ -166,13 +210,17 @@ object SensorLink {
             val p = e.peripherals.firstOrNull()
             if (p == null || s.wanted != null) Result(s, emptyList())
             else {
-                val next = s.copy(wanted = p.id, connected = p.id.takeIf { p.connected }, connectRequestedAt = at)
+                val next = s.named(p.id, p.name).copy(wanted = p.id, connected = p.id.takeIf { p.connected }, connectRequestedAt = at)
                 val cmds = if (p.connected) listOf(report(SensorState.Connecting, at), Command.Discover(p.id, Gatt.servicesUsed))
                            else listOf(report(SensorState.Connecting, at), Command.Connect(p.id))
                 Result(next.reported(cmds), cmds)
             }
         }
-        is BleEvent.Discovered -> Result(s, listOf(Command.Discovered(e.id, e.name, e.rssi)))
+        is BleEvent.Discovered ->
+            // Polar-only scan (SU3): the 0x180D filter is the radio's, the name prefix is ours. The sensor
+            // we want or already paired always passes (its advert may carry no name on some stacks).
+            if (isPolar(e.name) || e.id == s.wanted || e.id == s.paired) Result(s.named(e.id, e.name), listOf(Command.Discovered(e.id, e.name, e.rssi)))
+            else Result(s, emptyList())
         is BleEvent.Connected -> {
             if (e.id != s.wanted) Result(s, emptyList())
             else Result(
@@ -284,6 +332,8 @@ object SensorLink {
     }
 
     private fun State.dropped() = copy(connected = null, ready = false, hrNotifying = false, batteryNotifies = false)
+
+    private fun State.named(id: SensorId, name: String?) = if (name == null) this else copy(knownNames = knownNames + (id to name))
 
     private fun report(state: SensorState, at: Instant) = Command.Report(state, at)
 

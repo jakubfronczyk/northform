@@ -59,8 +59,8 @@ class HeartRateSensorContractTest {
         BleEvent.Characteristic(Gatt.heartRateService, Gatt.heartRateMeasurement, notify = true, read = false),
     ))
 
-    private fun TestScope.sensor(central: ScriptedCentral): GattHeartRateSensor =
-        GattHeartRateSensor(central, virtualWallClock(start)).also { it.start(backgroundScope); runCurrent() }
+    private fun TestScope.sensor(central: ScriptedCentral, onPaired: (SensorId?, String?) -> Unit = { _, _ -> }): GattHeartRateSensor =
+        GattHeartRateSensor(central, virtualWallClock(start), onPaired = onPaired).also { it.start(backgroundScope); runCurrent() }
 
     private fun ScriptedCentral.linkUp(id: SensorId) { radio(BleEvent.Connected(id)); radio(ready(id)) }
 
@@ -209,5 +209,50 @@ class HeartRateSensorContractTest {
         central.radio(BleEvent.PowerOn); runCurrent()
         central.linkUp(polar); runCurrent()
         assertEquals(listOf(SensorState.BluetoothOff, SensorState.Connecting, SensorState.Connected(null)), seen.drop(1).map { it.state })
+    }
+
+    // ── SU3 pairing through the port (adapters/01) ───────────────────────────────────────────
+
+    @Test
+    fun the_chosen_sensor_is_remembered_when_connect_is_called_even_if_it_times_out() = runTest {
+        val central = ScriptedCentral().apply { known += polar }
+        val paired = ArrayList<SensorId?>()
+        val sensor = sensor(central) { id, _ -> paired += id }
+        central.radio(BleEvent.PowerOn)
+        val connecting = async { runCatching { sensor.connect(polar) } }
+        runCurrent()
+        assertEquals(listOf<SensorId?>(polar), paired, "remembered at the moment of choosing")
+        advanceTimeBy(16.seconds); runCurrent()
+        assertTrue(connecting.await().isFailure)
+        assertEquals(polar, sensor.linkState.value.paired, "a timeout does not unpair")
+    }
+
+    @Test
+    fun forget_stops_the_link_and_clears_the_pairing() = runTest {
+        val central = ScriptedCentral().apply { known += polar }
+        val paired = ArrayList<SensorId?>()
+        val sensor = sensor(central) { id, _ -> paired += id }
+        central.radio(BleEvent.PowerOn)
+        launch { sensor.connect(polar) }
+        runCurrent(); central.linkUp(polar); runCurrent()
+        sensor.forget(); runCurrent()
+        assertEquals(listOf(polar, null), paired)
+        assertEquals("cancelConnect 3F2504E0", central.calls.last { !it.startsWith("notify") })
+        assertEquals(SensorState.Disconnected(DisconnectReason.User), sensor.states().first().state)
+    }
+
+    @Test
+    fun search_lists_only_polar_sensors_and_never_connects_one_by_itself() = runTest {
+        val central = ScriptedCentral()
+        val sensor = sensor(central)
+        central.radio(BleEvent.PowerOn)
+        val seen = ArrayList<String?>()
+        val searching = launch { sensor.search().collect { seen += it.name } }
+        runCurrent()
+        central.radio(BleEvent.Discovered(other, "Garmin HRM-Pro", -55))
+        central.radio(BleEvent.Discovered(polar, "Polar Sense ABC123", -60)); runCurrent()
+        assertEquals(listOf<String?>("Polar Sense ABC123"), seen)
+        assertTrue(central.calls.none { it.startsWith("connect") }, "nothing auto-connects: ${central.calls}")
+        searching.cancel()
     }
 }

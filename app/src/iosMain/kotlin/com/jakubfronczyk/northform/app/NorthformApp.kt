@@ -81,7 +81,8 @@ object NorthformApp {
 
         // 3  the sensor mailbox is alive before any radio event can be delivered (delegate callbacks are
         //    dispatched on the BLE queue only after CBCentralManager's init returns)
-        sensor = GattHeartRateSensor(central, wallClock)
+        // SU3: the link decides when a sensor counts as paired (adapters/01); the app only persists it.
+        sensor = GattHeartRateSensor(central, wallClock) { id, name -> PairedSensor.id = id?.value; PairedSensor.name = name ?: PairedSensor.name.takeIf { id != null } }
         sensor.start(scope)
         scope.launch { sensor.states().collect { DeviceLog.polar.notice("state ${it.state}") } }
 
@@ -135,7 +136,7 @@ object NorthformApp {
             onStartRun = model::startRun,
             onCloseRun = model::closeRun,
             map = { route -> RouteMap(route, showsUserLocation = live) },
-            sensorScreen = { close -> SensorScreen(sensor, onConnected = { PairedSensor.id = it.value }, onClose = close) },
+            sensorScreen = { close -> SensorScreen(sensor, onConnected = {}, onClose = close) },
         )
     }
 }

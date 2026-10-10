@@ -7,6 +7,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.channelFlow
@@ -44,6 +46,8 @@ class GattHeartRateSensor(
     private val central: BleCentral,
     private val wallClock: WallClock,
     private val tickEvery: kotlin.time.Duration = 1.seconds,
+    /** SU3 pairing (adapters/01): the sensor to persist as paired (id + advertised name if seen), `null` on forget. Called from the mailbox coroutine. */
+    private val onPaired: (id: SensorId?, name: String?) -> Unit = { _, _ -> },
 ) : HeartRateSensor {
 
     private val inbox = Channel<SensorLink.Input>(Channel.UNLIMITED)
@@ -64,6 +68,8 @@ class GattHeartRateSensor(
     private val unauthorized = MutableStateFlow(false)
     /** The link's state after every reduce; `connect()` watches `connected` here, not the reported `SensorState`. */
     private val link = MutableStateFlow(SensorLink.State())
+    /** Read-only view of the link for what the frozen port does not carry: firmware (E16), the paired id. */
+    val linkState: StateFlow<SensorLink.State> = link.asStateFlow()
 
     private var owner: Job? = null
     /**
@@ -118,6 +124,8 @@ class GattHeartRateSensor(
             }
             is SensorLink.Command.ConnectTimedOut -> timeouts.tryEmit(c.id)
             SensorLink.Command.Unauthorized -> unauthorized.value = true
+            is SensorLink.Command.Remember -> onPaired(c.id, c.name)
+            SensorLink.Command.Forget -> onPaired(null, null)
         }
     }
 
@@ -163,5 +171,10 @@ class GattHeartRateSensor(
 
     override suspend fun disconnect() {
         inbox.send(SensorLink.Input.Disconnect(wallClock.now()))
+    }
+
+    /** SU3 "forget": disconnects and drops the pairing (outside the frozen port, like [linkState]). */
+    suspend fun forget() {
+        inbox.send(SensorLink.Input.Forget(wallClock.now()))
     }
 }
