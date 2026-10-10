@@ -1,6 +1,8 @@
 package com.jakubfronczyk.northform.app
 
 import com.jakubfronczyk.northform.core.RecordingId
+import com.jakubfronczyk.northform.core.RecordingState
+import com.jakubfronczyk.northform.engine.run.CrashChoice
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,17 +20,61 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     /** What the screens show: the run flow while non-null, Today otherwise. */
     val activeRun: StateFlow<ActiveRun?> = _activeRun.asStateFlow()
 
+    private val _unfinished = MutableStateFlow<UnfinishedRun?>(null)
+    /** A recording a crash left behind (R28): the prompt is up while non-null, until the user chooses. */
+    val unfinished: StateFlow<UnfinishedRun?> = _unfinished.asStateFlow()
+
     /** A run is being opened (permission prompts): Start does nothing until it is (`:27`). */
     private var opening = false
     /** Runs whose screen closed after start: kept until their last write is done (D112). */
     private val finishing = HashMap<RecordingId, ActiveRun>()
 
     /** `AppModel.swift:49` — one run at a time. */
-    fun startRun() {
+    fun startRun() = openRun { ActiveRun.open(deps, scope) }
+
+    /** The one guard for both ways a run opens: `opening` is set before the launch, so a second tap is caught (`AppModel.swift:50-53`). */
+    private fun openRun(open: suspend () -> ActiveRun) {
         if (_activeRun.value != null || opening) return
         opening = true
         scope.launch {
-            try { _activeRun.value = ActiveRun.open(deps, scope) } finally { opening = false }
+            try { _activeRun.value = open() } finally { opening = false }
+        }
+    }
+
+    /**
+     * D9 step 4, at boot: is there a recording a crash left unfinished? Read and rebuilt off the boot
+     * path; nothing resumes until [resolveUnfinished] (R28: the user chooses).
+     */
+    fun checkUnfinished() {
+        scope.launch {
+            _unfinished.value = runCatching { UnfinishedRun.find(deps) }
+                .onFailure { deps.log("unfinished check failed: $it") }
+                .getOrNull()
+        }
+    }
+
+    /** The R28 prompt's answer. The prompt stays up until the store confirms, except for Continue, which starts the run at once. */
+    fun resolveUnfinished(choice: CrashChoice) {
+        val run = _unfinished.value ?: return
+        val id = run.id.value.take(8)
+        when (choice) {
+            CrashChoice.Continue -> openRun {
+                ActiveRun.resume(deps, scope, run).also { _unfinished.value = null; deps.log("run $id crash: continued") }
+            }
+            // Save: the recording ends where the store last heard from it and goes to `computing`, where a normally closed
+            // run sits too (`closeRun`); engine/04's summary path picks it up from there.
+            CrashChoice.Save -> scope.launch {
+                runCatching {
+                    if (run.facts.state == RecordingState.Active) deps.store.stop(run.id, run.facts.savedUntil)
+                    if (run.facts.state != RecordingState.Computing) deps.store.beginComputing(run.id)
+                }.onSuccess { _unfinished.value = null; deps.log("run $id crash: saved → computing") }
+                    .onFailure { deps.log("run $id crash: save failed: $it") }
+            }
+            CrashChoice.Delete -> scope.launch {
+                runCatching { deps.store.delete(run.id) }
+                    .onSuccess { _unfinished.value = null; deps.log("run $id crash: deleted") }
+                    .onFailure { deps.log("run $id crash: delete failed: $it") }
+            }
         }
     }
 

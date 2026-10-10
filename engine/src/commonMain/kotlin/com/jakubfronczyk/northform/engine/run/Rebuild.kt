@@ -3,10 +3,12 @@ package com.jakubfronczyk.northform.engine.run
 import com.jakubfronczyk.northform.core.DisconnectReason
 import com.jakubfronczyk.northform.core.EventKind
 import com.jakubfronczyk.northform.core.EventSource
+import com.jakubfronczyk.northform.core.RecordingEvent
 import com.jakubfronczyk.northform.core.SensorState
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.ports.RecordingData
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 /**
  * `Engine/Rebuild.swift` — rebuilds the run from what the store holds, for crash resume (D94).
@@ -46,4 +48,34 @@ fun RunReducer.rebuild(config: RunConfig, data: RecordingData): RunState {
         state = reduce(state, input).state
     }
     return state.copy(buffer = PersistBuffer(lastPersistAt = data.lastPersistedAt ?: start))
+}
+
+/**
+ * R28 "Continue": the run as it stands when the user reopens the app at [at], from a [rebuild] state.
+ * The gap since the last heartbeat is 1 Hz ticks through the same pure reducer, so what the reducer
+ * derives on a live run it derives here: HR lost 5 s after the last sample, GPS lost 10 s after the
+ * last fix (unless it was stationary, D102), total time running, a paused run still paused. Nothing
+ * is written: the `Persist` effects the ticks would have asked for are dropped and the in-flight
+ * mark cleared; the HR-lost alert is swallowed too (the user caused this gap). `lastPersistAt` stays
+ * the old heartbeat, so the session's first tick flushes at once — the derived events plus the
+ * `CrashRecovered` event appended here (the reducer has no input for "the user chose Continue").
+ */
+fun RunReducer.resumed(rebuilt: RunState, at: Instant): RunState {
+    val heartbeat = rebuilt.buffer.lastPersistAt ?: rebuilt.progress.startedAt ?: return rebuilt
+    var state = rebuilt
+    var tick = heartbeat + 1.seconds
+    while (tick < at) {
+        state = reduce(state, RunInput.Tick(tick)).state
+        tick += 1.seconds
+    }
+    if (at > heartbeat) state = reduce(state, RunInput.Tick(at)).state
+    val buffer = state.buffer
+    return state.copy(
+        buffer = buffer.copy(
+            events = buffer.events + RecordingEvent(at, EventKind.CrashRecovered, EventSource.Auto),
+            inFlight = null,
+            flushRequestedAt = null,
+            lastPersistAt = heartbeat,
+        ),
+    )
 }

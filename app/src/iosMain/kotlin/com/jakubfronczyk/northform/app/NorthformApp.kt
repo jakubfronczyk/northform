@@ -20,6 +20,7 @@ import com.jakubfronczyk.northform.persistence.SqlRecordingStore
 import com.jakubfronczyk.northform.persistence.nativeDriver
 import com.jakubfronczyk.northform.replay.RecordingTap
 import com.jakubfronczyk.northform.ui.AppRoot
+import com.jakubfronczyk.northform.ui.crash.CrashPromptScreen
 import com.jakubfronczyk.northform.ui.sensor.SensorScreen
 import com.jakubfronczyk.northform.ui.sensor.SensorScreenModel
 import kotlinx.coroutines.CoroutineScope
@@ -112,6 +113,7 @@ object NorthformApp {
             log = DeviceLog::runTrace,
         )
         model = AppModel(deps, scope)
+        model.checkUnfinished() // 4  store.unfinished()? → remembered for the R28 prompt; nothing resumes on its own (D9)
         // Background: save what the run has buffered now (D94). Observed from Kotlin — an Obj-C API, no Swift needed.
         NSNotificationCenter.defaultCenter.addObserverForName(UIApplicationDidEnterBackgroundNotification, null, NSOperationQueue.mainQueue) {
             model.appWentToBackground()
@@ -151,6 +153,7 @@ object NorthformApp {
     /** The Compose root. Swift wraps it in a UIViewControllerRepresentable and renders nothing of its own. */
     fun rootViewController(): UIViewController = ComposeUIViewController {
         val activeRun by model.activeRun.collectAsState()
+        val unfinished by model.unfinished.collectAsState()
         AppRoot(
             activeRun = activeRun?.session,
             onStartRun = model::startRun,
@@ -158,6 +161,7 @@ object NorthformApp {
             map = { route -> RouteMap(route, showsUserLocation = live) },
             // One model per opening (SU10): its collectors and 30 s search live exactly as long as the screen.
             sensorScreen = { close -> SensorScreen(remember { SensorScreenModel(sensor, sensorDetails) }, onClose = close) },
+            crashPrompt = unfinished?.let { run -> { CrashPromptScreen(run.facts, onChoice = model::resolveUnfinished) } },
         )
     }
 }

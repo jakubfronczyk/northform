@@ -34,13 +34,18 @@ fun AppRoot(
     onCloseRun: () -> Unit,
     map: @Composable (route: Route) -> Unit,
     sensorScreen: @Composable (close: () -> Unit) -> Unit,
+    /** The R28 crash prompt while a recording waits for the user's choice: a sheet over Today that cannot be dismissed (Swift D77 restated). */
+    crashPrompt: (@Composable () -> Unit)? = null,
 ) {
     var showSensor by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         when {
             activeRun != null -> RunFlow(activeRun, onClose = onCloseRun, map = map)
             showSensor -> sensorScreen { showSensor = false }
-            else -> TodayScreen(startRun = onStartRun, openSensor = { showSensor = true })
+            else -> {
+                TodayScreen(startRun = onStartRun, openSensor = { showSensor = true })
+                crashPrompt?.invoke()
+            }
         }
     }
 }

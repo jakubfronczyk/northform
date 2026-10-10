@@ -1,0 +1,150 @@
+package com.jakubfronczyk.northform.ui.crash
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.jakubfronczyk.northform.core.RecordingState
+import com.jakubfronczyk.northform.engine.run.CrashChoice
+import com.jakubfronczyk.northform.engine.run.CrashFacts
+import com.jakubfronczyk.northform.engine.run.CrashPrompt
+import com.jakubfronczyk.northform.ui.RunFormat
+import com.jakubfronczyk.northform.ui.Theme
+import com.jakubfronczyk.northform.ui.Type
+import kotlin.time.Instant
+
+/**
+ * The R28 crash prompt (`design/canvas/project/CrashPrompt.dc.html`, `CrashPromptLate` = the same board
+ * past 10 minutes): a scrim over Today and a bottom sheet with what is saved and the three answers.
+ * Which answer leads is [CrashPrompt.of]'s call, not the screen's. Delete asks twice (R27), in place.
+ */
+@Composable
+fun CrashPromptScreen(facts: CrashFacts, onChoice: (CrashChoice) -> Unit) {
+    val prompt = remember(facts) { CrashPrompt.of(facts) }
+    val now = facts.savedUntil + facts.interruptedFor
+    val minutesAgo = facts.interruptedFor.inWholeMinutes
+    Box(Modifier.fillMaxSize().background(Scrim)) {
+        Column(
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .background(Theme.card, RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
+                .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 50.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Interrupted $minutesAgo min ago · run started ${localTime(facts.startedAt, facts.tzOffset)}", style = Type.statusLabel, color = Theme.warn)
+                Text("Your run was interrupted", style = SheetHeadline, color = Theme.text)
+                Text(
+                    if (facts.state == RecordingState.Active) "The app closed. This part is saved." else "The app closed after you stopped. This part is saved.",
+                    style = Type.secondaryText, color = Theme.text2,
+                )
+            }
+
+            Row {
+                Fact("Distance", RunFormat.distance(facts.distance), unit = "km")
+                FactDivider()
+                Fact("Time", RunFormat.time(facts.totalTime))
+                FactDivider()
+                Fact("Saved until", localTime(facts.savedUntil, facts.tzOffset))
+            }
+
+            if (facts.state == RecordingState.Active) {
+                HorizontalDivider(color = Theme.line)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Gap until now counts as sensor + GPS lost", style = GapTitle, color = Theme.text)
+                    Text(
+                        "${localTime(facts.savedUntil, facts.tzOffset)} to ${localTime(now, facts.tzOffset)} · total time keeps running",
+                        style = Type.tertiaryText, color = Theme.text2,
+                    )
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                var confirmDelete by remember { mutableStateOf(false) }
+                for (choice in prompt.choices) when (choice) {
+                    CrashChoice.Continue -> ChoiceButton("Continue run", main = prompt.main == choice, mainColors = Continue) { onChoice(choice) }
+                    CrashChoice.Save -> ChoiceButton("Save and finish", main = prompt.main == choice, mainColors = Save) { onChoice(choice) }
+                    CrashChoice.Delete -> Text(
+                        if (confirmDelete) "Tap again to delete this run" else "Delete run",
+                        style = DeleteLabel, color = Danger,
+                        modifier = Modifier.fillMaxWidth().height(44.dp)
+                            .clickable { if (confirmDelete) onChoice(choice) else confirmDelete = true }
+                            .padding(top = 12.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** A main action is filled (white for Continue, the primary orange for Save); the other is outlined. */
+@Composable
+private fun ChoiceButton(title: String, main: Boolean, mainColors: Pair<Color, Color>, action: () -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    val base = Modifier.fillMaxWidth().height(68.dp)
+    val modifier = if (main) base.background(mainColors.first, shape) else base.border(1.5.dp, Theme.ring, shape)
+    Box(modifier.clickable(onClick = action), contentAlignment = Alignment.Center) {
+        Text(title, style = Type.sheetTitle, color = if (main) mainColors.second else Theme.text)
+    }
+}
+
+@Composable
+private fun RowScope.Fact(label: String, value: String, unit: String? = null) {
+    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, style = Type.tertiaryText, color = Theme.text2)
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(value, style = FactNumber, color = Theme.text)
+            if (unit != null) {
+                Spacer(Modifier.width(3.dp))
+                Text(unit, style = Type.tertiaryText, color = Theme.text2, modifier = Modifier.padding(bottom = 2.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun FactDivider() {
+    Box(Modifier.padding(end = 12.dp).width(1.dp).height(40.dp).background(Theme.line))
+}
+
+/** HH:MM in the recording's own time zone (`tzOffset` seconds east of UTC): the time the runner saw. */
+internal fun localTime(instant: Instant, tzOffset: Int): String {
+    val secondsOfDay = ((instant.epochSeconds + tzOffset) % 86_400 + 86_400) % 86_400
+    val h = secondsOfDay / 3600
+    val m = secondsOfDay / 60 % 60
+    return "${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}"
+}
+
+private val Scrim = Color(0xB8080809) // rgba(8,8,9,0.72)
+private val Danger = Color(0xFFFF6961)
+private val Continue = Color(0xFFF4F4F2) to Theme.bg
+private val Save = Theme.primary to Color.White
+private val SheetHeadline = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Black)
+private val GapTitle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+private val FactNumber = Type.number(24)
+private val DeleteLabel = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold)

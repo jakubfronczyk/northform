@@ -7,7 +7,10 @@ import com.jakubfronczyk.northform.engine.run.RecordingSession
 import com.jakubfronczyk.northform.engine.run.RunConfig
 import com.jakubfronczyk.northform.engine.run.RunInput
 import com.jakubfronczyk.northform.engine.run.RunPhase
+import com.jakubfronczyk.northform.engine.run.RunReducer
 import com.jakubfronczyk.northform.engine.run.RunSessionHandle
+import com.jakubfronczyk.northform.engine.run.RunState
+import com.jakubfronczyk.northform.engine.run.resumed
 import com.jakubfronczyk.northform.replay.RecordingTap
 import com.jakubfronczyk.northform.replay.ReplayMeta
 import kotlinx.coroutines.CoroutineScope
@@ -51,7 +54,7 @@ class ActiveRun private constructor(
     }
 
     companion object {
-        /** Opens the source, starts the session and the trace, then lets the source go (`onRunning`). */
+        /** A new run: a fresh gate, a new id, the debug tap. */
         suspend fun open(deps: AppDeps, scope: CoroutineScope): ActiveRun {
             val config = RunConfig(RecordingId(deps.newRecordingId()), RecordingType.Run, deps.profile, deps.tzOffset())
             val start = deps.wallClock.now()
@@ -59,10 +62,24 @@ class ActiveRun private constructor(
                 ReplayMeta(config.type, start, config.profile.hrMax, config.profile.hrRest, config.profile.sex),
                 fileName(start, config.type),
             )
+            return start(deps, scope, RunState(config), tap)
+        }
+
+        /**
+         * R28 "Continue": the same run, started where the store left it plus the gap until now
+         * (`RunReducer.resumed`), through the same session. No tap: a fixture of a run's tail has no
+         * start to replay from, and the original file already holds the part before the crash.
+         */
+        suspend fun resume(deps: AppDeps, scope: CoroutineScope, unfinished: UnfinishedRun): ActiveRun =
+            start(deps, scope, RunReducer.resumed(unfinished.rebuilt, at = deps.wallClock.now()), tap = null)
+
+        /** Opens the source, starts the session from [initial] and the trace, then lets the source go (`onRunning`). */
+        private suspend fun start(deps: AppDeps, scope: CoroutineScope, initial: RunState, tap: RecordingTap?): ActiveRun {
+            val config = initial.config
             val observer: ((RunInput) -> Unit)? = tap?.let { it::observe } // bound reference: the tap owns the RunInput → fixture mapping (replay/01)
             val inputs = deps.source.open(deps.wallClock, scope)
-            val session = RecordingSession(config, inputs.sensor, inputs.location, deps.store, deps.alerts, deps.wallClock, observer)
-            deps.log("session start ${config.type.wire}")
+            val session = RecordingSession(config, inputs.sensor, inputs.location, deps.store, deps.alerts, deps.wallClock, observer, initial = initial)
+            deps.log("session start ${config.type.wire}" + if (initial.progress.startedAt != null) " (resumed, R28)" else "")
             val runJob = scope.launch { session.run() }
             val logJob = scope.launch { logProgress(config.recordingId, session, deps.log) }
             inputs.onRunning() // after `run()` is queued: the session subscribes before anything is emitted
