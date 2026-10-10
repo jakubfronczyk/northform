@@ -9,6 +9,9 @@ import com.jakubfronczyk.northform.adapters.ble.CoreBluetoothCentral
 import com.jakubfronczyk.northform.adapters.clock.IosWallClock
 import com.jakubfronczyk.northform.adapters.location.KeepAlive
 import com.jakubfronczyk.northform.adapters.location.LiveLocation
+import com.jakubfronczyk.northform.adapters.location.LocationAuthorization
+import com.jakubfronczyk.northform.adapters.location.LocationAuthorizationMonitor
+import com.jakubfronczyk.northform.adapters.location.openAppSettings
 import com.jakubfronczyk.northform.adapters.location.LocationUpdates
 import com.jakubfronczyk.northform.adapters.location.requestWhenInUseAuthorization
 import com.jakubfronczyk.northform.core.SensorId
@@ -22,6 +25,7 @@ import com.jakubfronczyk.northform.ui.sensor.SensorScreenModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.Foundation.NSNotificationCenter
@@ -57,6 +61,7 @@ object NorthformApp {
         private set
     lateinit var location: LiveLocation
         private set
+    private lateinit var locationAuthorization: LocationAuthorizationMonitor
     lateinit var alerts: NotificationAlertPlayer
         private set
     lateinit var model: AppModel
@@ -77,7 +82,8 @@ object NorthformApp {
         // 1  graph — no I/O awaited. Opening the database is the one file touch (schema v1 is created on the first launch; D7/D12).
         val wallClock = IosWallClock
         alerts = NotificationAlertPlayer(scope, DeviceLog.run::notice)
-        location = LiveLocation(locationUpdates, wallClock, DeviceLog.location::notice)
+        locationAuthorization = LocationAuthorizationMonitor() // main thread: boot() runs in didFinishLaunching
+        location = LiveLocation(locationUpdates, wallClock, DeviceLog.location::notice, locationAuthorization.state)
 
         // 2  the central manager is created HERE, so willRestoreState lands in a live Kotlin delegate
         central = CoreBluetoothCentral(BLE_RESTORE_ID, DeviceLog.polar::notice)
@@ -126,6 +132,15 @@ object NorthformApp {
         DeviceLog.app.notice("location authorization answered: ${requestWhenInUseAuthorization()}")
         suspendCancellableCoroutine { cont -> alerts.requestPermission { cont.resume(Unit) } }
     }
+
+    /**
+     * adapters/03, for the gate (run-flow-ui/01): `LocationHint.of(it)` says why GPS is ✗ while location is denied or restricted, `null`
+     * when nothing stands in the way. Changes live as the person flips the switch in Settings.
+     */
+    fun locationAuthorizationState(): StateFlow<LocationAuthorization> = locationAuthorization.state
+
+    /** The Settings deep link the gate offers next to a `Denied` hint (`LocationHint.canOpenSettings`). */
+    fun openLocationSettings() = openAppSettings()
 
     /** `KeepAlive` is an `:adapters` class; `RunKeepAlive` is the app's seam for it (a fake in tests). */
     private fun KeepAlive.asRunKeepAlive() = object : RunKeepAlive {

@@ -14,6 +14,7 @@ import com.jakubfronczyk.northform.replay.ReplayScript
 import com.jakubfronczyk.northform.testing.virtualWallClock
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.test.TestScope
@@ -60,7 +61,7 @@ class LiveLocationMappingTest {
     private fun TestScope.fixFrom(location: CLLocation, stationary: Boolean): LocationFix {
         val updates = FakeUpdates()
         val received = ArrayList<LocationFix>()
-        val live = LiveLocation(updates, virtualWallClock(start), {}) { LocationAuthorization.WhenInUse }
+        val live = LiveLocation(updates, virtualWallClock(start), {}, MutableStateFlow(LocationAuthorization.WhenInUse))
         live.fixes().onEach { received += it }.launchIn(backgroundScope)
         runCurrent()
         updates.sink!!.onUpdate(location, stationary)

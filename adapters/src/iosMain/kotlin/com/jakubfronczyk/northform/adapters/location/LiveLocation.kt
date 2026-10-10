@@ -9,7 +9,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import platform.CoreLocation.CLLocation
 import platform.Foundation.timeIntervalSince1970
@@ -25,13 +28,18 @@ import kotlin.time.Instant
  * restart after 2 · 4 · 8 · 16 · 30 s (capped), reset by the first fix; permission denied ⇒ no restart,
  * the run shows GPS lost. Every restart is logged with its attempt number. `delay` runs on the
  * collector's dispatcher, so a test on a virtual clock drives the backoff without waiting.
+ *
+ * adapters/03: `authorization` is watched for the whole stream. The moment it turns to `WhenInUse`
+ * (granted in Settings mid-run, the app comes back) the forwarder is restarted at once, backoff reset,
+ * so GPS returns without an app restart. A change to `Denied`/`Restricted` does nothing by itself:
+ * the forwarder's stream ends (or goes quiet) and `onEnded` refuses the restart.
  */
 @OptIn(ExperimentalForeignApi::class)
 class LiveLocation(
     private val updates: LocationUpdates,
     private val wallClock: WallClock,
     private val log: (String) -> Unit = {},
-    private val authorization: () -> LocationAuthorization = { LocationAuthorization.current() },
+    private val authorization: StateFlow<LocationAuthorization> = MutableStateFlow(LocationAuthorization.current()),
 ) : LocationProvider {
 
     /** A cold stream per call; `awaitClose` is mandatory in `callbackFlow` and is where the forwarder stops. */
@@ -50,8 +58,8 @@ class LiveLocation(
 
             override fun onEnded(message: String?) {
                 log("live updates ended: ${message ?: "finished"}")
-                if (authorization() == LocationAuthorization.Denied) {
-                    log("location denied: no restart")
+                if (authorization.value.blocksLocation) {
+                    log("location ${authorization.value.name.lowercase()}: no restart")
                     return
                 }
                 val wait = backoff[minOf(attempt, backoff.lastIndex)]
@@ -64,6 +72,16 @@ class LiveLocation(
             }
         }
         updates.start(sink)
+        // `drop(1)`: a StateFlow replays its current value; only a *change* to granted restarts.
+        launch {
+            authorization.drop(1).collect { status ->
+                if (status != LocationAuthorization.WhenInUse) return@collect
+                restart?.cancel()
+                attempt = 0
+                log("location granted: restart now")
+                updates.start(sink) // the forwarder stops any previous stream itself (`LocationForwarder.start`)
+            }
+        }
         awaitClose {
             restart?.cancel()
             updates.stop()
