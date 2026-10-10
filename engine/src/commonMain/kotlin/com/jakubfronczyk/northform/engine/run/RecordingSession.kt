@@ -50,15 +50,13 @@ class RecordingSession(
     override val wallClock: WallClock,
     /** Sees every input in the order the reducer gets it (debug builds record runs with it). */
     private val inputObserver: ((RunInput) -> Unit)? = null,
+    /**
+     * Where the run starts: a fresh gate by default, or a state rebuilt from the store (crash resume,
+     * R28). The reducer never knows the difference; `config` must be `initial.config`.
+     */
+    private val initial: RunState = RunState(config),
 ) : RunSessionHandle {
-
-    /** `RecordingSession.swift:86` — what closing the run did (D116). */
-    enum class EndResult {
-        /** Nothing was recorded (gate or countdown): the run is dropped and `run()` returns. */
-        Discarded,
-        /** The run started: it keeps going to its last write (cool-down, computing, D112). */
-        Finishing,
-    }
+    init { require(initial.config == config) { "initial state belongs to another run" } }
 
     /** What arrives in the mailbox: reducer inputs, and the one question answered inside it. */
     private sealed interface Mail {
@@ -69,7 +67,7 @@ class RecordingSession(
     private val inbox = Channel<Mail>(Channel.UNLIMITED)
     private val writes = Channel<RunEffect.Store>(Channel.UNLIMITED)
     private val alertQueue = Channel<Alert>(Channel.UNLIMITED)
-    private val _snapshots = MutableStateFlow(RunState(config).snapshot)
+    private val _snapshots = MutableStateFlow(initial.snapshot)
     private val _routes = MutableStateFlow(Route())
     /** `run()` is single-shot (D112): the first caller takes this and never gives it back. */
     private val runOnce = Mutex()
@@ -88,7 +86,7 @@ class RecordingSession(
     override suspend fun send(action: UserAction, at: Instant) = receive(RunInput.User(action, at))
 
     /** The app went to the background at `t` (`RecordingSession.swift:111`). */
-    suspend fun backgrounded(at: Instant) = receive(RunInput.Backgrounded(at))
+    override suspend fun backgrounded(at: Instant) = receive(RunInput.Backgrounded(at))
 
     /**
      * `RecordingSession.swift:96` — the run screen closed. Decided inside the mailbox, so it can't
@@ -96,7 +94,7 @@ class RecordingSession(
      * same answer — also after `run()` has returned, when the mailbox is gone and the answer is
      * read from what it left behind (a Swift actor method always answered).
      */
-    suspend fun end(): EndResult {
+    override suspend fun end(): EndResult {
         ended.value?.let { return it }
         val reply = CompletableDeferred<EndResult>()
         if (inbox.trySend(Mail.End(reply)).isClosed) return ended.value!! // sealed by the mailbox before it closed the inbox
@@ -135,7 +133,7 @@ class RecordingSession(
     // ── Reduce (the one coroutine that owns RunState) ──────────────────────────────────────
 
     private suspend fun mailbox() {
-        var state = RunState(config)
+        var state = initial
         try {
             for (mail in inbox) {
                 when (mail) {

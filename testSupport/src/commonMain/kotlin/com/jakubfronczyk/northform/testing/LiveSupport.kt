@@ -4,7 +4,7 @@ import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.ports.Alert
 import com.jakubfronczyk.northform.core.ports.AlertPlayer
 import com.jakubfronczyk.northform.core.ports.WallClock
-import com.jakubfronczyk.northform.engine.run.RecordingSession
+import com.jakubfronczyk.northform.engine.run.RunSessionHandle
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlin.time.Duration.Companion.milliseconds
@@ -27,4 +27,4 @@ class RecordedAlerts : AlertPlayer {
 }
 
 /** A tap stamped with the run's own clock, as the screens do (D100). */
-suspend fun RecordingSession.tap(action: UserAction) = send(action, wallClock.now())
+suspend fun RunSessionHandle.tap(action: UserAction) = send(action, wallClock.now())

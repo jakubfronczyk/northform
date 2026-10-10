@@ -2,6 +2,7 @@ package com.jakubfronczyk.northform.ui.run
 
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.ports.WallClock
+import com.jakubfronczyk.northform.engine.run.EndResult
 import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.RoutePoint
 import com.jakubfronczyk.northform.engine.run.RunPhase
@@ -22,6 +23,8 @@ class FakeRunSession(snapshot: RunSnapshot, route: Route = Route()) : RunSession
     override val snapshots: StateFlow<RunSnapshot> = MutableStateFlow(snapshot)
     override val routes: StateFlow<Route> = MutableStateFlow(route)
     override suspend fun send(action: UserAction, at: Instant) {}
+    override suspend fun end(): EndResult = EndResult.Discarded
+    override suspend fun backgrounded(at: Instant) {}
 
     companion object {
         /** `LiveRunView.swift:207-218` — the preview values. */

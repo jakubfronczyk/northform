@@ -8,7 +8,7 @@ import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.ports.Alert
 import com.jakubfronczyk.northform.core.ports.RecordingData
 import com.jakubfronczyk.northform.engine.run.RecordingSession
-import com.jakubfronczyk.northform.engine.run.RecordingSession.EndResult
+import com.jakubfronczyk.northform.engine.run.EndResult
 import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.engine.run.RunReducer
 import com.jakubfronczyk.northform.engine.run.RunSessionHandle

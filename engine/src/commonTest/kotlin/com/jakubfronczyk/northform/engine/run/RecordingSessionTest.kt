@@ -31,6 +31,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -69,6 +70,27 @@ class RecordingSessionTest {
 
     private fun TestScope.session(sensor: FakeSensor, store: Store, alerts: RecordedAlerts = RecordedAlerts()) =
         RecordingSession(RunHarness.config, sensor, NoLocation, store, alerts, virtualWallClock(start))
+
+    /** Crash resume (R28): a session started from a rebuilt state is already active and keeps the old total time. */
+    @Test
+    fun a_session_started_from_a_rebuilt_state_continues_the_run() = runTest {
+        val sensor = FakeSensor()
+        val store = Store()
+        val startedAt = start - 10.minutes
+        val resumed = RunState(
+            RunHarness.config,
+            progress = RunProgress(phase = RunPhase.Active, startedAt = startedAt),
+            buffer = PersistBuffer(lastPersistAt = start),
+        )
+        val session = RecordingSession(RunHarness.config, sensor, NoLocation, store, RecordedAlerts(), virtualWallClock(start), initial = resumed)
+        assertEquals(RunPhase.Active, session.snapshots.value.phase, "no gate, no countdown")
+        val job = launch { session.run() }
+        advanceTimeBy(2.seconds); runCurrent()
+        assertEquals(RunPhase.Active, session.snapshots.value.phase)
+        assertTrue(session.snapshots.value.totalTime >= 10.minutes, "total time carries over: ${session.snapshots.value.totalTime}")
+        assertEquals(EndResult.Finishing, session.end(), "a resumed run was started, so closing finishes it")
+        job.cancel()
+    }
 
     @Test
     fun countdown_then_samples_flushed_every_5s_and_confirmed_through_the_inbox() = runTest {
