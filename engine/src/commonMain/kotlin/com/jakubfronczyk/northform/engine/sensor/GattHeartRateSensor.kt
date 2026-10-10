@@ -7,12 +7,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import com.jakubfronczyk.northform.core.DisconnectReason
@@ -49,14 +52,18 @@ class GattHeartRateSensor(
     /** Unbounded so a slow collector can never drop a sample (samples are persisted downstream). */
     private val samples = MutableSharedFlow<HrSample>(extraBufferCapacity = Int.MAX_VALUE)
     private val discoveries = MutableSharedFlow<DiscoveredSensor>(extraBufferCapacity = 64)
+    /** The link's first-attempt timeout (15 s) for the id it was trying; `connect()` turns it into [SensorError.ConnectTimedOut]. */
     private val timeouts = MutableSharedFlow<SensorId>(extraBufferCapacity = 8)
     private val unauthorized = MutableStateFlow(false)
-    private val _diagnostics = MutableStateFlow(LinkDiagnostics())
-
-    /** Live view of the link for the spike screen / logs; derived from the state after every reduce. */
-    val diagnostics: StateFlow<LinkDiagnostics> = _diagnostics.asStateFlow()
+    /** The link's state after every reduce; `connect()` watches `connected` here, not the reported `SensorState`. */
+    private val link = MutableStateFlow(SensorLink.State())
 
     private var owner: Job? = null
+    /**
+     * A `Connect` for an id the platform does not know yet: we scan for it and connect when it is
+     * discovered. Owned by the mailbox coroutine like the link state; never touched elsewhere.
+     */
+    private var scanningFor: SensorId? = null
 
     /** Called once from the composition root inside `boot()` (D9 step 3), before any radio event can arrive. */
     fun start(scope: CoroutineScope) {
@@ -66,26 +73,23 @@ class GattHeartRateSensor(
             launch { samples.subscriptionCount.collect { inbox.send(SensorLink.Input.Listeners(it, wallClock.now())) } }
             launch { while (true) { delay(tickEvery); inbox.send(SensorLink.Input.Tick(wallClock.now())) } }
             var state = SensorLink.State()
-            var radioEvents = 0
-            var lastEvent: String? = null
             for (input in inbox) {
                 val (next, commands) = SensorLink.reduce(state, input)
                 state = next
-                commands.forEach(::execute)
-                if (input is SensorLink.Input.Ble) { radioEvents++; lastEvent = input.event.toString().take(80) }
-                _diagnostics.value = state.toDiagnostics(radioEvents, lastEvent)
+                commands.forEach { execute(it, state) }
+                link.value = state
             }
         }
     }
 
-    private fun execute(c: SensorLink.Command) {
+    private fun execute(c: SensorLink.Command, s: SensorLink.State) {
         when (c) {
             is SensorLink.Command.Scan -> central.scan(c.services)
-            SensorLink.Command.StopScan -> central.stopScan()
+            SensorLink.Command.StopScan -> if (scanningFor == null) central.stopScan()
             is SensorLink.Command.Connect ->
-                if (central.isKnown(c.id)) central.connect(c.id, autoReconnect = true)
-                else central.scan(Gatt.servicesUsed.take(1)) // scan [0x180D]; `Discovered` for the wanted id → Connect
-            is SensorLink.Command.CancelConnect -> central.cancelConnect(c.id)
+                if (central.isKnown(c.id)) { scanningFor = null; central.connect(c.id, autoReconnect = true) }
+                else { scanningFor = c.id; central.scan(Gatt.servicesUsed.take(1)) } // scan [0x180D] until it shows up
+            is SensorLink.Command.CancelConnect -> { scanningFor = null; central.cancelConnect(c.id) }
             is SensorLink.Command.Discover -> central.discover(c.id, c.services)
             is SensorLink.Command.SetNotify -> central.setNotify(c.id, c.characteristic, c.on)
             is SensorLink.Command.Read -> central.read(c.id, c.characteristic)
@@ -96,8 +100,11 @@ class GattHeartRateSensor(
             is SensorLink.Command.Emit -> check(samples.tryEmit(c.sample)) { "unbounded sample buffer refused an emit" }
             is SensorLink.Command.Discovered -> {
                 discoveries.tryEmit(DiscoveredSensor(c.id, c.name, c.rssi))
-                // TODO(spike): when scanning on behalf of a Connect for an unknown id, match here and
-                // send Connect(id). The spike's Compose screen connects from the discovered list instead.
+                if (c.id == scanningFor) { // the sensor we were scanning for: stop (unless the UI is searching) and connect
+                    scanningFor = null
+                    if (!s.scanWanted) central.stopScan()
+                    central.connect(c.id, autoReconnect = true)
+                }
             }
             is SensorLink.Command.ConnectTimedOut -> timeouts.tryEmit(c.id)
             SensorLink.Command.Unauthorized -> unauthorized.value = true
@@ -128,12 +135,20 @@ class GattHeartRateSensor(
         }
     }
 
+    /**
+     * Returns once the link is connected to **this** id (a link already on another sensor does not
+     * count), throws [SensorError.ConnectTimedOut] when the link's first 15 s attempt times out. The
+     * link keeps trying after the throw (the port's contract). The intent is sent from `onStart`, so the
+     * watch exists before the mailbox can answer (the send never suspends: the inbox is unbounded).
+     */
     override suspend fun connect(id: SensorId) {
-        inbox.send(SensorLink.Input.Connect(id, wallClock.now()))
-        val connected = withTimeoutOrNull(SensorLink.connectTimeout + 1.seconds) {
-            states.first { it.state is SensorState.Connected }
+        val outcome = withTimeoutOrNull(SensorLink.connectTimeout + 1.seconds) {
+            merge<Boolean>(
+                link.filter { it.connected == id }.map { true },
+                timeouts.filter { it == id }.map { false },
+            ).onStart { inbox.send(SensorLink.Input.Connect(id, wallClock.now())) }.first()
         }
-        if (connected == null) throw SensorError.ConnectTimedOut
+        if (outcome != true) throw SensorError.ConnectTimedOut
     }
 
     override suspend fun disconnect() {
