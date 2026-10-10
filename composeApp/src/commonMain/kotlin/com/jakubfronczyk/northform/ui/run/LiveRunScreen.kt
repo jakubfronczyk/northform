@@ -31,6 +31,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jakubfronczyk.northform.core.UserAction
+import com.jakubfronczyk.northform.core.metrics.Zone
 import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
@@ -164,12 +165,13 @@ fun Chip(text: String, color: Color) {
 
 /** `LiveRunView.swift:174`. */
 @Composable
-fun ZonePill(zone: Int) {
-    val info = Theme.zones[zone.coerceIn(0, 5)]
+fun ZonePill(zone: Zone) {
+    // D23: the zone value carries its number (colour) and label; the canvas names stay in Theme until the screens settle the words.
+    val info = Theme.zones[zone.number]
     Text(
-        "Z$zone ${info.name}",
+        "${zone.label} ${info.name}",
         style = Type.pillLabel,
-        color = if (zone == 0) Theme.text else Theme.bg,
+        color = if (zone.number == 0) Theme.text else Theme.bg,
         modifier = Modifier.background(info.color, RoundedCornerShape(50)).padding(vertical = 4.dp, horizontal = 10.dp),
     )
 }

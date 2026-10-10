@@ -5,6 +5,7 @@ import com.jakubfronczyk.northform.core.LocationFix
 import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.RecordingEvent
 import com.jakubfronczyk.northform.core.inSecondsDouble
+import com.jakubfronczyk.northform.core.metrics.zoneOf
 import com.jakubfronczyk.northform.core.roundedHalfAwayFromZero
 import kotlin.time.Duration
 import kotlin.time.Instant
@@ -117,7 +118,7 @@ data class RunProgress(
             hrNow = hrNow,
             hrAvg = if (hrCount > 0) (hrSum.toDouble() / hrCount.toDouble()).roundedHalfAwayFromZero().toInt() else null,
             hrMax = hrMax,
-            zone = hrNow?.let { profile.zone(it) },
+            zone = hrNow?.let { profile.zoneOf(it) },
             hrLost = if (atTheGate) !gateHrReady else hrLost,
             gpsLost = if (atTheGate) !gateGpsReady else gpsLost,
         )

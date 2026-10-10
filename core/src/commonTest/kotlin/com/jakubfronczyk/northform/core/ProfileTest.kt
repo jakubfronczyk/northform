@@ -1,6 +1,7 @@
 package com.jakubfronczyk.northform.core
 
 import com.jakubfronczyk.northform.core.metrics.Geo
+import com.jakubfronczyk.northform.core.metrics.zoneOf
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -14,10 +15,10 @@ class ProfileTest {
     @Test
     fun karvonen_zones_count_lower_bounds_at_or_below_the_reserve_fraction() {
         // reserve = 127; 50 % → 123.5 bpm, 60 % → 136.2, 70 % → 148.9, 80 % → 161.6, 90 % → 174.3
-        assertEquals(0, profile.zone(120))
-        assertEquals(1, profile.zone(124))
-        assertEquals(3, profile.zone(150))
-        assertEquals(5, profile.zone(180))
+        assertEquals(0, profile.zoneOf(120).number)
+        assertEquals(1, profile.zoneOf(124).number)
+        assertEquals(3, profile.zoneOf(150).number)
+        assertEquals(5, profile.zoneOf(180).number)
     }
 
     @Test

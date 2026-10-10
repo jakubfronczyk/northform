@@ -8,6 +8,7 @@ import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.SensorState
 import com.jakubfronczyk.northform.core.UserAction
+import com.jakubfronczyk.northform.core.metrics.Zone
 import com.jakubfronczyk.northform.core.ports.Alert
 import com.jakubfronczyk.northform.core.ports.FlushBatch
 import kotlin.time.Duration
@@ -115,7 +116,8 @@ data class RunSnapshot(
     val hrNow: Int? = null,
     val hrAvg: Int? = null,
     val hrMax: Int? = null,
-    val zone: Int? = null,
+    /** The zone of `hrNow` under the run's profile (D23): number, name and %HRR range in one value; null with `hrNow`. */
+    val zone: Zone? = null,
     val hrLost: Boolean = false,
     val gpsLost: Boolean = false,
 )

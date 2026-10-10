@@ -30,7 +30,6 @@ class ZoneTest {
         )
         for ((bpm, expected) in cases) {
             assertEquals(expected, profile.zoneOf(bpm).number, "$bpm bpm")
-            assertEquals(profile.zone(bpm), profile.zoneOf(bpm).number, "$bpm bpm: the Int form agrees until D23 lands")
         }
     }
 

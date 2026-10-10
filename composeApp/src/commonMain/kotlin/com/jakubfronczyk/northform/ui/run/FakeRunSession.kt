@@ -1,6 +1,8 @@
 package com.jakubfronczyk.northform.ui.run
 
+import com.jakubfronczyk.northform.core.HRZones
 import com.jakubfronczyk.northform.core.UserAction
+import com.jakubfronczyk.northform.core.metrics.zone
 import com.jakubfronczyk.northform.core.ports.WallClock
 import com.jakubfronczyk.northform.engine.run.EndResult
 import com.jakubfronczyk.northform.engine.run.Route
@@ -34,7 +36,7 @@ class FakeRunSession(snapshot: RunSnapshot, route: Route = Route()) : RunSession
 
         val running = RunSnapshot(
             phase = RunPhase.Active, startedAt = Clock.System.now() - 2058.seconds, totalTime = 2058.seconds, distance = 6420.0,
-            splitPace = 312.0, currentPace = 304.0, hrNow = 152, hrAvg = 148, hrMax = 171, zone = 3,
+            splitPace = 312.0, currentPace = 304.0, hrNow = 152, hrAvg = 148, hrMax = 171, zone = HRZones.standard.zone(3),
         )
     }
 }

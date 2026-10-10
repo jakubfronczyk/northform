@@ -72,15 +72,7 @@ data class Profile(
     /** `Zones.swift:3` — heart-rate reserve fraction: (HR − HRrest) / (HRmax − HRrest) (Karvonen). */
     fun reserveFraction(bpm: Int): Double = (bpm - hrRest).toDouble() / (hrMax - hrRest).toDouble()
 
-    /**
-     * `Zones.swift:8` — zone 0–5: the number of zone lower bounds at or below the reserve fraction.
-     * Kept for `RunSnapshot.zone: Int?` until the engine lane applies D23; new code uses
-     * [com.jakubfronczyk.northform.core.metrics.zoneOf], which returns the `Zone` value.
-     */
-    fun zone(bpm: Int): Int {
-        val fraction = reserveFraction(bpm)
-        return zones.lowerBounds.count { fraction >= it }
-    }
+    // The zone of a bpm is `profile.zoneOf(bpm)` (`core/metrics/Zone.kt`, D23): a `Zone` value, never a bare Int.
 
     companion object {
         /**

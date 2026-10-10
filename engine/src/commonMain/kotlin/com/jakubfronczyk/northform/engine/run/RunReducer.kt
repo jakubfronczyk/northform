@@ -10,6 +10,7 @@ import com.jakubfronczyk.northform.core.RecordingEvent
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.SensorState
 import com.jakubfronczyk.northform.core.UserAction
+import com.jakubfronczyk.northform.core.metrics.HeartRate
 import com.jakubfronczyk.northform.core.ports.Alert
 import com.jakubfronczyk.northform.core.ports.FlushBatch
 import kotlin.time.Duration
@@ -30,8 +31,8 @@ object RunReducer {
     val cooldown: Duration = 60.seconds
     val persistEvery: Duration = 5.seconds
     val hrLostAfter: Duration = 5.seconds
-    /** A sample outside this is invalid and dropped before anything reads it (spec 08, D119). */
-    val validHeartRate = 30..230
+    /** A sample outside this is invalid and dropped before anything reads it (spec 08, D119): the ONE range `:core` metrics also read (metrics/06). */
+    val validHeartRate: IntRange = HeartRate.valid
     /** The HR-lost alert waits until the loss has lasted this long, once per loss (D108). */
     val hrLostAlertAfter: Duration = 10.seconds
     val gpsLostAfter: Duration = 10.seconds
