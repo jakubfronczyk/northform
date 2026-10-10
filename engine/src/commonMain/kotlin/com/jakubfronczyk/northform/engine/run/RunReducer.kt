@@ -11,6 +11,7 @@ import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.SensorState
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.metrics.HeartRate
+import com.jakubfronczyk.northform.core.metrics.Splits
 import com.jakubfronczyk.northform.core.ports.Alert
 import com.jakubfronczyk.northform.core.ports.FlushBatch
 import kotlin.time.Duration
@@ -38,9 +39,10 @@ object RunReducer {
     val gpsLostAfter: Duration = 10.seconds
     /** A fix worse than this means GPS is lost. */
     const val gpsLostAccuracy = 50.0
-    /** Pace is shown only once it means something (D102). */
-    const val splitPaceMinDistance = 50.0
-    const val splitDistance = 1000.0
+    /** Pace is shown only once it means something (D102); the summary table reads the same bar (`Splits`). */
+    const val splitPaceMinDistance = Splits.paceMinDistance
+    /** D22, one definition shared with the summary table (`Splits`). */
+    const val splitDistance = Splits.distance
     /** R24: GPS ✓ at the start gate = this many consecutive fixes within [gateFixAccuracy]. */
     const val gateFixes = 3
     /** R24: the accuracy a gate fix must have — the same 20 m a fix needs to count for distance (D107). */
@@ -303,17 +305,17 @@ object RunReducer {
 
         /**
          * `RunReducer.swift:249` — a km mark inside the segment is reached at the moment read off the
-         * segment, linear in time; the next split starts there (D121). The alert plays now.
+         * segment, linear in time (`Splits.markReachedAt`, the ONE interpolation the summary's rows
+         * also stand on, D121); the next split starts there. The alert plays now.
          */
         private fun addDistance(metres: Double, from: Instant, to: Instant) {
             val before = p.distance
             val total = p.distance + metres
             p = p.copy(distance = total, currentPace = p.currentPace.append(total = total, at = to))
-            val span = to - from
             while (p.distance >= (p.splitIndex + 1) * splitDistance) {
                 val index = p.splitIndex + 1
                 val mark = index * splitDistance
-                val reached = from + span * ((mark - before) / metres)
+                val reached = Splits.markReachedAt(mark, before, metres, from, to)
                 // activeTime reads only start/stop/pause fields, none of which this copy changes.
                 p = p.copy(splitIndex = index, splitStartDistance = mark, splitStartActive = p.activeTime(reached))
                 record(EventKind.Split(index), reached)
