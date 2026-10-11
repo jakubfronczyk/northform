@@ -59,7 +59,7 @@ fun RunReducer.rebuild(config: RunConfig, data: RecordingData): RunState {
     // D35: rebuild's ticks need not land where the live ones did, so the loss starts where the live run said it
     // did — the stored `HrLost` still open — else at the one rebuild derived (and keeps unstored, above).
     val hrLostSince = if (!progress.hrLost) null else {
-        val open = data.events.lastOrNull { Signal.of(it.kind) == Signal.Hr }?.takeIf { it.kind == EventKind.HrLost }
+        val open = lastStored(Signal.Hr, data.events)?.takeIf { it.kind == Signal.Hr.lost }
         (open ?: derived[Signal.Hr])?.t ?: progress.hrLostSince
     }
     return state.copy(
@@ -78,6 +78,10 @@ private enum class Signal(val lost: EventKind, val back: EventKind) {
     }
 }
 
+/** The last lost-or-back event of [signal] the store holds: the state the live run last made durable. */
+private fun lastStored(signal: Signal, events: List<RecordingEvent>): RecordingEvent? =
+    events.lastOrNull { Signal.of(it.kind) == signal }
+
 /**
  * Rebuild's 1 s ticks need not land where the live ticks did, so its closing tick can derive a loss
  * the live run never reached before the last flush (backgrounded 0.6 s after a tick, say). The
@@ -88,7 +92,7 @@ private enum class Signal(val lost: EventKind, val back: EventKind) {
  * not durable yet — and the first flush after Continue writes it.
  */
 private fun notStored(signal: Signal, lost: Boolean, stored: List<RecordingEvent>, derived: Map<Signal, RecordingEvent>): RecordingEvent? {
-    val storedLost = stored.lastOrNull { Signal.of(it.kind) == signal }?.kind == signal.lost
+    val storedLost = lastStored(signal, stored)?.kind == signal.lost
     if (lost == storedLost) return null
     return derived[signal]?.takeIf { it.kind == (if (lost) signal.lost else signal.back) }
 }
