@@ -63,18 +63,20 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
             }
             // Save: the recording ends where the store last heard from it and goes to `computing`, where a normally closed
             // run sits too (`closeRun`); engine/04's summary path picks it up from there.
-            CrashChoice.Save -> scope.launch {
-                runCatching {
-                    if (run.facts.state == RecordingState.Active) deps.store.stop(run.id, run.facts.savedUntil)
-                    if (run.facts.state != RecordingState.Computing) deps.store.beginComputing(run.id)
-                }.onSuccess { _unfinished.value = null; deps.log("run $id crash: saved → computing") }
-                    .onFailure { deps.log("run $id crash: save failed: $it") }
+            CrashChoice.Save -> settleUnfinished(id, "saved → computing", "save") {
+                if (run.facts.state == RecordingState.Active) deps.store.stop(run.id, run.facts.savedUntil)
+                if (run.facts.state != RecordingState.Computing) deps.store.beginComputing(run.id)
             }
-            CrashChoice.Delete -> scope.launch {
-                runCatching { deps.store.delete(run.id) }
-                    .onSuccess { _unfinished.value = null; deps.log("run $id crash: deleted") }
-                    .onFailure { deps.log("run $id crash: delete failed: $it") }
-            }
+            CrashChoice.Delete -> settleUnfinished(id, "deleted", "delete") { deps.store.delete(run.id) }
+        }
+    }
+
+    /** Save/Delete: the store call, then the prompt goes away and it is logged — or it stays up and the failure is logged. */
+    private fun settleUnfinished(id: String, done: String, verb: String, call: suspend () -> Unit) {
+        scope.launch {
+            runCatching { call() }
+                .onSuccess { _unfinished.value = null; deps.log("run $id crash: $done") }
+                .onFailure { deps.log("run $id crash: $verb failed: $it") }
         }
     }
 
