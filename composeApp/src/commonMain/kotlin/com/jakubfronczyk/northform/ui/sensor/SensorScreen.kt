@@ -51,7 +51,6 @@ import com.jakubfronczyk.northform.ui.Type
 import com.jakubfronczyk.northform.ui.VDivider
 import com.jakubfronczyk.northform.ui.ValueCell
 import com.jakubfronczyk.northform.ui.sensor.SensorScreenModel.Mode
-import com.jakubfronczyk.northform.ui.sensor.SensorScreenModel.Signal
 
 /**
  * The Sensor screen (SU10, D72), built from `design/canvas/project/Sensor.dc.html` and its
@@ -214,8 +213,6 @@ private fun ConnectedCard(ui: SensorScreenModel.Ui) = Card {
     Row(Modifier.fillMaxWidth()) {
         Stat("Battery", ui.battery?.let { "$it %" } ?: "–", Theme.text, Modifier.weight(1f))
         Divider()
-        SignalStat(ui.signal, Modifier.weight(1f).padding(start = 12.dp))
-        Divider()
         Stat("Firmware", ui.firmware ?: "–", if (ui.firmwareTooOld) Theme.warn else Theme.text, Modifier.weight(1f).padding(start = 12.dp))
     }
 }
@@ -223,23 +220,6 @@ private fun ConnectedCard(ui: SensorScreenModel.Ui) = Card {
 @Composable
 private fun Stat(label: String, value: String, color: Color, modifier: Modifier) =
     ValueCell(value, modifier, labelText = label, valueStyle = Type.number22, color = color, spacing = 4.dp)
-
-/** Four bars, lit by bucket (3 = Good, 2 = Fair, 1 = Weak), "–" when no advert was seen. */
-@Composable
-private fun SignalStat(signal: Signal?, modifier: Modifier) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("Signal", style = Type.tertiaryText, color = Theme.text2)
-        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.height(22.dp)) {
-            val lit = when (signal) { Signal.Good -> 3; Signal.Fair -> 2; Signal.Weak -> 1; null -> 0 }
-            listOf(7, 12, 17, 22).forEachIndexed { i, h ->
-                Box(Modifier.width(5.dp).height(h.dp).background(if (i < lit) Theme.text else Color(0xFF707175), RoundedCornerShape(2.dp)))
-                Spacer(Modifier.width(3.dp))
-            }
-            Spacer(Modifier.width(3.dp))
-            Text(signal?.name ?: "–", style = Type.unitLabel.copy(fontWeight = FontWeight.Bold), color = Theme.text)
-        }
-    }
-}
 
 @Composable
 private fun RowScope.Divider() = VDivider(Modifier.height(40.dp).align(Alignment.CenterVertically))

@@ -6,7 +6,6 @@ import com.jakubfronczyk.northform.core.HrSample
 import com.jakubfronczyk.northform.core.SensorId
 import com.jakubfronczyk.northform.core.SensorState
 import com.jakubfronczyk.northform.ui.sensor.SensorScreenModel.Mode
-import com.jakubfronczyk.northform.ui.sensor.SensorScreenModel.Signal
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -157,7 +156,7 @@ class SensorScreenModelTest {
         sensor.set(SensorState.Connected(64)); runCurrent()
         assertEquals(Mode.Connected, model.ui.value.mode)
         assertEquals("FFEE11", model.ui.value.paired?.code)
-        assertEquals(Signal.Fair, model.ui.value.signal, "from the advert that was seen (-80 dBm)")
+        assertEquals(64, model.ui.value.battery, "connected: HR and battery, no signal (D34)")
     }
 
     @Test
@@ -216,13 +215,5 @@ class SensorScreenModelTest {
         assertEquals(listOf("forget"), details.calls)
         assertNull(model.ui.value.paired)
         assertTrue("disconnect" in sensor.calls && "search off" in sensor.calls, "${sensor.calls}")
-    }
-
-    @Test
-    fun signal_buckets() {
-        assertEquals(Signal.Good, Signal.of(-70))
-        assertEquals(Signal.Fair, Signal.of(-71))
-        assertEquals(Signal.Fair, Signal.of(-85))
-        assertEquals(Signal.Weak, Signal.of(-86))
     }
 }

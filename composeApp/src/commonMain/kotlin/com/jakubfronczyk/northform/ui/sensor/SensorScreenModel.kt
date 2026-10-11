@@ -40,17 +40,6 @@ class SensorScreenModel(
     /** The design's artboard variants, plus the two radio states the port can report. */
     enum class Mode { Connected, Disconnected, Searching, NotFound, BluetoothOff, Unauthorized }
 
-    /** Advert strength bucket from the last advert seen for the sensor; `null` when none was seen this session. */
-    enum class Signal { Good, Fair, Weak;
-        companion object {
-            fun of(rssi: Int): Signal = when {
-                rssi >= -70 -> Good
-                rssi >= -85 -> Fair
-                else -> Weak
-            }
-        }
-    }
-
     data class Ui(
         val mode: Mode = Mode.Disconnected,
         val paired: PairedSensorInfo? = null,
@@ -59,8 +48,11 @@ class SensorScreenModel(
         val firmware: String? = null,
         /** E16: firmware below 2.1.0 (the link's rule). */
         val firmwareTooOld: Boolean = false,
-        val signal: Signal? = null,
-        /** What `search()` yielded while looking for a sensor to pair: the paired one first, strangers after. */
+        /**
+         * What `search()` yielded while looking for a sensor to pair: the paired one first, strangers after. The only
+         * place signal is shown (D34): an advert's RSSI is current while scanning; once connected it would be a stale
+         * last-seen value, and polling `readRSSI` costs radio time for nothing a runner acts on.
+         */
         val nearby: List<DiscoveredSensor> = emptyList(),
         val error: String? = null,
     )
@@ -74,7 +66,6 @@ class SensorScreenModel(
     private var userSearching = false
     private var notFound = false
     private var state: SensorState = SensorState.Disconnected(DisconnectReason.User)
-    private val rssi = HashMap<SensorId, Int>()
 
     /** Collects the port while the screen is up; returns only when cancelled. */
     suspend fun follow(): Unit = coroutineScope {
@@ -173,7 +164,6 @@ class SensorScreenModel(
             val found = withTimeoutOrNull(searchTimeout) {
                 try {
                     sensor.search().collect { d ->
-                        rssi[d.id] = d.rssi
                         _ui.update { ui -> rendered(ui.copy(nearby = sorted(ui.nearby.filter { it.id != d.id } + d))) }
                     }
                 } catch (e: CancellationException) { throw e } catch (e: Exception) { fail("Search failed: ${e.message}") }
@@ -217,7 +207,6 @@ class SensorScreenModel(
             battery = (s as? SensorState.Connected)?.battery,
             firmware = firmware,
             firmwareTooOld = firmware?.let(SensorLink::firmwareTooOld) ?: false,
-            signal = paired?.let { p -> rssi[p.id] }?.let(Signal::of),
         )
     }
 

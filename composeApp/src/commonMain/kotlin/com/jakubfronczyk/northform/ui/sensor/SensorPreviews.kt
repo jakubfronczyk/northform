@@ -5,12 +5,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.jakubfronczyk.northform.core.DiscoveredSensor
 import com.jakubfronczyk.northform.core.SensorId
 import com.jakubfronczyk.northform.ui.sensor.SensorScreenModel.Mode
-import com.jakubfronczyk.northform.ui.sensor.SensorScreenModel.Signal
 
 // One preview per artboard variant (`Sensor.dc.html` modes + `oldFirmware`), from plain values.
 
 private val paired = FakeSensorDetails.sample
-private val connected = SensorScreenModel.Ui(Mode.Connected, paired, bpm = 74, battery = 82, firmware = "2.2.1", signal = Signal.Good)
+private val connected = SensorScreenModel.Ui(Mode.Connected, paired, bpm = 74, battery = 82, firmware = "2.2.1")
 
 @Composable
 private fun preview(ui: SensorScreenModel.Ui) = SensorScreenContent(ui, connect = {}, pair = {}, cancel = {}, disconnect = {}, close = {})
