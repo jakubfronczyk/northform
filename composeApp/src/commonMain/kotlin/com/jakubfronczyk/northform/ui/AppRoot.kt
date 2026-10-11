@@ -44,8 +44,12 @@ fun AppRoot(
     var showSensor by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         when {
-            activeRun != null -> RunFlow(activeRun, onClose = onCloseRun, map = map, gateSensor = gateSensor, connectSensor = connectSensor)
+            // The Sensor sheet first: the gate's "Pair a sensor" opens it over a run still at the gate, and Close returns there.
             showSensor -> sensorScreen { showSensor = false }
+            activeRun != null -> RunFlow(
+                activeRun, onClose = onCloseRun, map = map, gateSensor = gateSensor, connectSensor = connectSensor,
+                pairSensor = { showSensor = true },
+            )
             else -> {
                 TodayScreen(startRun = onStartRun, openSensor = { showSensor = true })
                 crashPrompt?.invoke()

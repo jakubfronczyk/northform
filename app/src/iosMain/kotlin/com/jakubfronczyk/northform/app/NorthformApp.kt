@@ -29,8 +29,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.Foundation.NSNotificationCenter
@@ -159,9 +159,9 @@ object NorthformApp {
     /** E1: what the gate shows about the sensor. Replay has no link, so it says nothing (null = unknown). */
     private fun gateSensorStates(): Flow<GateSensor?> =
         if (!live) flowOf(null)
-        else sensor.states().map { change ->
+        else combine(sensor.states(), sensorDetails.paired) { change, paired ->
             val connected = change.state as? SensorState.Connected
-            GateSensor(connected = connected != null, batteryPercent = connected?.battery)
+            GateSensor(connected = connected != null, batteryPercent = connected?.battery, paired = paired != null)
         }
 
     /** `KeepAlive` is an `:adapters` class; `RunKeepAlive` is the app's seam for it (a fake in tests). */

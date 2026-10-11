@@ -50,6 +50,8 @@ fun GateScreen(
     close: () -> Unit,
     sensor: GateSensor? = null,
     connectSensor: (() -> Unit)? = null,
+    /** Opens the Sensor screen, for "Pair a sensor" when nothing is paired; null hides that button. */
+    pairSensor: (() -> Unit)? = null,
 ) {
     val model = GateModel.from(snapshot, sensor)
     Column(Modifier.fillMaxSize()) {
@@ -77,7 +79,7 @@ fun GateScreen(
                 Text(model.title, style = GateType.title, color = Theme.text)
                 Text(model.subtitle, style = Type.rowLabel, color = Theme.text2)
             }
-            ReadinessCard(model, connectSensor)
+            ReadinessCard(model, connectSensor, pairSensor)
             model.warning?.let { WarningLine(it) }
             Spacer(Modifier.weight(1f))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -97,23 +99,27 @@ fun GateScreen(
 
 /** The three rows: heart rate · GPS · sensor battery, dashed lines between them. */
 @Composable
-private fun ReadinessCard(model: GateModel, connectSensor: (() -> Unit)?) {
+private fun ReadinessCard(model: GateModel, connectSensor: (() -> Unit)?, pairSensor: (() -> Unit)?) {
     Column(Modifier.fillMaxWidth().background(Theme.card, RoundedCornerShape(22.dp)).padding(horizontal = 16.dp, vertical = 4.dp)) {
         when (val hr = model.hr) {
             is GateModel.HrRow.Ready -> CardRow(icon = { CheckBadge() }, title = "Heart rate", sub = "Reading from sensor") {
                 BigValue(hr.bpm, "bpm")
             }
             GateModel.HrRow.Waiting -> CardRow(icon = { Spinner() }, title = "Heart rate · waiting…", sub = "No reading in the last 5 s") {}
-            GateModel.HrRow.NoSensor -> CardRow(
+            is GateModel.HrRow.NoSensor -> CardRow(
                 icon = { Text("♥", style = Type.number22, color = Theme.warn) },
                 title = "Heart rate", sub = "Sensor not connected", subColor = Theme.warn, minHeight = 68.dp,
             ) {
-                if (connectSensor != null) {
+                val onClick = when (hr.action) {
+                    GateModel.SensorAction.Connect -> connectSensor
+                    GateModel.SensorAction.Pair -> pairSensor
+                }
+                if (onClick != null) {
                     Box(
                         Modifier.height(44.dp).background(Theme.primary, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp))
-                            .clickable(onClick = connectSensor).padding(horizontal = 18.dp),
+                            .clickable(onClick = onClick).padding(horizontal = 18.dp),
                         contentAlignment = Alignment.Center,
-                    ) { Text("Connect", style = Type.statusLabel.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = Color.White) }
+                    ) { Text(hr.action.label, style = Type.statusLabel.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = Color.White) }
                 }
             }
         }

@@ -51,6 +51,8 @@ fun RunFlow(
     gateSensor: GateSensor?,
     /** The gate's "Connect" next to a sensor that is not connected; null hides it. */
     connectSensor: (() -> Unit)?,
+    /** The gate's "Pair a sensor" when nothing is paired: opens the Sensor screen; null hides it. */
+    pairSensor: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val snapshot by session.snapshots.collectAsState()
@@ -68,7 +70,7 @@ fun RunFlow(
     CompositionLocalProvider(LocalMapCamera provides camera) {
         Box(Modifier.fillMaxSize().background(Theme.bg)) {
             when (val phase = snapshot.phase) {
-                RunPhase.Gate -> GateScreen(snapshot, route, map, start = { send(UserAction.Start) }, close = onClose, sensor = gateSensor, connectSensor = connectSensor)
+                RunPhase.Gate -> GateScreen(snapshot, route, map, start = { send(UserAction.Start) }, close = onClose, sensor = gateSensor, connectSensor = connectSensor, pairSensor = pairSensor)
                 is RunPhase.Countdown -> CountdownScreen(phase.endsAt, session.wallClock)
                 RunPhase.Active, is RunPhase.Paused -> LiveRunScreen(snapshot, route, session.wallClock, send, map)
                 is RunPhase.Cooldown -> StoppedScreen(snapshot, skip = { send(UserAction.SkipCooldown) })

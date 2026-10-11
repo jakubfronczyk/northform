@@ -56,7 +56,7 @@ class GateModelTest {
 
     @Test
     fun ready_enables_start_and_hides_start_anyway() {
-        val m = GateModel.from(ready, GateSensor(connected = true, batteryPercent = 82))
+        val m = GateModel.from(ready, GateSensor(connected = true, batteryPercent = 82, paired = true))
         assertEquals("Ready to run", m.title)
         assertEquals("Heart rate and GPS are locked in", m.subtitle)
         assertEquals("GPS", m.gpsTitle)
@@ -69,10 +69,10 @@ class GateModelTest {
 
     @Test
     fun no_sensor_offers_a_gps_only_run_through_start_anyway() {
-        val m = GateModel.from(ready.copy(hrLost = true, hrNow = null), GateSensor(connected = false, batteryPercent = null))
+        val m = GateModel.from(ready.copy(hrLost = true, hrNow = null), GateSensor(connected = false, batteryPercent = null, paired = true))
         assertEquals("No heart rate yet", m.title)
         assertEquals("Connect the sensor, or start a GPS only run.", m.subtitle)
-        assertEquals(GateModel.HrRow.NoSensor, m.hr)
+        assertEquals(GateModel.HrRow.NoSensor(GateModel.SensorAction.Connect), m.hr)
         assertEquals("Start · sensor not connected", m.startLabel)
         assertFalse(m.startEnabled)
         assertTrue(m.showStartAnyway)
@@ -80,13 +80,22 @@ class GateModelTest {
     }
 
     @Test
+    fun nothing_paired_offers_pairing_not_a_connect_that_has_nothing_to_connect() {
+        val m = GateModel.from(ready.copy(hrLost = true, hrNow = null), GateSensor(connected = false, batteryPercent = null, paired = false))
+        assertEquals(GateModel.HrRow.NoSensor(GateModel.SensorAction.Pair), m.hr)
+        assertEquals("Pair a sensor", GateModel.SensorAction.Pair.label)
+        assertEquals("Pair a sensor, or start a GPS only run.", m.subtitle)
+        assertTrue(m.showStartAnyway, "a GPS only run is still one tap away")
+    }
+
+    @Test
     fun low_battery_warns_below_20_percent_but_does_not_hold_start() {
-        val m = GateModel.from(ready, GateSensor(connected = true, batteryPercent = 14))
+        val m = GateModel.from(ready, GateSensor(connected = true, batteryPercent = 14, paired = true))
         assertEquals(GateModel.Battery(14, low = true), m.battery)
         assertEquals("Sensor battery 14 % · may not last the run", m.warning)
         assertEquals("GPS is locked in. Sensor battery is low.", m.subtitle)
         assertTrue(m.startEnabled, "E1 warns, it never blocks")
-        assertNull(GateModel.from(ready, GateSensor(true, 20)).warning, "20 % is not low")
+        assertNull(GateModel.from(ready, GateSensor(true, 20, paired = true)).warning, "20 % is not low")
     }
 
     @Test

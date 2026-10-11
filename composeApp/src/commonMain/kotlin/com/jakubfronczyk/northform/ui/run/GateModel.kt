@@ -4,11 +4,12 @@ import com.jakubfronczyk.northform.engine.run.RunReducer
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
 
 /**
- * What the gate knows about the sensor beyond the snapshot (E1): whether one is connected and its
- * battery. Not on `RunSessionHandle` today — the composition root passes it when it has it; null
- * means "unknown", which hides the battery row and assumes a sensor (the snapshot's `hrLost` still rules).
+ * What the gate knows about the sensor beyond the snapshot (E1): whether one is connected, its
+ * battery, and whether one is paired at all (with nothing paired there is nothing to connect: the gate
+ * offers pairing instead). Not on `RunSessionHandle` today — the composition root passes it when it has
+ * it; null means "unknown", which hides the battery row and assumes a sensor (the snapshot's `hrLost` still rules).
  */
-data class GateSensor(val connected: Boolean, val batteryPercent: Int?)
+data class GateSensor(val connected: Boolean, val batteryPercent: Int?, val paired: Boolean)
 
 /**
  * The Gate artboard's copy and states as one pure function of the snapshot at `RunPhase.Gate`
@@ -32,8 +33,11 @@ data class GateModel(
     sealed interface HrRow {
         data class Ready(val bpm: String) : HrRow
         data object Waiting : HrRow
-        data object NoSensor : HrRow
+        /** Not connected. [action] is the button beside it: Connect a paired sensor, or Pair one when none is. */
+        data class NoSensor(val action: SensorAction) : HrRow
     }
+
+    enum class SensorAction(val label: String) { Connect("Connect"), Pair("Pair a sensor") }
 
     data class Battery(val percent: Int, val low: Boolean)
 
@@ -61,6 +65,7 @@ data class GateModel(
                     else -> "Getting ready"
                 },
                 subtitle = when {
+                    noSensor && !sensor.paired -> "Pair a sensor, or start a GPS only run."
                     noSensor -> "Connect the sensor, or start a GPS only run."
                     startOk && lowBattery -> "GPS is locked in. Sensor battery is low."
                     startOk -> "Heart rate and GPS are locked in"
@@ -69,7 +74,7 @@ data class GateModel(
                     else -> "Waiting for heart rate. GPS is ready."
                 },
                 hr = when {
-                    noSensor -> HrRow.NoSensor
+                    noSensor -> HrRow.NoSensor(if (!sensor.paired) SensorAction.Pair else SensorAction.Connect)
                     hrReady -> HrRow.Ready(snapshot.hrNow?.toString() ?: NO_VALUE)
                     else -> HrRow.Waiting
                 },
