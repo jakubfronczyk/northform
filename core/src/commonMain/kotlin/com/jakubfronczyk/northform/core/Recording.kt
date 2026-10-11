@@ -88,6 +88,9 @@ sealed interface EventKind {
      * the run), so a run a crash interrupted never looks like a normal finish.
      */
     data object CrashRecovered : EventKind
+
+    /** Holds [fromWire]. */
+    companion object
 }
 
 /** The kind's stored name (what the Swift description printed and the store will write); `Split` keeps its index separately. */
@@ -107,6 +110,20 @@ val EventKind.wire: String
         EventKind.CooldownEnd -> "cooldownEnd"
         EventKind.CrashRecovered -> "crashRecovered"
     }
+
+/** Every kind without a payload, the ones [fromWire] looks up by [wire]; `Split` is built from its index. */
+private val payloadFreeKinds: List<EventKind> = listOf(
+    EventKind.Pause, EventKind.Resume, EventKind.HrLost, EventKind.HrBack, EventKind.GpsLost, EventKind.GpsBack,
+    EventKind.SensorLost, EventKind.SensorReconnected, EventKind.BluetoothOff, EventKind.Stop, EventKind.CooldownEnd,
+    EventKind.CrashRecovered,
+)
+
+/**
+ * The inverse of [wire], the one decoder the store and the backup share: [splitIndex] is the separately stored
+ * index a `split` needs. null for an unknown name or a split without its index; each caller says why in its own error.
+ */
+fun EventKind.Companion.fromWire(wire: String, splitIndex: Int?): EventKind? =
+    if (wire == "split") splitIndex?.let { EventKind.Split(it) } else payloadFreeKinds.firstOrNull { it.wire == wire }
 
 /** `RecordingEvent.swift:31`. */
 data class RecordingEvent(val t: Instant, val kind: EventKind, val source: EventSource)

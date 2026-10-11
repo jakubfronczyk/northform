@@ -17,6 +17,7 @@ import com.jakubfronczyk.northform.core.RunTag
 import com.jakubfronczyk.northform.core.Sex
 import com.jakubfronczyk.northform.core.UserId
 import com.jakubfronczyk.northform.core.ports.RecordingData
+import com.jakubfronczyk.northform.core.fromWire
 import com.jakubfronczyk.northform.core.wire
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -210,11 +211,10 @@ object BackupCodec {
 
     private fun JsonObject.eventKind(path: String): EventKind {
         val kind = string("kind") ?: throw BackupError.Malformed("$path.kind", "missing")
-        if (kind == "split") return EventKind.Split(int("splitIndex") ?: throw BackupError.Malformed("$path.splitIndex", "a split needs its index"))
-        return listOf(
-            EventKind.Pause, EventKind.Resume, EventKind.HrLost, EventKind.HrBack, EventKind.GpsLost, EventKind.GpsBack,
-            EventKind.SensorLost, EventKind.SensorReconnected, EventKind.BluetoothOff, EventKind.Stop, EventKind.CooldownEnd, EventKind.CrashRecovered,
-        ).firstOrNull { it.wire == kind } ?: throw BackupError.Malformed("$path.kind", "unknown event kind $kind")
+        return EventKind.fromWire(kind, int("splitIndex")) ?: throw (
+            if (kind == "split") BackupError.Malformed("$path.splitIndex", "a split needs its index")
+            else BackupError.Malformed("$path.kind", "unknown event kind $kind")
+        )
     }
 
     private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content

@@ -20,6 +20,7 @@ import com.jakubfronczyk.northform.core.ports.RecordingData
 import com.jakubfronczyk.northform.core.ports.RecordingStore
 import com.jakubfronczyk.northform.core.ports.RecordingStoreError
 import com.jakubfronczyk.northform.core.reliability.ReliabilityRecord
+import com.jakubfronczyk.northform.core.fromWire
 import com.jakubfronczyk.northform.core.wire
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -224,22 +225,8 @@ class SqlRecordingStore(
         notes = notes,
     )
 
-    private fun eventKind(wire: String, splitIndex: Long?): EventKind = when (wire) {
-        "pause" -> EventKind.Pause
-        "resume" -> EventKind.Resume
-        "split" -> EventKind.Split(splitIndex?.toInt() ?: error("split without index"))
-        "hrLost" -> EventKind.HrLost
-        "hrBack" -> EventKind.HrBack
-        "gpsLost" -> EventKind.GpsLost
-        "gpsBack" -> EventKind.GpsBack
-        "sensorLost" -> EventKind.SensorLost
-        "sensorReconnected" -> EventKind.SensorReconnected
-        "bluetoothOff" -> EventKind.BluetoothOff
-        "stop" -> EventKind.Stop
-        "cooldownEnd" -> EventKind.CooldownEnd
-        "crashRecovered" -> EventKind.CrashRecovered
-        else -> error("unknown event kind $wire")
-    }
+    private fun eventKind(wire: String, splitIndex: Long?): EventKind =
+        EventKind.fromWire(wire, splitIndex?.toInt()) ?: error("unknown event kind '$wire' (split index $splitIndex) in the database")
 
     private companion object {
         const val KIND_HR = "hr"

@@ -15,6 +15,8 @@ import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.RunTag
 import com.jakubfronczyk.northform.core.Sex
+import com.jakubfronczyk.northform.core.fromWire
+import com.jakubfronczyk.northform.core.wire
 import com.jakubfronczyk.northform.core.ports.FlushBatch
 import com.jakubfronczyk.northform.core.ports.RecordingStore
 import com.jakubfronczyk.northform.core.ports.RecordingStoreError
@@ -95,6 +97,8 @@ class RecordingStoreContract(private val store: RecordingStore) {
         val events = kinds.mapIndexed { i, k -> RecordingEvent(t0 + i.seconds, k, if (i % 2 == 0) EventSource.Auto else EventSource.Manual) }
         store.flush(FlushBatch(id, events = events, persistedAt = t0 + 20.seconds))
         assertEquals(events, assertNotNull(store.load(id)).events)
+        // The one decoder every store and the backup read through: each kind's stored name comes back as that kind.
+        for (k in kinds + EventKind.Stop) assertEquals(k, EventKind.fromWire(k.wire, (k as? EventKind.Split)?.index), k.wire)
     }
 
     suspend fun flush_needs_a_recording_in_active_or_stopping() {
