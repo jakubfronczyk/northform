@@ -19,6 +19,7 @@ import com.jakubfronczyk.northform.testing.RecordedAlerts
 import com.jakubfronczyk.northform.testing.RunHarness
 import com.jakubfronczyk.northform.testing.tap
 import com.jakubfronczyk.northform.testing.virtualWallClock
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -29,6 +30,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -78,6 +80,22 @@ class RecordingSessionTest {
 
     private fun TestScope.session(sensor: FakeSensor, store: Store, alerts: RecordedAlerts = RecordedAlerts()) =
         RecordingSession(RunHarness.config, sensor, NoLocation, store, alerts, virtualWallClock(start))
+
+    /**
+     * `run()` cancelled before its mailbox was ever dispatched: a child cancelled before it starts never
+     * runs its body, so the seal must not live only in the mailbox. `backgrounded` and `end` return.
+     */
+    @Test
+    fun run_cancelled_before_the_mailbox_starts_still_answers_backgrounded_and_end() = runTest {
+        val session = session(FakeSensor(), Store())
+        val job = launch(start = CoroutineStart.UNDISPATCHED) { session.run() } // children launched, none dispatched yet
+        job.cancel()
+        runCurrent()
+        withTimeout(5.seconds) {
+            session.backgrounded(start + 1.seconds)
+            assertEquals(EndResult.Discarded, session.end(), "sealed from the gate it never left")
+        }
+    }
 
     /** Crash resume (R28): a session started from a rebuilt state is already active and keeps the old total time. */
     @Test

@@ -135,18 +135,49 @@ class RecordingSession(
      */
     suspend fun run() {
         if (!runOnce.tryLock()) return
-        coroutineScope {
-            launch { mailbox() }
-            launch { alertLoop() }
-            launch { heartRateLoop() }
-            launch { fixLoop() }
-            launch { sensorStateLoop() }
-            launch { tickLoop() }
-            val writer = launch { writeLoop() }
-            // The session waits for the writer alone (`RecordingSession.swift:135`), then tears the rest down.
-            writer.join()
-            alertQueue.close() // mirrors `:136`; the cancel below is what actually ends the loops
-            coroutineContext.cancelChildren()
+        try {
+            coroutineScope {
+                launch { mailbox() }
+                launch { alertLoop() }
+                launch { heartRateLoop() }
+                launch { fixLoop() }
+                launch { sensorStateLoop() }
+                launch { tickLoop() }
+                val writer = launch { writeLoop() }
+                // The session waits for the writer alone (`RecordingSession.swift:135`), then tears the rest down.
+                writer.join()
+                alertQueue.close() // mirrors `:136`; the cancel below is what actually ends the loops
+                coroutineContext.cancelChildren()
+            }
+        } finally {
+            // A child cancelled before it was first dispatched never runs its body, `finally` included. When
+            // `run()` is cancelled that early the mailbox never sealed, and every `backgrounded`/`end` would
+            // wait on an inbox nobody reads. `coroutineScope` returns only after every child finished, so by
+            // here a mailbox that did start has sealed already, and this is a no-op.
+            seal(initial)
+        }
+    }
+
+    /** Set once by [seal]; read and written only by the mailbox and then by `run()` after it, never at once. */
+    private var sealed = false
+
+    /**
+     * The mailbox is gone with `run()`: seal the answer from the final state, then later taps are
+     * dropped and later `end()`s read the seal (one coroutine decides, even in hindsight). Nothing
+     * will be answered any more, so no `backgrounded` waits on it.
+     */
+    private fun seal(last: RunState, waiting: List<Pair<Int, CompletableDeferred<Unit>>> = emptyList()) {
+        if (sealed) return
+        sealed = true
+        if (ended.value == null) ended.value = decide(last.progress.phase)
+        inbox.close()
+        waiting.forEach { (_, answered) -> answered.complete(Unit) }
+        while (true) {
+            when (val late = inbox.tryReceive().getOrNull() ?: break) {
+                is Mail.End -> late.reply.complete(ended.value!!)
+                is Mail.Backgrounded -> late.answered.complete(Unit)
+                is Mail.Input -> Unit
+            }
         }
     }
 
@@ -204,19 +235,7 @@ class RecordingSession(
                 }
             }
         } finally {
-            // The mailbox is gone with `run()`: seal the answer from the final state, then later taps are
-            // dropped and later `end()`s read the seal (one coroutine decides, even in hindsight). Nothing
-            // will be answered any more, so no `backgrounded` waits on it.
-            if (ended.value == null) ended.value = decide(state.progress.phase)
-            inbox.close()
-            waiting.forEach { (_, answered) -> answered.complete(Unit) }
-            while (true) {
-                when (val late = inbox.tryReceive().getOrNull() ?: break) {
-                    is Mail.End -> late.reply.complete(ended.value!!)
-                    is Mail.Backgrounded -> late.answered.complete(Unit)
-                    is Mail.Input -> Unit
-                }
-            }
+            seal(state, waiting)
         }
     }
 
