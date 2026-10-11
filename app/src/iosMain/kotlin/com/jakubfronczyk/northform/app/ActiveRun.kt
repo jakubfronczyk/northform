@@ -81,8 +81,8 @@ class ActiveRun private constructor(
          * (`RunReducer.resumed`), through the same session. No tap: a fixture of a run's tail has no
          * start to replay from, and the original file already holds the part before the crash.
          */
-        suspend fun resume(deps: AppDeps, scope: CoroutineScope, unfinished: UnfinishedRun): ActiveRun =
-            start(deps, scope, RunReducer.resumed(unfinished.rebuilt, at = deps.wallClock.now()), tap = null)
+        suspend fun resume(deps: AppDeps, scope: CoroutineScope, unfinished: UnfinishedRun, at: Instant): ActiveRun =
+            start(deps, scope, RunReducer.resumed(unfinished.rebuilt, at = at), tap = null)
 
         /** Opens the source, starts the session from [initial] and the trace, then lets the source go (`onRunning`). */
         private suspend fun start(deps: AppDeps, scope: CoroutineScope, initial: RunState, tap: RecordingTap?): ActiveRun {

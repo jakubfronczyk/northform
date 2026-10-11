@@ -1,13 +1,12 @@
 package com.jakubfronczyk.northform.app
 
 import com.jakubfronczyk.northform.core.EventKind
-import com.jakubfronczyk.northform.core.EventSource
-import com.jakubfronczyk.northform.core.RecordingEvent
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.ports.FlushBatch
 import com.jakubfronczyk.northform.engine.run.CrashChoice
 import com.jakubfronczyk.northform.engine.run.CrashPrompt
+import com.jakubfronczyk.northform.engine.run.crashMark
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,6 +39,8 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
 
     /** A run is being opened (permission prompts): Start does nothing until it is (`:27`). */
     private val opening = AtomicBoolean(false)
+    /** An R28 answer is being settled (Save/Delete store calls, or Continue opening): another tap does nothing until it is. */
+    private val answering = AtomicBoolean(false)
     /** Runs whose screen closed after start: kept until their last write is done (D112). Immutable snapshots, swapped atomically. */
     private val finishing = MutableStateFlow<Map<RecordingId, ActiveRun>>(emptyMap())
 
@@ -51,13 +52,14 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
 
     /**
      * The one guard for both ways a run opens: `opening` is claimed (compare-and-set) before the launch, so a second tap
-     * is caught (`AppModel.swift:50-53`). [open] may decline with `null`.
+     * is caught (`AppModel.swift:50-53`). [open] may decline with `null`. Returns whether it launched.
      */
-    private fun openRun(open: suspend () -> ActiveRun?) {
-        if (_activeRun.value != null || !opening.compareAndSet(false, true)) return
+    private fun openRun(open: suspend () -> ActiveRun?): Boolean {
+        if (_activeRun.value != null || !opening.compareAndSet(false, true)) return false
         scope.launch {
             try { open()?.let { _activeRun.value = it } } finally { opening.store(false) }
         }
+        return true
     }
 
     /**
@@ -72,56 +74,70 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
         }
     }
 
-    /** The R28 prompt's answer. The prompt stays up until the store confirms, except for Continue, which starts the run at once. */
+    /**
+     * The R28 prompt's answer, as [CrashPrompt.resolve] decides it at the tap (D30). The prompt stays up until the store
+     * confirms, except for Continue, which starts the run at once. One answer at a time: `answering` is claimed
+     * (compare-and-set, like `opening`) before anything runs, so a second tap while one is being settled is ignored —
+     * two Save taps before the store answered used to write two `CrashRecovered`.
+     */
     fun resolveUnfinished(choice: CrashChoice) {
         val run = _unfinished.value ?: return
         val id = run.id.value.take(8)
-        // D30: the interruption is measured now, at the tap: a prompt left up past the cap no longer offers Continue,
-        // and a late tap on a Continue still drawn from an older render is refused here (the prompt stays up).
-        val now = deps.wallClock.now()
-        if (choice !in CrashPrompt.of(run.facts, now).choices) {
-            deps.log("run $id crash: $choice refused (not offered after ${run.facts.interruptedFor(now).inWholeMinutes} min)")
+        val resolution = CrashPrompt.resolve(run.facts, deps.wallClock.now(), choice)
+        if (resolution is CrashPrompt.Resolution.Refused) {
+            // A late tap on a Continue still drawn from an older render: the prompt stays up and redraws without it.
+            deps.log("run $id crash: ${resolution.choice} refused (not offered after ${resolution.interruptedFor.inWholeMinutes} min)")
             return
         }
-        when (choice) {
+        if (!answering.compareAndSet(false, true)) return deps.log("run $id crash: $choice ignored (an answer is being settled)")
+        when (resolution) {
             // Continue only resumes a recording the store still holds as `active`: one already stopped (a crash after
             // the stop, or a Save that got halfway) has nothing to resume, so the answer is saved instead.
-            CrashChoice.Continue -> openRun {
-                val stored = runCatching { storedState(run) }.getOrElse { deps.log("run $id crash: continue failed: $it"); return@openRun null }
-                if (stored != RecordingState.Active) {
-                    deps.log("run $id crash: continue refused (stored $stored), saving")
-                    runCatching { save(run) }
-                        .onSuccess { _unfinished.value = null; deps.log("run $id crash: saved → computing") }
-                        .onFailure { deps.log("run $id crash: save failed: $it") }
-                    return@openRun null
+            is CrashPrompt.Resolution.Continue -> {
+                val launched = openRun {
+                    try {
+                        val stored = runCatching { storedState(run) }.getOrElse { deps.log("run $id crash: continue failed: $it"); return@openRun null }
+                        if (stored != RecordingState.Active) {
+                            deps.log("run $id crash: continue refused (stored $stored), saving")
+                            runCatching { save(run, CrashPrompt.Resolution.Save(crashMark(resolution.at), endAt = run.facts.savedUntil)) }
+                                .onSuccess { _unfinished.value = null; deps.log("run $id crash: saved → computing") }
+                                .onFailure { deps.log("run $id crash: save failed: $it") }
+                            return@openRun null
+                        }
+                        ActiveRun.resume(deps, scope, run, resolution.at).also { _unfinished.value = null; deps.log("run $id crash: continued") }
+                    } finally {
+                        answering.store(false)
+                    }
                 }
-                ActiveRun.resume(deps, scope, run).also { _unfinished.value = null; deps.log("run $id crash: continued") }
+                if (!launched) answering.store(false)
             }
-            CrashChoice.Save -> settleUnfinished(id, "saved → computing", "save") { save(run) }
-            CrashChoice.Delete -> settleUnfinished(id, "deleted", "delete") { deps.store.delete(run.id) }
+            is CrashPrompt.Resolution.Save -> settleUnfinished(id, "saved → computing", "save") { save(run, resolution) }
+            CrashPrompt.Resolution.Delete -> settleUnfinished(id, "deleted", "delete") { deps.store.delete(run.id) }
+            is CrashPrompt.Resolution.Refused -> error("handled above")
         }
     }
 
     /**
-     * Save: the recording ends where the store last heard from it (D30: never at reopen) and goes to `computing`, where a
+     * Save: the recording ends at [answer]'s `endAt` (`savedUntil`, D30: never at reopen) and goes to `computing`, where a
      * normally closed run sits too (`closeRun`); engine/04's summary path picks it up from there. Each attempt re-reads the
      * stored data and does only the steps left, so a retry after a half-done Save never repeats a step.
      *
-     * D32: while still `active`, the crash is marked first (`CrashRecovered`, Auto, at the answer, as Continue marks it),
-     * flushed with the heartbeat it already has so "saved until" does not move. A mark later than that heartbeat can only
-     * be this Save's own (a resumed run's mark is followed by its first flush's later heartbeat), so a retry skips it.
+     * D32: while still `active`, the crash mark is flushed first, with the heartbeat it already has so "saved until" does
+     * not move. It is stamped no earlier than that heartbeat (a wall clock moved backwards still lands it at or after it),
+     * so a mark at or after `savedUntil` can only be this Save's own (a resumed run's mark is followed by its first flush's
+     * later heartbeat): a retry finds it and skips it.
      */
-    private suspend fun save(run: UnfinishedRun) {
+    private suspend fun save(run: UnfinishedRun, answer: CrashPrompt.Resolution.Save) {
         val data = deps.store.load(run.id) ?: return // gone: nothing left to save
         val stored = data.recording.state
         if (stored == RecordingState.Active) {
-            val heartbeat = data.lastPersistedAt ?: data.recording.startUtc
-            val marked = data.events.any { it.kind == EventKind.CrashRecovered && it.t > heartbeat }
+            val savedUntil = answer.endAt
+            val marked = data.events.any { it.kind == EventKind.CrashRecovered && it.t >= savedUntil }
             if (!marked) {
-                val mark = RecordingEvent(deps.wallClock.now(), EventKind.CrashRecovered, EventSource.Auto)
-                deps.store.flush(FlushBatch(run.id, events = listOf(mark), persistedAt = heartbeat))
+                val mark = crashMark(maxOf(answer.mark.t, savedUntil))
+                deps.store.flush(FlushBatch(run.id, events = listOf(mark), persistedAt = savedUntil))
             }
-            deps.store.stop(run.id, run.facts.savedUntil)
+            deps.store.stop(run.id, savedUntil)
         }
         if (stored == RecordingState.Active || stored == RecordingState.Stopping) deps.store.beginComputing(run.id)
     }
@@ -129,12 +145,16 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     /** The recording's state as the store holds it now — not as it was at boot. */
     private suspend fun storedState(run: UnfinishedRun): RecordingState? = deps.store.load(run.id)?.recording?.state
 
-    /** Save/Delete: the store call, then the prompt goes away and it is logged — or it stays up and the failure is logged. */
+    /** Save/Delete: the store call, then the prompt goes away and it is logged — or it stays up and the failure is logged. Releases `answering`. */
     private fun settleUnfinished(id: String, done: String, verb: String, call: suspend () -> Unit) {
         scope.launch {
-            runCatching { call() }
-                .onSuccess { _unfinished.value = null; deps.log("run $id crash: $done") }
-                .onFailure { deps.log("run $id crash: $verb failed: $it") }
+            try {
+                runCatching { call() }
+                    .onSuccess { _unfinished.value = null; deps.log("run $id crash: $done") }
+                    .onFailure { deps.log("run $id crash: $verb failed: $it") }
+            } finally {
+                answering.store(false)
+            }
         }
     }
 

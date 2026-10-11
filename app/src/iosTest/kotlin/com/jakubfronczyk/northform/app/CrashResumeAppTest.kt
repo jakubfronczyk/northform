@@ -364,4 +364,51 @@ class CrashResumeAppTest {
             driver.close()
         }
     }
+
+    /** Hands the coroutine back after every load and flush, so a second tap can land while a settle is mid-flight. */
+    private fun yieldingStore(real: RecordingStore) = object : RecordingStore by real {
+        override suspend fun load(id: RecordingId) = real.load(id).also { kotlinx.coroutines.yield() }
+        override suspend fun flush(batch: FlushBatch) { real.flush(batch); kotlinx.coroutines.yield() }
+    }
+
+    @Test
+    fun two_save_taps_before_the_store_answers_write_one_crash_mark() = runTest {
+        val driver = inMemoryDriver("crash-resume-double-save")
+        try {
+            val real = SqlRecordingStore(driver, io = EmptyCoroutineContext)
+            seed(real)
+            val model = AppModel(replayDeps(straightRun(), yieldingStore(real), clockStart = t0 + 1.hours), backgroundScope)
+            model.checkUnfinished(); runCurrent()
+            model.resolveUnfinished(CrashChoice.Save)
+            model.resolveUnfinished(CrashChoice.Save) // the second tap lands while the first settle is running
+            runCurrent()
+            val saved = assertNotNull(real.load(seeded))
+            assertEquals(RecordingState.Computing, saved.recording.state)
+            assertEquals(1, saved.events.count { it.kind == EventKind.CrashRecovered }, "${saved.events}")
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun a_save_retry_after_the_clock_moved_back_writes_one_crash_mark() = runTest {
+        val driver = inMemoryDriver("crash-resume-clock-back")
+        try {
+            val real = SqlRecordingStore(driver, io = EmptyCoroutineContext)
+            seed(real) // heartbeat t0 + 30 s
+            // The wall clock reads before the heartbeat (manual change, NTP step): the mark must still be found on retry.
+            val model = AppModel(replayDeps(straightRun(), failingStopOnce(real), clockStart = t0 + 10.seconds), backgroundScope)
+            model.checkUnfinished(); runCurrent()
+            model.resolveUnfinished(CrashChoice.Save); runCurrent() // marked, then the stop fails
+            advanceTimeBy(5.seconds)
+            model.resolveUnfinished(CrashChoice.Save); runCurrent()
+            val saved = assertNotNull(real.load(seeded))
+            assertEquals(RecordingState.Computing, saved.recording.state)
+            val marks = saved.events.filter { it.kind == EventKind.CrashRecovered }
+            assertEquals(1, marks.size, "${saved.events}")
+            assertTrue(marks.single().t >= t0 + 30.seconds, "the mark is never stamped before the heartbeat: ${marks.single()}")
+        } finally {
+            driver.close()
+        }
+    }
 }
