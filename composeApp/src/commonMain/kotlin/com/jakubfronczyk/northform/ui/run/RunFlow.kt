@@ -48,9 +48,9 @@ fun RunFlow(
     onClose: () -> Unit,
     map: @Composable (route: Route) -> Unit,
     /** E1: the sensor's connection + battery for the gate; null = unknown (previews, replay). */
-    gateSensor: GateSensor? = null,
+    gateSensor: GateSensor?,
     /** The gate's "Connect" next to a sensor that is not connected; null hides it. */
-    connectSensor: (() -> Unit)? = null,
+    connectSensor: (() -> Unit)?,
 ) {
     val scope = rememberCoroutineScope()
     val snapshot by session.snapshots.collectAsState()

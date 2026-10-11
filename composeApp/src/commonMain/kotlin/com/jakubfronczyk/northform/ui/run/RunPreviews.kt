@@ -12,14 +12,14 @@ import kotlin.time.Duration.Companion.seconds
 /** Previews draw the Compose route (`RouteCanvas`); the platform map is injected only by `:app`. */
 @Composable
 private fun previewRun(snapshot: RunSnapshot) {
-    RunFlow(FakeRunSession(snapshot, FakeRunSession.previewRoute), onClose = {}, map = { r -> RouteCanvas(r) })
+    RunFlow(FakeRunSession(snapshot, FakeRunSession.previewRoute), onClose = {}, map = { r -> RouteCanvas(r) }, gateSensor = null, connectSensor = null)
 }
 
 // Gate (R24/E1): one preview per artboard state. The initial snapshot has nothing seen yet.
 private val gate = RunSnapshot(RunPhase.Gate, hrLost = true, gpsLost = true)
 @Composable
 private fun previewGate(snapshot: RunSnapshot, sensor: GateSensor? = null) {
-    RunFlow(FakeRunSession(snapshot), onClose = {}, map = { r -> RouteCanvas(r) }, gateSensor = sensor)
+    RunFlow(FakeRunSession(snapshot), onClose = {}, map = { r -> RouteCanvas(r) }, gateSensor = sensor, connectSensor = {})
 }
 @Preview @Composable fun GateWaitingPreview() = previewGate(gate.copy(hrLost = false, hrNow = 74), GateSensor(true, 82))
 @Preview @Composable fun GateWaitingForHrPreview() = previewGate(gate.copy(gpsLost = false))
