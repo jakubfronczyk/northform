@@ -164,7 +164,7 @@ fun RunReducer.resumed(rebuilt: RunState, at: Instant): RunState {
     val buffer = state.buffer
     return state.copy(
         buffer = buffer.copy(
-            events = buffer.events + RecordingEvent(at, EventKind.CrashRecovered, EventSource.Auto),
+            events = buffer.events + crashMark(at),
             inFlight = null,
             flushRequestedAt = null,
             lastPersistAt = heartbeat,

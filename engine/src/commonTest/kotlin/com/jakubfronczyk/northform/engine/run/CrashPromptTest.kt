@@ -1,5 +1,8 @@
 package com.jakubfronczyk.northform.engine.run
 
+import com.jakubfronczyk.northform.core.EventKind
+import com.jakubfronczyk.northform.core.EventSource
+import com.jakubfronczyk.northform.core.RecordingEvent
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RecordingState.Active
 import com.jakubfronczyk.northform.core.RecordingState.Computing
@@ -41,11 +44,32 @@ class CrashPromptTest {
 
     @Test
     fun the_interruption_is_measured_at_the_moment_asked_not_when_the_facts_were_read() {
-        val savedUntil = Instant.parse("2026-10-11T06:00:00Z")
-        val facts = CrashFacts(Active, startedAt = savedUntil - 30.minutes, tzOffset = 0, distance = 5000.0, totalTime = 30.minutes, savedUntil = savedUntil)
-
         assertEquals(Continue, CrashPrompt.of(facts, now = savedUntil + 5.minutes).main)
         assertEquals(Save, CrashPrompt.of(facts, now = savedUntil + 10.minutes).main, "the same facts, later: Save leads")
         assertEquals(listOf(Save, Delete), CrashPrompt.of(facts, now = savedUntil + 2.hours).choices, "left up for 2 h: Continue is gone")
+    }
+
+    private val savedUntil = Instant.parse("2026-10-11T06:00:00Z")
+    private val facts = CrashFacts(Active, startedAt = savedUntil - 30.minutes, tzOffset = 0, distance = 5000.0, totalTime = 30.minutes, savedUntil = savedUntil)
+
+    @Test
+    fun a_clock_moved_backwards_reads_as_no_interruption() {
+        assertEquals(Duration.ZERO, facts.interruptedFor(savedUntil - 3.minutes))
+    }
+
+    @Test
+    fun the_crash_mark_is_an_auto_crash_recovered_at_the_answer() {
+        assertEquals(RecordingEvent(savedUntil, EventKind.CrashRecovered, EventSource.Auto), crashMark(savedUntil))
+    }
+
+    @Test
+    fun resolve_answers_the_tap_with_what_the_app_does() {
+        val now = savedUntil + 5.minutes
+        assertEquals(CrashPrompt.Resolution.Continue(at = now), CrashPrompt.resolve(facts, now, Continue))
+        assertEquals(CrashPrompt.Resolution.Save(mark = crashMark(now), endAt = savedUntil), CrashPrompt.resolve(facts, now, Save), "D30: ends at the heartbeat")
+        assertEquals(CrashPrompt.Resolution.Delete, CrashPrompt.resolve(facts, now, Delete))
+        val late = savedUntil + 2.hours
+        assertEquals(CrashPrompt.Resolution.Refused(Continue, 2.hours), CrashPrompt.resolve(facts, late, Continue), "D30: a Continue drawn earlier is refused at the tap")
+        assertEquals(CrashPrompt.Resolution.Save(mark = crashMark(late), endAt = savedUntil), CrashPrompt.resolve(facts, late, Save))
     }
 }
