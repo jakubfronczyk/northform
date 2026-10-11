@@ -39,20 +39,22 @@ import com.jakubfronczyk.northform.ui.Type
 import com.jakubfronczyk.northform.ui.VDivider
 import com.jakubfronczyk.northform.ui.ValueCell
 import kotlinx.coroutines.delay
-import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
 
 /**
  * The R28 crash prompt (`design/canvas/project/CrashPrompt.dc.html`, `CrashPromptLate` = the same board
  * past 10 minutes): a scrim over Today and a bottom sheet with what is saved and the three answers.
  * Which answers are offered and which one leads is [CrashPrompt.of]'s call, not the screen's: it is asked again
- * every second from the wall clock [now] (D30), so a prompt left up past 10 min turns to Save-first and past 2 h
- * drops Continue while it is on screen. Delete asks twice (R27), in place.
+ * at every minute boundary from the wall clock [now] (D30, [untilNextMinute]), so a prompt left up past 10 min turns to
+ * Save-first and past 2 h drops Continue while it is on screen; the tap itself is re-checked by `CrashPrompt.resolve`.
+ * The buttons keep one order ([inFixedOrder]); only the filled one moves. Delete asks twice (R27), in place.
  */
 @Composable
 fun CrashPromptScreen(facts: CrashFacts, now: () -> Instant, onChoice: (CrashChoice) -> Unit) {
     var at by remember { mutableStateOf(now()) }
-    LaunchedEffect(facts) { while (true) { at = now(); delay(1.seconds) } }
+    LaunchedEffect(facts) { while (true) { at = now(); delay(untilNextMinute(facts, at)) } }
     val prompt = CrashPrompt.of(facts, at)
     val minutesAgo = facts.interruptedFor(at).inWholeMinutes
     // The scrim takes every touch: Today's buttons under it stay out of reach until the prompt is answered.
@@ -96,7 +98,7 @@ fun CrashPromptScreen(facts: CrashFacts, now: () -> Instant, onChoice: (CrashCho
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 var confirmDelete by remember { mutableStateOf(false) }
-                for (choice in prompt.choices) when (choice) {
+                for (choice in prompt.inFixedOrder()) when (choice) {
                     CrashChoice.Continue -> ChoiceButton("Continue run", main = prompt.main == choice, mainColors = Continue) { onChoice(choice) }
                     CrashChoice.Save -> ChoiceButton("Save and finish", main = prompt.main == choice, mainColors = Save) { onChoice(choice) }
                     CrashChoice.Delete -> Text(
@@ -132,3 +134,24 @@ private val Save = Theme.primary to Color.White
 private val SheetHeadline = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Black)
 private val GapTitle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
 private val DeleteLabel = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+
+/**
+ * The offered answers in the one order the screen draws them (D39: Garmin and Strava never swap buttons under the finger):
+ * Continue (while offered) first, Save second, Delete last. Which one leads is shown by emphasis alone ([CrashPrompt.main]).
+ */
+internal fun CrashPrompt.inFixedOrder(): List<CrashChoice> = FixedOrder.filter { it in choices }
+
+private val FixedOrder = listOf(CrashChoice.Continue, CrashChoice.Save, CrashChoice.Delete)
+
+/**
+ * How long until anything on the prompt can change: everything it shows is per minute, so the next redraw is the earlier of
+ * the gap's next whole minute ("Interrupted N min ago", the 10 min / 2 h rules) and the local wall clock's ("to 07:42").
+ * Never zero, so the redraw loop cannot spin.
+ */
+internal fun untilNextMinute(facts: CrashFacts, at: Instant): Duration {
+    val minute = 60_000L
+    val gapMs = (at - facts.savedUntil).inWholeMilliseconds
+    val toGapMinute = if (gapMs < 0) -gapMs + minute else minute - gapMs.mod(minute)
+    val toWallMinute = minute - (at.toEpochMilliseconds() + facts.tzOffset * 1000L).mod(minute)
+    return minOf(toGapMinute, toWallMinute).milliseconds
+}
