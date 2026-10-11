@@ -120,4 +120,11 @@ data class RunSnapshot(
     val zone: Zone? = null,
     val hrLost: Boolean = false,
     val gpsLost: Boolean = false,
+    /**
+     * D35: when the current heart-rate loss began (the `HrLost` event's moment), so the run screen can show
+     * "Sensor lost · 0:12" and keep it across recreation; null while heart rate is fine and at the gate.
+     */
+    val hrLostSince: Instant? = null,
+    /** D35: the run's type (`RunConfig.type`), for the Run/Walk chip and nouns. */
+    val type: RecordingType = RecordingType.Run,
 )

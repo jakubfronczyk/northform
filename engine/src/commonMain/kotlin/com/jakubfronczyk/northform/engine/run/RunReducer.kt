@@ -110,7 +110,7 @@ object RunReducer {
             if (startedAt != null && p.stoppedAt == null) {
                 val lastHrTime = p.lastHr?.t ?: startedAt
                 if (!p.hrLost && t - lastHrTime >= hrLostAfter) {
-                    p = p.copy(hrLost = true)
+                    p = p.copy(hrLost = true, hrLostSince = t) // D35: the loss starts where its event does
                     record(EventKind.HrLost, t)
                 }
                 if (p.hrLost && !p.hrLostAlerted && t - lastHrTime >= hrLostAlertAfter) {
@@ -147,7 +147,7 @@ object RunReducer {
             )
             b = b.copy(hr = b.hr + sample)
             if (p.hrLost) {
-                p = p.copy(hrLost = false, hrLostAlerted = false)
+                p = p.copy(hrLost = false, hrLostSince = null, hrLostAlerted = false)
                 record(EventKind.HrBack, sample.t)
             }
         }

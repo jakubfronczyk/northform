@@ -2,7 +2,6 @@ package com.jakubfronczyk.northform.engine.run
 
 import com.jakubfronczyk.northform.core.HrSample
 import com.jakubfronczyk.northform.core.LocationFix
-import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.RecordingEvent
 import com.jakubfronczyk.northform.core.metrics.HeartRate
 import com.jakubfronczyk.northform.core.metrics.Splits
@@ -20,7 +19,7 @@ data class RunState(
     val progress: RunProgress = RunProgress(),
     val buffer: PersistBuffer = PersistBuffer(),
 ) {
-    val snapshot: RunSnapshot get() = progress.snapshot(config.profile)
+    val snapshot: RunSnapshot get() = progress.snapshot(config)
 }
 
 /**
@@ -38,6 +37,8 @@ data class RunProgress(
     // Heart
     val lastHr: HrSample? = null,
     val hrLost: Boolean = false,
+    /** D35: the moment [hrLost] turned true (its `HrLost` event's time); null while it is false. */
+    val hrLostSince: Instant? = null,
     /** The alert for the current loss has played (D108). */
     val hrLostAlerted: Boolean = false,
     val hrSum: Int = 0,
@@ -97,7 +98,8 @@ data class RunProgress(
      * screens already read: `hrLost`/`gpsLost` = not ready (R24), `hrNow` = the live bpm. After start
      * they mean what they always meant (R25, R26).
      */
-    fun snapshot(profile: Profile): RunSnapshot {
+    fun snapshot(config: RunConfig): RunSnapshot {
+        val profile = config.profile
         val now = lastTick ?: startedAt
         val total = if (startedAt != null && now != null) maxOf(Duration.ZERO, (stoppedAt ?: now) - startedAt) else Duration.ZERO
         val splitDistance = distance - splitStartDistance
@@ -121,6 +123,8 @@ data class RunProgress(
             zone = hrNow?.let { profile.zoneOf(it) },
             hrLost = if (atTheGate) !gateHrReady else hrLost,
             gpsLost = if (atTheGate) !gateGpsReady else gpsLost,
+            hrLostSince = if (atTheGate) null else hrLostSince,
+            type = config.type,
         )
     }
 }

@@ -4,6 +4,7 @@ import com.jakubfronczyk.northform.core.DisconnectReason
 import com.jakubfronczyk.northform.core.EventKind
 import com.jakubfronczyk.northform.core.HrSample
 import com.jakubfronczyk.northform.core.LocationFix
+import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.SensorState
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.inSecondsDouble
@@ -246,6 +247,38 @@ class RunReducerTest {
         run.send(tick(11.0))
         assertNull(run.state.snapshot.hrNow)
         assertEquals(150, run.state.snapshot.hrMax)
+    }
+
+    /** D35: the snapshot carries when the current loss began, cleared when heart rate is back, set anew on the next loss. */
+    @Test
+    fun hr_lost_since_is_the_moment_each_loss_began() {
+        val run = activeRun() // started at 5 s
+        data class Row(val input: RunInput, val since: Double?)
+        val table = listOf(
+            Row(hr(6.0, 140), null),
+            Row(tick(10.0), null), // 4 s without a sample
+            Row(tick(11.0), 11.0), // 5 s: lost, since now
+            Row(tick(20.0), 11.0), // still the same loss
+            Row(hr(21.5, 141), null), // back
+            Row(tick(26.0), null),
+            Row(tick(27.0), 27.0), // lost again: a new start
+            Row(user(UserAction.Pause, 28.0), 27.0), // a pause does not end a loss
+        )
+        for ((i, row) in table.withIndex()) {
+            run.send(row.input)
+            assertEquals(row.since?.let(::at), run.state.snapshot.hrLostSince, "row $i: ${row.input}")
+        }
+        assertEquals(run.recordedEvents.filter { it.kind == EventKind.HrLost }.map { it.t }, listOf(at(11), at(27)), "the same moments as the events")
+    }
+
+    @Test
+    fun snapshot_carries_the_run_type_and_no_loss_start_at_the_gate() {
+        val walk = RunHarness(RunHarness.config.copy(type = RecordingType.Walk))
+        walk.send(user(UserAction.Start, 0.0))
+        assertEquals(RecordingType.Walk, walk.state.snapshot.type)
+        assertTrue(walk.state.snapshot.hrLost, "at the gate hrLost means not ready")
+        assertNull(walk.state.snapshot.hrLostSince)
+        assertEquals(RecordingType.Run, activeRun().state.snapshot.type)
     }
 
     /** D31: Bluetooth off is recorded as `BluetoothOff`, never as a drop; a drop while it is off adds nothing. */

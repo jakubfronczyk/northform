@@ -200,6 +200,8 @@ class RealRecordingsTest {
                 live.progress, rebuilt.progress,
                 "$name, ticks +$tickOffset, confirm after $confirmAfter: at ${(heartbeat - script.meta.start).inSecondsDouble} s",
             )
+            // D35: what the screen reads, the loss start and the type included.
+            assertEquals(live.snapshot, rebuilt.snapshot, "$name snapshot at ${(heartbeat - script.meta.start).inSecondsDouble} s")
         }
     }
 
