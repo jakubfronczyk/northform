@@ -13,8 +13,8 @@ import kotlin.time.Instant
  *
  * Vocabulary (GLOSSARY of the Swift build, "Signal loss"): a **drop** is the Bluetooth link lost without
  * the user asking (`SensorLost`; a user disconnect records nothing), a **reconnect** is the link coming back
- * (`SensorReconnected`), HR/GPS **lost seconds** are the sum of every Lost → Back interval, a **recovery** is a
- * crash the user continued (`CrashRecovered`). **Bluetooth off** (`BluetoothOff`, D31) is the radio switched
+ * (`SensorReconnected`), HR/GPS **lost seconds** are the sum of every Lost → Back interval, a **crash** is the app
+ * reopened after a crash (`CrashRecovered`, written whatever the user chose, D32). **Bluetooth off** (`BluetoothOff`, D31) is the radio switched
  * off, counted apart and never as a drop; the link coming back after it is a reconnect with no reconnect time
  * (no drop was open).
  */
@@ -25,7 +25,8 @@ data class ReliabilityRecord(
     val reconnectTimes: List<Duration>,
     val hrLost: Duration,
     val gpsLost: Duration,
-    val recoveries: Int,
+    /** `CrashRecovered` events (D32): every crash the run went through, continued or saved. */
+    val crashes: Int,
     /** `BluetoothOff` events (D31): the radio was off, not a drop. */
     val bluetoothOff: Int = 0,
 ) {
@@ -35,7 +36,7 @@ data class ReliabilityRecord(
     companion object {
         /**
          * Bumped when a counting rule changes, so stored rows can be told apart from fresh ones.
-         * 2 (D31): Bluetooth-off is counted apart, no longer as a drop.
+         * 2 (D31, D32): Bluetooth-off is counted apart, no longer as a drop; `recoveries` became `crashes`.
          */
         const val version = 2
         val none = ReliabilityRecord(0, 0, emptyList(), Duration.ZERO, Duration.ZERO, 0)
@@ -55,7 +56,7 @@ data class ReliabilityRecord(
             val end = closeAt ?: data.lastPersistedAt ?: data.recording.endUtc ?: data.events.lastOrNull()?.t ?: data.recording.startUtc
             var drops = 0
             var reconnects = 0
-            var recoveries = 0
+            var crashes = 0
             var bluetoothOff = 0
             val reconnectTimes = ArrayList<Duration>()
             var dropOpenedAt: Instant? = null
@@ -76,7 +77,7 @@ data class ReliabilityRecord(
                     EventKind.HrBack -> hr.back(t)
                     EventKind.GpsLost -> gps.lost(t)
                     EventKind.GpsBack -> gps.back(t)
-                    EventKind.CrashRecovered -> recoveries += 1
+                    EventKind.CrashRecovered -> crashes += 1
                     EventKind.Pause, EventKind.Resume, is EventKind.Split, EventKind.Stop, EventKind.CooldownEnd -> Unit
                 }
             }
@@ -86,7 +87,7 @@ data class ReliabilityRecord(
                 reconnectTimes = reconnectTimes,
                 hrLost = hr.total(end),
                 gpsLost = gps.total(end),
-                recoveries = recoveries,
+                crashes = crashes,
                 bluetoothOff = bluetoothOff,
             )
         }

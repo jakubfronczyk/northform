@@ -136,7 +136,7 @@ class SqlRecordingStore(
             drops = record.drops.toLong(), reconnects = record.reconnects.toLong(),
             reconnect_times = record.reconnectTimes.joinToString(",") { it.inWholeNanoseconds.toString() },
             hr_lost = record.hrLost.inWholeNanoseconds, gps_lost = record.gpsLost.inWholeNanoseconds,
-            recoveries = record.recoveries.toLong(), bluetooth_off = record.bluetoothOff.toLong(),
+            crashes = record.crashes.toLong(), bluetooth_off = record.bluetoothOff.toLong(),
         )
     }
 
@@ -148,7 +148,7 @@ class SqlRecordingStore(
                 ReliabilityRecord(
                     drops = r.drops.toInt(), reconnects = r.reconnects.toInt(),
                     reconnectTimes = r.reconnect_times.split(',').filter { it.isNotEmpty() }.map { it.toLong().nanoseconds },
-                    hrLost = r.hr_lost.nanoseconds, gpsLost = r.gps_lost.nanoseconds, recoveries = r.recoveries.toInt(),
+                    hrLost = r.hr_lost.nanoseconds, gpsLost = r.gps_lost.nanoseconds, crashes = r.crashes.toInt(),
                     bluetoothOff = r.bluetooth_off.toInt(),
                 )
             }

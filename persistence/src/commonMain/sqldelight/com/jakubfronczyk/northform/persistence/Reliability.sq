@@ -1,6 +1,6 @@
 -- Schema v3 (engine/03, D31): the reliability log per recording (R29), a cache of `ReliabilityRecord.of(load(id))`
 -- stamped with the rule version that computed it. Created for an existing database by `migrations/1.sqm` and
--- recreated with the `bluetooth_off` column by `migrations/2.sqm`; this
+-- recreated with `bluetooth_off` (D31) and `recoveries` renamed `crashes` (D32) by `migrations/2.sqm`; this
 -- file is the same table for a fresh install (the fresh schema = every .sq file; `verifySqlDelightMigration`
 -- proves the two agree). Durations are nanoseconds like every other time column (Nanos.kt).
 
@@ -12,12 +12,12 @@ CREATE TABLE reliability (
     reconnect_times TEXT NOT NULL,     -- ns per reconnect that followed a drop, comma-separated, run order ('' = none)
     hr_lost INTEGER NOT NULL,          -- ns
     gps_lost INTEGER NOT NULL,         -- ns
-    recoveries INTEGER NOT NULL,       -- crashRecovered events
+    crashes INTEGER NOT NULL,          -- crashRecovered events (D32)
     bluetooth_off INTEGER NOT NULL     -- bluetoothOff events (D31)
 );
 
 upsertReliability:
-INSERT OR REPLACE INTO reliability(recording_id, version, drops, reconnects, reconnect_times, hr_lost, gps_lost, recoveries, bluetooth_off)
+INSERT OR REPLACE INTO reliability(recording_id, version, drops, reconnects, reconnect_times, hr_lost, gps_lost, crashes, bluetooth_off)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 selectReliability:

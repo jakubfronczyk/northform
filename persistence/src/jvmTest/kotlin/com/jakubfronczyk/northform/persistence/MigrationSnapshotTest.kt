@@ -37,7 +37,7 @@ class MigrationSnapshotTest {
             store.create(recording)
             assertEquals(recording, assertNotNull(store.load(recording.id)).recording)
             // v2 (1.sqm): the real v1 file, migrated, takes the reliability row too.
-            val record = ReliabilityRecord(drops = 1, reconnects = 1, reconnectTimes = listOf(30.seconds), hrLost = 35.seconds, gpsLost = 0.seconds, recoveries = 0, bluetoothOff = 1)
+            val record = ReliabilityRecord(drops = 1, reconnects = 1, reconnectTimes = listOf(30.seconds), hrLost = 35.seconds, gpsLost = 0.seconds, crashes = 0, bluetoothOff = 1)
             store.saveReliability(recording.id, record)
             assertEquals(record, store.reliability(recording.id))
         } finally {

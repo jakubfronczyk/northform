@@ -62,7 +62,7 @@ class MigrationTest {
 
             // v2 (1.sqm, engine/03): the migrated database takes a reliability row for the v1 run and reads it back.
             assertNull(store.reliability(id), "no log yet for a v1 run")
-            val record = ReliabilityRecord(drops = 2, reconnects = 1, reconnectTimes = listOf(30.878.seconds), hrLost = 41.seconds, gpsLost = Duration.ZERO, recoveries = 1, bluetoothOff = 3)
+            val record = ReliabilityRecord(drops = 2, reconnects = 1, reconnectTimes = listOf(30.878.seconds), hrLost = 41.seconds, gpsLost = Duration.ZERO, crashes = 1, bluetoothOff = 3)
             store.saveReliability(id, record)
             assertEquals(record, store.reliability(id))
             store.saveReliability(id, ReliabilityRecord.none)

@@ -81,7 +81,7 @@ data class RunSummary(
         val hrGap: Duration,
         /** `GpsLost` events. */
         val gpsLosses: Int,
-        /** `CrashRecovered` events. */
+        /** `CrashRecovered` events: every crash the run went through (D32). */
         val crashes: Int,
     )
 
@@ -142,7 +142,7 @@ data class RunSummary(
                 sensorDrops = log.drops,
                 hrGap = log.hrLost,
                 gpsLosses = data.events.count { it.kind == EventKind.GpsLost }, // a count; the log keeps GPS lost time
-                crashes = log.recoveries,
+                crashes = log.crashes,
             )
         }
     }

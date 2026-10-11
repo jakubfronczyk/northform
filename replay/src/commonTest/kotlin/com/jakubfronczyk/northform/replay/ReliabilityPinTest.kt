@@ -29,16 +29,16 @@ class ReliabilityPinTest {
             assertEquals(1, record.drops, name)
             assertEquals(1, record.reconnects, name)
             assertEquals(listOf(back.t - lost.t), record.reconnectTimes, "$name: the reconnect time is the span between the two stored events")
-            assertEquals(0, record.recoveries, name)
+            assertEquals(0, record.crashes, name)
         }
     }
 
     @Test
     fun the_records_stay_put() {
         val expected = mapOf(
-            "run-1-park" to ReliabilityRecord(drops = 1, reconnects = 1, reconnectTimes = listOf(30.878.seconds), hrLost = 84.189.seconds, gpsLost = 439.734.seconds, recoveries = 0),
-            "run-2-walk" to ReliabilityRecord(drops = 1, reconnects = 1, reconnectTimes = listOf(13.935.seconds), hrLost = 28.027.seconds, gpsLost = 253.106.seconds, recoveries = 0),
-            "straight-run-3min" to ReliabilityRecord(drops = 1, reconnects = 1, reconnectTimes = listOf(15.seconds), hrLost = 10.5.seconds, gpsLost = 0.seconds, recoveries = 0),
+            "run-1-park" to ReliabilityRecord(drops = 1, reconnects = 1, reconnectTimes = listOf(30.878.seconds), hrLost = 84.189.seconds, gpsLost = 439.734.seconds, crashes = 0),
+            "run-2-walk" to ReliabilityRecord(drops = 1, reconnects = 1, reconnectTimes = listOf(13.935.seconds), hrLost = 28.027.seconds, gpsLost = 253.106.seconds, crashes = 0),
+            "straight-run-3min" to ReliabilityRecord(drops = 1, reconnects = 1, reconnectTimes = listOf(15.seconds), hrLost = 10.5.seconds, gpsLost = 0.seconds, crashes = 0),
             "slow-walk-5min" to ReliabilityRecord.none,
             "sitting-still-10min" to ReliabilityRecord.none,
         )

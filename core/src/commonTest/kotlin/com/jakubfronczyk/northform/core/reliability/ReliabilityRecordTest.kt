@@ -34,7 +34,7 @@ class ReliabilityRecordTest {
     @Test
     fun a_drop_and_its_reconnect_count_once_with_the_time_between_them() {
         val record = ReliabilityRecord.of(data(100 to EventKind.SensorLost, 130 to EventKind.SensorReconnected))
-        assertEquals(ReliabilityRecord(drops = 1, reconnects = 1, reconnectTimes = listOf(30.seconds), hrLost = Duration.ZERO, gpsLost = Duration.ZERO, recoveries = 0), record)
+        assertEquals(ReliabilityRecord(drops = 1, reconnects = 1, reconnectTimes = listOf(30.seconds), hrLost = Duration.ZERO, gpsLost = Duration.ZERO, crashes = 0), record)
         assertEquals(30.seconds, record.reconnectTotal)
         assertEquals(30.seconds, record.reconnectLongest)
     }
@@ -97,8 +97,8 @@ class ReliabilityRecordTest {
     }
 
     @Test
-    fun a_crash_the_user_continued_is_a_recovery() {
-        assertEquals(2, ReliabilityRecord.of(data(100 to EventKind.CrashRecovered, 300 to EventKind.CrashRecovered)).recoveries)
+    fun every_crash_recovered_event_is_a_crash() {
+        assertEquals(2, ReliabilityRecord.of(data(100 to EventKind.CrashRecovered, 300 to EventKind.CrashRecovered)).crashes)
     }
 
     @Test

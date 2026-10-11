@@ -83,7 +83,10 @@ sealed interface EventKind {
     data object Stop : EventKind
     /** End of the 60 s heart-rate cool-down, or the skip. */
     data object CooldownEnd : EventKind
-    /** App reopened after a crash and the user chose Continue. */
+    /**
+     * The app reopened after a crash (D32): written whatever the user chose (Continue or Save; Delete removes
+     * the run), so a run a crash interrupted never looks like a normal finish.
+     */
     data object CrashRecovered : EventKind
 }
 
