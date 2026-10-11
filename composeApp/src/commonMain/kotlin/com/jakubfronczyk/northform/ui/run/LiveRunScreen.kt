@@ -196,7 +196,7 @@ private fun ZoneBar(lit: Int?) {
     Row(Modifier.fillMaxWidth().height(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.Bottom) {
         for (z in 0..5) {
             val on = z == lit
-            Box(Modifier.weight(1f).height(if (on) 8.dp else 4.dp).background(if (on) Theme.zones[z].color else RunPalette.unlit, RoundedCornerShape(4.dp)))
+            Box(Modifier.weight(1f).height(if (on) 8.dp else 4.dp).background(if (on) Theme.zoneColors[z] else RunPalette.unlit, RoundedCornerShape(4.dp)))
         }
     }
 }
@@ -309,13 +309,13 @@ fun Chip(text: String, color: Color) {
 /** `LiveRunView.swift:174` — "Z3 Moderate" in the zone colour; Z0 keeps light text on its grey. */
 @Composable
 fun ZonePill(zone: Zone) {
-    // D23: the zone value carries its number (colour) and label; the canvas names stay in Theme until the screens settle the words.
-    val info = Theme.zones[zone.number]
+    // D23 + D29: the zone value carries its number, label and name; Theme only colours it.
+    val color = Theme.zoneColors[zone.number]
     Text(
-        "${zone.label} ${info.name}",
+        "${zone.label} ${zone.name}",
         style = Type.pillLabel,
         color = if (zone.number == 0) Theme.text else Theme.bg,
-        modifier = Modifier.background(info.color, RoundedCornerShape(50)).padding(vertical = 4.dp, horizontal = 10.dp),
+        modifier = Modifier.background(color, RoundedCornerShape(50)).padding(vertical = 4.dp, horizontal = 10.dp),
     )
 }
 

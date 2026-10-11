@@ -25,14 +25,14 @@ data class Zone(
     /** "Z0" … "Z5". */
     val label: String get() = "Z$number"
 
-    /** ◻ Starting names; the screens may rename them. */
+    /** D29: plain effort words, the same table the screens show (Polar's vocabulary, the design canvas). */
     val name: String get() = names[number]
 
     operator fun contains(fraction: Double): Boolean =
         (lowerFraction == null || fraction >= lowerFraction) && (upperFraction == null || fraction < upperFraction)
 
     companion object {
-        val names: List<String> = listOf("Rest", "Recovery", "Easy", "Tempo", "Threshold", "Maximum")
+        val names: List<String> = listOf("Rest", "Very light", "Light", "Moderate", "Hard", "Maximum")
     }
 }
 

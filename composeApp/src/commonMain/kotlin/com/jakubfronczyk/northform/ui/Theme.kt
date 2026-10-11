@@ -24,15 +24,14 @@ object Theme {
     val warn = Color(0xFFE9C46A)
     val ok = Color(0xFF5FD08A)
 
-    class Zone(val name: String, val color: Color)
-
-    val zones = listOf(
-        Zone("Rest", Color(0xFF6B6C70)),
-        Zone("Very light", Color(0xFF9CA3AF)),
-        Zone("Light", Color(0xFF3B82F6)),
-        Zone("Moderate", Color(0xFF22C55E)),
-        Zone("Hard", Color(0xFFF59E0B)),
-        Zone("Maximum", Color(0xFFEF4444)),
+    /** Zone colours by number, Z0 first. The names live on `core` `Zone.name` (D29): one table. */
+    val zoneColors = listOf(
+        Color(0xFF6B6C70),
+        Color(0xFF9CA3AF),
+        Color(0xFF3B82F6),
+        Color(0xFF22C55E),
+        Color(0xFFF59E0B),
+        Color(0xFFEF4444),
     )
 }
 
