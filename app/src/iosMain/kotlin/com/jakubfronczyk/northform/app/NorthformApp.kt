@@ -111,6 +111,7 @@ object NorthformApp {
             // Debug builds write each run as a replay fixture into Documents/Recordings (visible in the Files app).
             makeTap = { meta, name -> if (Platform.isDebugBinary) RecordingTap(meta) { Documents.write(Documents.recordingPath(name), it) } else null },
             log = DeviceLog::runTrace,
+            backgroundTasks = UiBackgroundTasks(DeviceLog.app::notice),
         )
         model = AppModel(deps, scope)
         model.checkUnfinished() // 4  store.unfinished()? → remembered for the R28 prompt; nothing resumes on its own (D9)

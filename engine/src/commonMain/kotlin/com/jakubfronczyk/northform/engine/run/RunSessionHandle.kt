@@ -2,6 +2,7 @@ package com.jakubfronczyk.northform.engine.run
 
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.ports.WallClock
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.time.Instant
 
@@ -34,4 +35,12 @@ interface RunSessionHandle {
     suspend fun end(): EndResult
     /** The app went to the background at `at`: save what is buffered now (D94). */
     suspend fun backgrounded(at: Instant)
+    /**
+     * True while the last store write failed — the first row, a flush, the stop or the computing step
+     * — so the screen can say "not saving" (persistence/02); false again once a flush lands (the
+     * reducer retries by seq, D94). A default so fakes and previews need nothing: never failing.
+     */
+    val notSaving: StateFlow<Boolean> get() = NeverNotSaving
 }
+
+private val NeverNotSaving: StateFlow<Boolean> = MutableStateFlow(false)

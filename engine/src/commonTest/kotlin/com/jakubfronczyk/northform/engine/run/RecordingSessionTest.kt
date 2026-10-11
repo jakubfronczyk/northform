@@ -3,6 +3,7 @@ package com.jakubfronczyk.northform.engine.run
 import com.jakubfronczyk.northform.core.DiscoveredSensor
 import com.jakubfronczyk.northform.core.HrSample
 import com.jakubfronczyk.northform.core.LocationFix
+import com.jakubfronczyk.northform.core.Recording
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.SensorId
 import com.jakubfronczyk.northform.core.SensorState
@@ -30,6 +31,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -60,6 +62,12 @@ class RecordingSessionTest {
     /** The in-memory store, with a switch to fail the next flush once (Kotlin interface delegation for the rest). */
     private class Store(val inner: InMemoryRecordingStore = InMemoryRecordingStore()) : RecordingStore by inner {
         var failNext = false
+        /** The first row cannot be written (persistence/02): every later flush fails too, there is no recording. */
+        var failCreate = false
+        override suspend fun create(recording: Recording) {
+            if (failCreate) error("disk full")
+            inner.create(recording)
+        }
         override suspend fun flush(batch: FlushBatch) {
             if (failNext) { failNext = false; error("disk full") }
             inner.flush(batch)
@@ -127,9 +135,31 @@ class RecordingSessionTest {
         advanceTimeBy(5.seconds); runCurrent()
         store.failNext = true
         sensor.hr.emit(HrSample(session.wallClock.now(), 130))
+        assertFalse(session.notSaving.value)
         advanceTimeBy(5.seconds); runCurrent() // first flush fails → PersistFailed → buffer kept
+        assertTrue(session.notSaving.value, "the screen may say not saving (persistence/02)")
         advanceTimeBy(5.seconds); runCurrent() // next flush carries it
         assertEquals(listOf(130), store.data().hr.map { it.bpm })
+        assertFalse(session.notSaving.value, "saving again once a flush lands")
+        job.cancel()
+    }
+
+    /** persistence/02: the first row fails ⇒ "not saving" at once, and it stays, because every flush fails on a missing recording. */
+    @Test
+    fun a_failed_create_shows_not_saving_from_the_start() = runTest {
+        val sensor = FakeSensor()
+        val store = Store().apply { failCreate = true }
+        val session = session(sensor, store)
+        val job = launch { session.run() }
+        runCurrent()
+        session.tap(UserAction.Start)
+        advanceTimeBy(5.seconds); runCurrent() // countdown over: Create fails
+        assertEquals(RunPhase.Active, session.snapshots.value.phase, "the run goes on (Swift only logged this)")
+        assertTrue(session.notSaving.value)
+        sensor.hr.emit(HrSample(session.wallClock.now(), 130))
+        advanceTimeBy(10.seconds); runCurrent() // two flushes: NotFound, NotFound
+        assertTrue(session.notSaving.value)
+        assertEquals(null, store.inner.records.load(RunHarness.config.recordingId))
         job.cancel()
     }
 

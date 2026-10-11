@@ -22,13 +22,15 @@ import kotlin.time.Instant
  * change nothing. The screens depend on [RunSessionHandle], never on the real session. Tests use
  * [ScriptedFakeRunSession].
  */
-class FakeRunSession(snapshot: RunSnapshot, route: Route = Route()) : RunSessionHandle {
+class FakeRunSession(snapshot: RunSnapshot, route: Route = Route(), notSaving: Boolean = false) : RunSessionHandle {
     override val wallClock: WallClock = WallClock { Clock.System.now() }
     override val snapshots: StateFlow<RunSnapshot> = MutableStateFlow(snapshot)
     override val routes: StateFlow<Route> = MutableStateFlow(route)
     override suspend fun send(action: UserAction, at: Instant) {}
     override suspend fun end(): EndResult = EndResult.Discarded
     override suspend fun backgrounded(at: Instant) {}
+    /** persistence/02: a preview of the "not saving" state. */
+    override val notSaving: StateFlow<Boolean> = MutableStateFlow(notSaving)
 
     companion object {
         /** `LiveRunView.swift:207-218` — the preview values. */
@@ -73,6 +75,14 @@ class ScriptedFakeRunSession(
     override suspend fun end(): EndResult = if (state.value.startedAt == null) EndResult.Discarded else EndResult.Finishing
 
     override suspend fun backgrounded(at: Instant) {}
+
+    private val notSavingState = MutableStateFlow(false)
+    /** persistence/02: a store write failed; tests set it through [scriptNotSaving]. */
+    override val notSaving: StateFlow<Boolean> get() = notSavingState
+
+    fun scriptNotSaving(failing: Boolean) {
+        notSavingState.value = failing
+    }
 
     /** The clock reached `now`: the timed phases move on, as the session's tick would make them. */
     fun advanceTo(now: Instant) {

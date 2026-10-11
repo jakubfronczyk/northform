@@ -71,8 +71,9 @@ class RecordingSession(
     private val _routes = MutableStateFlow(Route())
     /** `run()` is single-shot (D112): the first caller takes this and never gives it back. */
     private val runOnce = Mutex()
-    /** The one store-effect interpreter (also what the test harness runs); a failed create/stop/computing is only logged, as in Swift. */
-    private val storeEffects = StoreEffectInterpreter(store, config.recordingId)
+    private val _notSaving = MutableStateFlow(false)
+    /** The one store-effect interpreter (also what the test harness runs); a failed create/stop/computing cannot be retried by seq, so it only marks the run "not saving" (Swift logged it). */
+    private val storeEffects = StoreEffectInterpreter(store, config.recordingId, onFailure = { _, _ -> _notSaving.value = true })
 
     /** Every change of what the run screen shows (`RecordingSession.swift:67`). */
     override val snapshots: StateFlow<RunSnapshot> = _snapshots.asStateFlow()
@@ -80,6 +81,8 @@ class RecordingSession(
     override val routes: StateFlow<Route> = _routes.asStateFlow()
     /** `RecordingSession.swift:76`. */
     val snapshot: RunSnapshot get() = _snapshots.value
+    /** persistence/02: the last store write failed; cleared by the next confirmed flush. */
+    override val notSaving: StateFlow<Boolean> = _notSaving.asStateFlow()
 
     /** Set by the first `end()` (`RecordingSession.swift:39`); atomic because `end()` may read it from another coroutine. */
     private val ended = MutableStateFlow<EndResult?>(null)
@@ -148,6 +151,11 @@ class RecordingSession(
                     }
                     is Mail.Input -> {
                         if (ended.value == EndResult.Discarded) continue // nothing may be recorded after a discard (`:144`)
+                        when (mail.input) { // the writer's answers are the store's health (persistence/02)
+                            is RunInput.Persisted -> _notSaving.value = false
+                            is RunInput.PersistFailed -> _notSaving.value = true
+                            else -> Unit
+                        }
                         inputObserver?.invoke(mail.input)
                         val (next, effects) = RunReducer.reduce(state, mail.input)
                         state = next

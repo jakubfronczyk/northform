@@ -93,6 +93,8 @@ class AppDeps(
     /** Debug builds: the tap that writes the run as a replay fixture (`AppModel.swift:142`); null in release. */
     val makeTap: (meta: ReplayMeta, fileName: String) -> RecordingTap? = { _, _ -> null },
     val log: (String) -> Unit = {},
+    /** Holds the process alive for the background flush (persistence/02): `UIApplication` on the phone, none in tests. */
+    val backgroundTasks: BackgroundTasks = BackgroundTasks.None,
     val profile: Profile = sampleProfile,
     val newRecordingId: () -> String = { NSUUID().UUIDString },
     val tzOffset: () -> Int = { NSTimeZone.localTimeZone.secondsFromGMT.toInt() },

@@ -33,12 +33,26 @@ class ActiveRun private constructor(
     /** `run()`'s job; the run is over when it completes. Tests wait on it. */
     internal val runJob: Job,
     private val tap: RecordingTap?,
+    private val watch: FlushWatch,
+    private val tasks: BackgroundTasks,
     private val release: () -> Unit,
 ) {
-    /** The app went to the background (`AppModel.swift:106`): save what is buffered (D94) and flush the tap. */
+    /**
+     * The app went to the background (`AppModel.swift:106`): save what is buffered (D94) and flush the
+     * tap. The save runs inside a background task (persistence/02) held until the store confirms the
+     * batch asked for at [at] — or iOS expires the task. Nothing to confirm before start (no row yet)
+     * or after the run's last write (the mailbox is gone, D112): then the input is just sent.
+     */
     suspend fun backgrounded(at: Instant) {
-        session.backgrounded(at)
         tap?.write()
+        if (session.snapshots.value.startedAt == null || runJob.isCompleted) {
+            session.backgrounded(at)
+            return
+        }
+        tasks.bracket(FLUSH_TASK) {
+            session.backgrounded(at)
+            watch.awaitDurable(id, at)
+        }
     }
 
     /**
@@ -78,16 +92,20 @@ class ActiveRun private constructor(
             val config = initial.config
             val observer: ((RunInput) -> Unit)? = tap?.let { it::observe } // bound reference: the tap owns the RunInput → fixture mapping (replay/01)
             val inputs = deps.source.open(deps.wallClock, scope)
-            val session = RecordingSession(config, inputs.sensor, inputs.location, deps.store, deps.alerts, deps.wallClock, observer, initial = initial)
+            val watch = FlushWatch(deps.store) // the session writes through it, so `backgrounded` can wait for its batch
+            val session = RecordingSession(config, inputs.sensor, inputs.location, watch, deps.alerts, deps.wallClock, observer, initial = initial)
             deps.log("session start ${config.type.wire}" + if (initial.progress.startedAt != null) " (resumed, R28)" else "")
             val runJob = scope.launch { session.run() }
             val logJob = scope.launch { logProgress(config.recordingId, session, deps.log) }
             inputs.onRunning() // after `run()` is queued: the session subscribes before anything is emitted
-            return ActiveRun(config.recordingId, session, runJob, tap) {
+            return ActiveRun(config.recordingId, session, runJob, tap, watch, deps.backgroundTasks) {
                 logJob.cancel()
                 inputs.release()
             }
         }
+
+        /** The one background task this app holds: the flush when the app leaves the foreground. */
+        const val FLUSH_TASK = "com.jakubfronczyk.northform.flush"
 
         /** `AppModel.swift:148` — `Recordings/<start>-<type>.jsonl`, colons replaced so the name is a valid file name. */
         fun fileName(start: Instant, type: RecordingType) =
