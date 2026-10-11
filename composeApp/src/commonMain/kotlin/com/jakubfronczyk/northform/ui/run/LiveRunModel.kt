@@ -17,7 +17,6 @@ internal const val NO_VALUE = "—"
  * Port of `LiveRunView.swift:16-85` plus the design's paused pill, zone bar and Avg/Max row (H1).
  */
 data class LiveRunModel(
-    val paused: Boolean,
     /** "Paused · 0:42" — how long the run has been paused; null while running. */
     val pausedFor: Duration?,
     /** Current pace (D106), rounded to 5 s/km (D22); [NO_VALUE] while paused, under 20 m, or with GPS lost. */
@@ -33,9 +32,12 @@ data class LiveRunModel(
     /** "on hold" while GPS is lost (distance stops counting), else "". */
     val distanceSub: String,
     val time: String,
-    val valuesDimmed: Boolean,
     val gpsLost: Boolean,
 ) {
+    val paused: Boolean get() = pausedFor != null
+    /** Paused dims every value but the time. */
+    val valuesDimmed: Boolean get() = paused
+
     /** The HR cell: never a stale number (`LiveRunView.swift:70`). */
     sealed interface Hr {
         data object Lost : Hr
@@ -46,13 +48,15 @@ data class LiveRunModel(
     val litZone: Int? get() = (hr as? Hr.Reading)?.zone?.number
 
     companion object {
+        /** How long a pause that began at [since] has lasted at [now]; never negative. */
+        fun pausedFor(since: Instant, now: Instant): Duration = (now - since).coerceAtLeast(Duration.ZERO)
+
         fun from(snapshot: RunSnapshot, now: Instant): LiveRunModel {
             val paused = snapshot.phase as? RunPhase.Paused
             val gpsLost = snapshot.gpsLost
             val shownPace = ShownPace.round(snapshot.currentPace)
             return LiveRunModel(
-                paused = paused != null,
-                pausedFor = paused?.let { (now - it.since).coerceAtLeast(Duration.ZERO) },
+                pausedFor = paused?.let { pausedFor(it.since, now) },
                 pace = if (gpsLost || shownPace == null) NO_VALUE else RunFormat.pace(shownPace),
                 paceDimmed = gpsLost || paused != null,
                 split = if (gpsLost || snapshot.splitPace == null) NO_VALUE else RunFormat.pace(snapshot.splitPace),
@@ -62,7 +66,6 @@ data class LiveRunModel(
                 distance = RunFormat.distance(snapshot.distance),
                 distanceSub = if (gpsLost) "on hold" else "",
                 time = RunFormat.time(snapshot.totalTime),
-                valuesDimmed = paused != null,
                 gpsLost = gpsLost,
             )
         }

@@ -8,12 +8,12 @@ import com.jakubfronczyk.northform.engine.run.EndResult
 import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.RoutePoint
 import com.jakubfronczyk.northform.engine.run.RunPhase
+import com.jakubfronczyk.northform.engine.run.RunReducer
 import com.jakubfronczyk.northform.engine.run.RunSessionHandle
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.time.Clock
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -106,17 +106,12 @@ class ScriptedFakeRunSession(
     }
 
     companion object {
-        /** R24: the countdown. */
-        val COUNTDOWN: Duration = 5.seconds
-        /** H7: the cool-down. */
-        val COOLDOWN: Duration = 60.seconds
-
         /** The phase table, pure: a tap in the wrong phase is ignored (`RunReducer` does the same). */
         fun step(s: RunSnapshot, action: UserAction, at: Instant): RunSnapshot = when (action) {
-            UserAction.Start -> if (s.phase == RunPhase.Gate) s.copy(phase = RunPhase.Countdown(at + COUNTDOWN)) else s
+            UserAction.Start -> if (s.phase == RunPhase.Gate) s.copy(phase = RunPhase.Countdown(at + RunReducer.countdown)) else s
             UserAction.Pause -> if (s.phase == RunPhase.Active) s.copy(phase = RunPhase.Paused(at), currentPace = null) else s
             UserAction.Resume -> if (s.phase is RunPhase.Paused) s.copy(phase = RunPhase.Active) else s
-            UserAction.Stop -> if (s.phase == RunPhase.Active || s.phase is RunPhase.Paused) s.copy(phase = RunPhase.Cooldown(at + COOLDOWN), currentPace = null) else s
+            UserAction.Stop -> if (s.phase == RunPhase.Active || s.phase is RunPhase.Paused) s.copy(phase = RunPhase.Cooldown(at + RunReducer.cooldown), currentPace = null) else s
             UserAction.SkipCooldown -> if (s.phase is RunPhase.Cooldown) s.copy(phase = RunPhase.Done) else s
         }
     }

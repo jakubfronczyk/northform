@@ -43,17 +43,21 @@ import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.metrics.Zone
 import com.jakubfronczyk.northform.core.ports.WallClock
 import com.jakubfronczyk.northform.engine.run.Route
+import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
+import com.jakubfronczyk.northform.ui.BigButton
 import com.jakubfronczyk.northform.ui.RunFormat
 import com.jakubfronczyk.northform.ui.Theme
 import com.jakubfronczyk.northform.ui.Type
+import com.jakubfronczyk.northform.ui.VDivider
+import com.jakubfronczyk.northform.ui.ValueCell
 import kotlinx.coroutines.delay
+import kotlin.time.Instant
 
 /** Design tokens the LiveDark/Gate artboards use beyond `Theme` (map placeholder, unlit zone segment). */
 internal object RunPalette {
     val mapPanel = Color(0xFF1D1F21)
     val unlit = Color(0xFF3A3B3E)
-    val held = Color(0xFF2E2F32)
 }
 
 /** The hold-to-stop duration (R27, `LiveRunView.swift:106`). */
@@ -72,8 +76,11 @@ fun LiveRunScreen(
     send: (UserAction) -> Unit,
     map: @Composable (route: Route) -> Unit,
 ) {
-    val now = rememberNow(wallClock)
-    val model = LiveRunModel.from(snapshot, now)
+    // Only the paused pill reads the clock every second; the rest recomposes per snapshot.
+    val model = remember(snapshot) { LiveRunModel.from(snapshot, wallClock.now()) }
+    // One hold for whichever stop control is shown; a phase switch drops it (and cancels the pending Stop).
+    var holding by remember(model.paused) { mutableStateOf(false) }
+    HoldToStop(holding, send)
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().weight(1f)) {
             map(route)
@@ -90,11 +97,11 @@ fun LiveRunScreen(
                 .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 50.dp - 22.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            if (model.paused) PausedPill(model.pausedFor?.let(RunFormat::time) ?: "")
+            (snapshot.phase as? RunPhase.Paused)?.let { PausedPill(it.since, wallClock) }
             BigGrid(model)
             ZoneBar(model.litZone)
             SmallRow(model)
-            if (model.paused) PausedControls(send) else RunningControls(send)
+            if (model.paused) PausedControls(holding, { holding = it }, send) else RunningControls(holding, { holding = it }, send)
         }
     }
 }
@@ -121,7 +128,7 @@ private fun RecenterButton(modifier: Modifier = Modifier) {
 
 /** Reads the run's clock once a second while shown, so "Paused · 0:42" counts on the run's own time (D100). */
 @Composable
-private fun rememberNow(wallClock: WallClock): kotlin.time.Instant {
+private fun PausedPill(since: Instant, wallClock: WallClock) {
     var now by remember { mutableStateOf(wallClock.now()) }
     LaunchedEffect(wallClock) {
         while (true) {
@@ -129,14 +136,9 @@ private fun rememberNow(wallClock: WallClock): kotlin.time.Instant {
             delay(1000)
         }
     }
-    return now
-}
-
-@Composable
-private fun PausedPill(time: String) {
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Text(
-            "Paused · $time", style = RunType.pausedPill, color = Theme.bg,
+            "Paused · ${RunFormat.time(LiveRunModel.pausedFor(since, now))}", style = RunType.pausedPill, color = Theme.bg,
             modifier = Modifier.background(Theme.text, RoundedCornerShape(18.dp)).padding(horizontal = 18.dp, vertical = 8.dp),
         )
     }
@@ -182,19 +184,11 @@ private fun BigCell(
     sub: String,
     modifier: Modifier = Modifier,
     subColor: Color = Theme.warn,
-) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(Modifier.height(24.dp), verticalAlignment = Alignment.CenterVertically, content = label)
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(value, style = Type.number54Black, color = color, maxLines = 1)
-            if (unit != null) {
-                Spacer(Modifier.width(4.dp))
-                Text(unit, style = Type.unitLabel, color = Theme.text2, modifier = Modifier.padding(bottom = 10.dp))
-            }
-        }
-        Text(sub, style = Type.tertiaryText.copy(fontWeight = FontWeight.SemiBold), color = subColor, modifier = Modifier.height(16.dp))
-    }
-}
+) = ValueCell(
+    value, modifier, unit = unit, valueStyle = Type.number54Black, color = color, unitStyle = Type.unitLabel, unitLift = 10.dp, maxLines = 1,
+    label = { Row(Modifier.height(24.dp), verticalAlignment = Alignment.CenterVertically, content = label) },
+    footer = { Text(sub, style = RunType.sub, color = subColor, modifier = Modifier.height(16.dp)) },
+)
 
 /** Six segments, the current zone lit in its colour and taller; none lit while the sensor is lost. */
 @Composable
@@ -212,38 +206,30 @@ private fun ZoneBar(lit: Int?) {
 private fun SmallRow(model: LiveRunModel) {
     val valueColor = if (model.valuesDimmed) Theme.dim else Theme.text
     Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-        SmallCell("Split", model.split, "/km", if (model.paceDimmed) Theme.dim else Theme.text, first = true, modifier = Modifier.weight(1f))
-        SmallCell("Avg HR", model.hrAvg, "bpm", valueColor, modifier = Modifier.weight(1f))
-        SmallCell("Max HR", model.hrMax, "bpm", valueColor, modifier = Modifier.weight(1f))
+        ValueCell(model.split, Modifier.weight(1f), labelText = "Split", unit = "/km", color = if (model.paceDimmed) Theme.dim else Theme.text, maxLines = 1)
+        SmallCellAfterRule("Avg HR", model.hrAvg, valueColor)
+        SmallCellAfterRule("Max HR", model.hrMax, valueColor)
     }
 }
 
+/** A bpm cell of the small row with the rule before it. */
 @Composable
-internal fun SmallCell(label: String, value: String, unit: String, color: Color, modifier: Modifier = Modifier, first: Boolean = false) {
-    Row(modifier) {
-        if (!first) Box(Modifier.width(1.dp).fillMaxHeight().background(Theme.line))
-        Column(Modifier.padding(start = if (first) 0.dp else 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(label, style = Type.tertiaryText, color = Theme.text2)
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(value, style = RunType.number24, color = color, maxLines = 1)
-                Spacer(Modifier.width(4.dp))
-                Text(unit, style = Type.tertiaryText, color = Theme.text2, modifier = Modifier.padding(bottom = 3.dp))
-            }
-        }
+private fun RowScope.SmallCellAfterRule(label: String, value: String, color: Color) {
+    Row(Modifier.weight(1f)) {
+        VDivider(Modifier.fillMaxHeight())
+        ValueCell(value, Modifier.padding(start = 12.dp), labelText = label, unit = "bpm", color = color, maxLines = 1)
     }
 }
 
 /** Running: pause circle + "Hold to stop" that fills while held; "Release to cancel" under it (`LiveRunView.swift:87`). */
 @Composable
-private fun RunningControls(send: (UserAction) -> Unit) {
-    var holding by remember { mutableStateOf(false) }
-    HoldToStop(holding, send)
+private fun RunningControls(holding: Boolean, onHolding: (Boolean) -> Unit, send: (UserAction) -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             RoundControl(border = Theme.ring, onClick = { send(UserAction.Pause) }) {
                 Text("❚❚", style = Type.number22, color = Theme.text)
             }
-            HoldButton(holding, onHolding = { holding = it }, modifier = Modifier.weight(1f))
+            HoldButton(holding, onHolding, modifier = Modifier.weight(1f))
         }
         Text(
             if (holding) "Release to cancel" else "", style = RunType.caption, color = Theme.text2,
@@ -254,20 +240,13 @@ private fun RunningControls(send: (UserAction) -> Unit) {
 
 /** Paused: a stop circle that must be held + a white "Resume" button; "Hold the circle to stop" under them. */
 @Composable
-private fun PausedControls(send: (UserAction) -> Unit) {
-    var holding by remember { mutableStateOf(false) }
-    HoldToStop(holding, send)
+private fun PausedControls(holding: Boolean, onHolding: (Boolean) -> Unit, send: (UserAction) -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            RoundControl(border = Theme.primary, modifier = Modifier.holdGesture { holding = it }) {
+            RoundControl(border = Theme.primary, modifier = Modifier.holdGesture(onHolding)) {
                 Box(Modifier.size(18.dp).background(Theme.text, RoundedCornerShape(4.dp)))
             }
-            Box(
-                Modifier.weight(1f).height(68.dp).background(Theme.text, RoundedCornerShape(16.dp)).clickable { send(UserAction.Resume) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("▶  Resume", style = Type.sheetTitle, color = Theme.bg)
-            }
+            BigButton("▶  Resume", { send(UserAction.Resume) }, Modifier.weight(1f), fill = Theme.text, textColor = Theme.bg)
         }
         Text(if (holding) "Keep holding…" else "Hold the circle to stop", style = RunType.caption, color = Theme.text2, modifier = Modifier.padding(top = 8.dp))
     }
@@ -306,7 +285,7 @@ private fun RoundControl(border: Color, modifier: Modifier = Modifier, onClick: 
 private fun HoldButton(holding: Boolean, onHolding: (Boolean) -> Unit, modifier: Modifier = Modifier) {
     val fill by animateFloatAsState(if (holding) 1f else 0f, tween(if (holding) HOLD_TO_STOP_MS else 150), label = "hold")
     Box(
-        modifier.height(68.dp).clip(RoundedCornerShape(16.dp)).background(if (holding) RunPalette.held else Theme.primary).holdGesture(onHolding),
+        modifier.height(68.dp).clip(RoundedCornerShape(16.dp)).background(if (holding) Theme.track else Theme.primary).holdGesture(onHolding),
         contentAlignment = Alignment.Center,
     ) {
         if (holding) Box(Modifier.fillMaxHeight().fillMaxWidth(fill).align(Alignment.CenterStart).background(Theme.primary))
@@ -342,22 +321,7 @@ fun ZonePill(zone: Zone) {
 
 /** Text styles the run artboards use beyond `Type` (kept in this lane's package; tabular digits like `Type.number`). */
 internal object RunType {
-    val number24 = Type.number(24)
     val pausedPill = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Bold, fontFeatureSettings = "tnum")
     val caption = TextStyle(fontSize = 12.sp)
-}
-
-/** `LiveRunView.swift:188` — still used by the cool-down card. */
-@Composable
-fun Stat(label: String, value: String, unit: String? = null, dimmed: Boolean = false) {
-    Column {
-        Text(label, style = Type.rowLabel, color = Theme.text2)
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(value, style = Type.number40, color = if (dimmed) Theme.dim else Theme.text)
-            if (unit != null) {
-                Spacer(Modifier.width(4.dp))
-                Text(unit, style = Type.unitLabel, color = Theme.text2, modifier = Modifier.padding(bottom = 8.dp))
-            }
-        }
-    }
+    val sub = Type.tertiaryText.copy(fontWeight = FontWeight.SemiBold)
 }

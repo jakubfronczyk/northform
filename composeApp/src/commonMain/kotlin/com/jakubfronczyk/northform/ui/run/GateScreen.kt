@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -28,9 +27,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jakubfronczyk.northform.engine.run.Route
+import com.jakubfronczyk.northform.engine.run.RunReducer
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
+import com.jakubfronczyk.northform.ui.BigButton
+import com.jakubfronczyk.northform.ui.DashedLine
 import com.jakubfronczyk.northform.ui.Theme
 import com.jakubfronczyk.northform.ui.Type
+import com.jakubfronczyk.northform.ui.ValueCell
 
 /**
  * The start gate (Gate artboard; R24, E1, E13; `RunView.swift:38` was the bare version): the map
@@ -78,7 +81,10 @@ fun GateScreen(
             model.warning?.let { WarningLine(it) }
             Spacer(Modifier.weight(1f))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                StartButton(model.startLabel, model.startEnabled, start)
+                BigButton(
+                    "▶  ${model.startLabel}", start, fill = if (model.startEnabled) Theme.primary else Theme.track,
+                    textColor = if (model.startEnabled) Color.White else Theme.dim, enabled = model.startEnabled,
+                )
                 if (model.showStartAnyway) {
                     Box(Modifier.fillMaxWidth().height(44.dp).clickable(onClick = start), contentAlignment = Alignment.Center) {
                         Text("Start anyway", style = Type.statusLabel.copy(fontSize = 16.sp), color = Theme.text)
@@ -116,7 +122,7 @@ private fun ReadinessCard(model: GateModel, connectSensor: (() -> Unit)?) {
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(model.fixLabel, style = Type.statusLabel.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = Theme.text)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    for (i in 0 until GateModel.FIXES_NEEDED) {
+                    for (i in 0 until RunReducer.gateFixes) {
                         Box(Modifier.size(18.dp, 6.dp).background(if (i < model.fixesLit) Theme.ok else RunPalette.unlit, RoundedCornerShape(3.dp)))
                     }
                 }
@@ -151,13 +157,7 @@ private fun CardRow(
 }
 
 @Composable
-private fun BigValue(value: String, unit: String, color: Color = Theme.text) {
-    Row(verticalAlignment = Alignment.Bottom) {
-        Text(value, style = RunType.number24, color = color)
-        Spacer(Modifier.width(3.dp))
-        Text(unit, style = Type.tertiaryText, color = Theme.text2, modifier = Modifier.padding(bottom = 3.dp))
-    }
-}
+private fun BigValue(value: String, unit: String, color: Color = Theme.text) = ValueCell(value, unit = unit, color = color, unitGap = 3.dp)
 
 /** The green check disc. */
 @Composable
@@ -175,27 +175,10 @@ private fun Spinner() {
 }
 
 @Composable
-private fun DashedLine() = Box(Modifier.fillMaxWidth().height(1.dp).background(Theme.line))
-
-@Composable
 private fun WarningLine(text: String) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp).heightIn(min = 24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("△", style = Type.statusLabel, color = Theme.warn)
         Text(text, style = Type.statusLabel.copy(fontSize = 15.sp), color = Theme.warn)
-    }
-}
-
-/** Start: primary when ready, the disabled grey block otherwise (still a real button: nothing to tap). */
-@Composable
-private fun StartButton(label: String, enabled: Boolean, start: () -> Unit) {
-    Box(
-        Modifier.fillMaxWidth().height(68.dp)
-            .background(if (enabled) Theme.primary else RunPalette.held, RoundedCornerShape(16.dp))
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(enabled = enabled, onClick = start),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text("▶  $label", style = Type.sheetTitle, color = if (enabled) Color.White else Theme.dim)
     }
 }
 

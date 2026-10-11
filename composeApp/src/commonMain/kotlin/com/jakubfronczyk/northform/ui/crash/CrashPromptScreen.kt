@@ -1,19 +1,16 @@
 package com.jakubfronczyk.northform.ui.crash
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
@@ -33,10 +30,12 @@ import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.engine.run.CrashChoice
 import com.jakubfronczyk.northform.engine.run.CrashFacts
 import com.jakubfronczyk.northform.engine.run.CrashPrompt
+import com.jakubfronczyk.northform.ui.BigButton
 import com.jakubfronczyk.northform.ui.RunFormat
 import com.jakubfronczyk.northform.ui.Theme
 import com.jakubfronczyk.northform.ui.Type
-import kotlin.time.Instant
+import com.jakubfronczyk.northform.ui.VDivider
+import com.jakubfronczyk.northform.ui.ValueCell
 
 /**
  * The R28 crash prompt (`design/canvas/project/CrashPrompt.dc.html`, `CrashPromptLate` = the same board
@@ -56,7 +55,7 @@ fun CrashPromptScreen(facts: CrashFacts, onChoice: (CrashChoice) -> Unit) {
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Interrupted $minutesAgo min ago · run started ${localTime(facts.startedAt, facts.tzOffset)}", style = Type.statusLabel, color = Theme.warn)
+                Text("Interrupted $minutesAgo min ago · run started ${RunFormat.localTime(facts.startedAt, facts.tzOffset)}", style = Type.statusLabel, color = Theme.warn)
                 Text("Your run was interrupted", style = SheetHeadline, color = Theme.text)
                 Text(
                     if (facts.state == RecordingState.Active) "The app closed. This part is saved." else "The app closed after you stopped. This part is saved.",
@@ -69,7 +68,7 @@ fun CrashPromptScreen(facts: CrashFacts, onChoice: (CrashChoice) -> Unit) {
                 FactDivider()
                 Fact("Time", RunFormat.time(facts.totalTime))
                 FactDivider()
-                Fact("Saved until", localTime(facts.savedUntil, facts.tzOffset))
+                Fact("Saved until", RunFormat.localTime(facts.savedUntil, facts.tzOffset))
             }
 
             if (facts.state == RecordingState.Active) {
@@ -77,7 +76,7 @@ fun CrashPromptScreen(facts: CrashFacts, onChoice: (CrashChoice) -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Gap until now counts as sensor + GPS lost", style = GapTitle, color = Theme.text)
                     Text(
-                        "${localTime(facts.savedUntil, facts.tzOffset)} to ${localTime(now, facts.tzOffset)} · total time keeps running",
+                        "${RunFormat.localTime(facts.savedUntil, facts.tzOffset)} to ${RunFormat.localTime(now, facts.tzOffset)} · total time keeps running",
                         style = Type.tertiaryText, color = Theme.text2,
                     )
                 }
@@ -104,47 +103,20 @@ fun CrashPromptScreen(facts: CrashFacts, onChoice: (CrashChoice) -> Unit) {
 
 /** A main action is filled (white for Continue, the primary orange for Save); the other is outlined. */
 @Composable
-private fun ChoiceButton(title: String, main: Boolean, mainColors: Pair<Color, Color>, action: () -> Unit) {
-    val shape = RoundedCornerShape(16.dp)
-    val base = Modifier.fillMaxWidth().height(68.dp)
-    val modifier = if (main) base.background(mainColors.first, shape) else base.border(1.5.dp, Theme.ring, shape)
-    Box(modifier.clickable(onClick = action), contentAlignment = Alignment.Center) {
-        Text(title, style = Type.sheetTitle, color = if (main) mainColors.second else Theme.text)
-    }
-}
+private fun ChoiceButton(title: String, main: Boolean, mainColors: Pair<Color, Color>, action: () -> Unit) =
+    BigButton(title, action, fill = mainColors.first.takeIf { main }, textColor = if (main) mainColors.second else Theme.text)
 
 @Composable
-private fun RowScope.Fact(label: String, value: String, unit: String? = null) {
-    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, style = Type.tertiaryText, color = Theme.text2)
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(value, style = FactNumber, color = Theme.text)
-            if (unit != null) {
-                Spacer(Modifier.width(3.dp))
-                Text(unit, style = Type.tertiaryText, color = Theme.text2, modifier = Modifier.padding(bottom = 2.dp))
-            }
-        }
-    }
-}
+private fun RowScope.Fact(label: String, value: String, unit: String? = null) =
+    ValueCell(value, Modifier.weight(1f), labelText = label, unit = unit, unitGap = 3.dp, unitLift = 2.dp)
 
 @Composable
-private fun FactDivider() {
-    Box(Modifier.padding(end = 12.dp).width(1.dp).height(40.dp).background(Theme.line))
-}
-
-/** HH:MM in the recording's own time zone (`tzOffset` seconds east of UTC): the time the runner saw. */
-internal fun localTime(instant: Instant, tzOffset: Int): String {
-    val secondsOfDay = ((instant.epochSeconds + tzOffset) % 86_400 + 86_400) % 86_400
-    val h = secondsOfDay / 3600
-    val m = secondsOfDay / 60 % 60
-    return "${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}"
-}
+private fun FactDivider() = VDivider(Modifier.padding(end = 12.dp).height(40.dp))
 
 private val Scrim = Color(0xB8080809) // rgba(8,8,9,0.72)
 private val Danger = Color(0xFFFF6961)
-private val Continue = Color(0xFFF4F4F2) to Theme.bg
+private val Continue = Theme.text to Theme.bg
 private val Save = Theme.primary to Color.White
 private val SheetHeadline = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Black)
 private val GapTitle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-private val FactNumber = Type.number(24)
 private val DeleteLabel = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold)

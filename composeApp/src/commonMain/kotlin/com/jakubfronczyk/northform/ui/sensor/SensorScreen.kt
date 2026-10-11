@@ -2,7 +2,6 @@ package com.jakubfronczyk.northform.ui.sensor
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,13 +38,18 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jakubfronczyk.northform.core.DiscoveredSensor
+import com.jakubfronczyk.northform.ui.BigButton
+import com.jakubfronczyk.northform.ui.DashedLine
 import com.jakubfronczyk.northform.ui.Theme
 import com.jakubfronczyk.northform.ui.Type
+import com.jakubfronczyk.northform.ui.VDivider
+import com.jakubfronczyk.northform.ui.ValueCell
 import com.jakubfronczyk.northform.ui.sensor.SensorScreenModel.Mode
 import com.jakubfronczyk.northform.ui.sensor.SensorScreenModel.Signal
 
@@ -215,12 +219,8 @@ private fun ConnectedCard(ui: SensorScreenModel.Ui) = Card {
 }
 
 @Composable
-private fun Stat(label: String, value: String, color: Color, modifier: Modifier) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, style = Type.tertiaryText, color = Theme.text2)
-        Text(value, style = Type.number22, color = color)
-    }
-}
+private fun Stat(label: String, value: String, color: Color, modifier: Modifier) =
+    ValueCell(value, modifier, labelText = label, valueStyle = Type.number22, color = color, spacing = 4.dp)
 
 /** Four bars, lit by bucket (3 = Good, 2 = Fair, 1 = Weak), "–" when no advert was seen. */
 @Composable
@@ -240,12 +240,7 @@ private fun SignalStat(signal: Signal?, modifier: Modifier) {
 }
 
 @Composable
-private fun RowScope.Divider() = Box(Modifier.width(1.dp).height(40.dp).align(Alignment.CenterVertically).background(Theme.line))
-
-@Composable
-private fun DashedLine() = Canvas(Modifier.fillMaxWidth().height(1.dp)) {
-    drawLine(Theme.line, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx())))
-}
+private fun RowScope.Divider() = VDivider(Modifier.height(40.dp).align(Alignment.CenterVertically))
 
 @Composable
 private fun FirmwareWarning(version: String) {
@@ -332,17 +327,14 @@ private fun TipsCard() = Card {
 
 @Composable
 private fun FilledButton(title: String, action: () -> Unit, modifier: Modifier) =
-    ButtonFrame(modifier.background(Theme.primary, RoundedCornerShape(16.dp)), action) { Text(title, style = Type.sheetTitle, color = Color.White) }
+    BigButton(title, action, modifier, textColor = Color.White, contentPadding = 22.dp)
 
 @Composable
 private fun LightButton(title: String, action: () -> Unit, modifier: Modifier) =
-    ButtonFrame(modifier.background(Theme.text, RoundedCornerShape(16.dp)), action) { Text(title, style = Type.sheetTitle, color = Theme.bg) }
+    BigButton(title, action, modifier, fill = Theme.text, textColor = Theme.bg, contentPadding = 22.dp)
 
 @Composable
 private fun OutlineButton(title: String, action: () -> Unit, modifier: Modifier) =
-    ButtonFrame(modifier.border(1.5.dp, Theme.ring, RoundedCornerShape(16.dp)), action) { Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Theme.text) }
+    BigButton(title, action, modifier, fill = null, textStyle = OutlineLabel, contentPadding = 22.dp)
 
-@Composable
-private fun ButtonFrame(modifier: Modifier, action: () -> Unit, label: @Composable () -> Unit) {
-    Box(modifier.height(68.dp).clickable(onClick = action).padding(horizontal = 22.dp), contentAlignment = Alignment.Center) { label() }
-}
+private val OutlineLabel = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold)

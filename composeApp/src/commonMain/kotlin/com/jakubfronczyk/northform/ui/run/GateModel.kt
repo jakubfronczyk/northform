@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.ui.run
 
+import com.jakubfronczyk.northform.engine.run.RunReducer
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
 
 /**
@@ -22,14 +23,11 @@ data class GateModel(
     val gpsReady: Boolean,
     val gpsTitle: String,
     val gpsSub: String,
-    /** "3 of 3 fixes" — the snapshot gives only ready/not, so the bars are all lit or none. */
-    val fixesLit: Int,
     val battery: Battery?,
     /** The E1 line under the card, or null. */
     val warning: String?,
     val startLabel: String,
     val startEnabled: Boolean,
-    val showStartAnyway: Boolean,
 ) {
     sealed interface HrRow {
         data class Ready(val bpm: String) : HrRow
@@ -39,11 +37,13 @@ data class GateModel(
 
     data class Battery(val percent: Int, val low: Boolean)
 
-    val fixLabel: String get() = "$fixesLit of $FIXES_NEEDED fixes"
+    /** "3 of 3 fixes" — the snapshot gives only ready/not, so the bars are all lit or none. */
+    val fixesLit: Int get() = if (gpsReady) RunReducer.gateFixes else 0
+    val fixLabel: String get() = "$fixesLit of ${RunReducer.gateFixes} fixes"
+    /** Option A: "Start anyway" stands in whenever Start is held. */
+    val showStartAnyway: Boolean get() = !startEnabled
 
     companion object {
-        /** R24: three consecutive fixes ≤ 20 m. */
-        const val FIXES_NEEDED = 3
         /** E1: warn below 20 %. */
         const val LOW_BATTERY_BELOW = 20
 
@@ -75,8 +75,7 @@ data class GateModel(
                 },
                 gpsReady = gpsReady,
                 gpsTitle = if (gpsReady) "GPS" else "GPS · finding signal…",
-                gpsSub = if (gpsReady) "Locked in" else "Needs $FIXES_NEEDED fixes within 20 m",
-                fixesLit = if (gpsReady) FIXES_NEEDED else 0,
+                gpsSub = if (gpsReady) "Locked in" else "Needs ${RunReducer.gateFixes} fixes within ${RunReducer.gateFixAccuracy.toInt()} m",
                 battery = battery,
                 warning = battery?.takeIf { it.low }?.let { "Sensor battery ${it.percent} % · may not last the run" },
                 startLabel = when {
@@ -86,7 +85,6 @@ data class GateModel(
                     else -> "Start · waiting for heart rate"
                 },
                 startEnabled = startOk,
-                showStartAnyway = !startOk,
             )
         }
     }

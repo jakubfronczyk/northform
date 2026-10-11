@@ -6,6 +6,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.jakubfronczyk.northform.core.roundedHalfAwayFromZero
 import kotlin.time.Duration
+import kotlin.time.Instant
 
 /** Colour tokens from the style guide (`Features/Style/Theme.swift:4-26`). */
 object Theme {
@@ -44,6 +45,7 @@ object Type {
     val countdown = number(160, FontWeight.Black)
     val number54Black = number(54, FontWeight.Black)
     val number40 = number(40)
+    val number24 = number(24)
     val number22 = number(22)
     val pillLabel = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold)
 
@@ -79,6 +81,12 @@ object RunFormat {
         val m = total / 60 % 60
         val s = total % 60
         return if (h > 0) "$h:${m.toInt().pad2()}:${s.toInt().pad2()}" else "$m:${s.toInt().pad2()}"
+    }
+
+    /** HH:MM in a recording's own time zone (`tzOffset` seconds east of UTC): the time the runner saw. */
+    fun localTime(instant: Instant, tzOffset: Int): String {
+        val secondsOfDay = ((instant.epochSeconds + tzOffset) % 86_400 + 86_400) % 86_400
+        return "${(secondsOfDay / 3600).toInt().pad2()}:${(secondsOfDay / 60 % 60).toInt().pad2()}"
     }
 
     private fun Int.pad2() = toString().padStart(2, '0')

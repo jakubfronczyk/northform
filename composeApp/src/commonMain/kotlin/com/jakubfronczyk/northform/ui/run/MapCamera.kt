@@ -1,6 +1,6 @@
 package com.jakubfronczyk.northform.ui.run
 
-import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -42,13 +42,15 @@ class MapCamera {
 /**
  * The one camera the run flow shares with whatever draws the map. A `CompositionLocal` rather than a
  * parameter so the platform map (`:app/RouteMap.kt`, slot type `(Route) -> Unit`) can adopt it later
- * without a signature change; the default is a camera nobody drags.
+ * without a signature change. `RunFlow` provides it; there is no default, because a silently created
+ * camera would not be the one the re-center button reads. Static: the provided camera never changes,
+ * its fields are snapshot state.
  */
-val LocalMapCamera = compositionLocalOf { MapCamera() }
+val LocalMapCamera = staticCompositionLocalOf<MapCamera> { error("no MapCamera provided: build the map inside RunFlow") }
 
 /**
- * Lat/lon → canvas pixels, pure (table-tested): an equirectangular projection around the camera
- * centre (route end + pan). Fine at run scale — a 900 m window, the same as `RouteMap.kt`'s
+ * Lat/lon → canvas pixels, pure (table-tested): an equirectangular projection to metres around the
+ * route end ([metres]), then the camera centre (route end + pan) at the middle of the view ([toPx]). Fine at run scale — a 900 m window, the same as `RouteMap.kt`'s
  * `MKCoordinateRegionMakeWithDistance`. Mercator would change nothing visible over 1 km.
  */
 object RouteProjection {
@@ -64,28 +66,35 @@ object RouteProjection {
     /** The route's last point, or null for a route with nothing drawn yet. */
     fun end(route: Route): RoutePoint? = route.segments.lastOrNull()?.lastOrNull()
 
-    /** The camera centre as lat/lon: the route end moved by the pan. */
-    fun centre(route: Route, pan: Pan): Pair<Double, Double>? {
-        val end = end(route) ?: return null
-        val lat = end.latitude + pan.northMetres / METRES_PER_DEGREE_LAT
-        val lon = end.longitude + pan.eastMetres / (METRES_PER_DEGREE_LAT * cos(end.latitude * PI / 180))
-        return lat to lon
-    }
-
-    /** Every segment as pixel points, the centre at the middle of the view, north up. */
-    fun project(route: Route, widthPx: Float, heightPx: Float, pan: Pan): List<List<Px>> {
-        val (cLat, cLon) = centre(route, pan) ?: return emptyList()
-        val mpp = metresPerPixel(widthPx, heightPx)
-        val metresPerDegLon = METRES_PER_DEGREE_LAT * cos(cLat * PI / 180)
+    /**
+     * Every segment as metres (east, north) from the route's end: the part of the projection that
+     * depends on the route alone, so a canvas computes it once per route and pans/zooms with a transform.
+     */
+    fun metres(route: Route): List<List<Pan>> {
+        val end = end(route) ?: return emptyList()
+        val metresPerDegLon = METRES_PER_DEGREE_LAT * cos(end.latitude * PI / 180)
         return route.segments.map { segment ->
             segment.map { p ->
-                Px(
-                    x = (widthPx / 2 + (p.longitude - cLon) * metresPerDegLon / mpp).toFloat(),
-                    y = (heightPx / 2 - (p.latitude - cLat) * METRES_PER_DEGREE_LAT / mpp).toFloat(),
+                Pan(
+                    eastMetres = (p.longitude - end.longitude) * metresPerDegLon,
+                    northMetres = (p.latitude - end.latitude) * METRES_PER_DEGREE_LAT,
                 )
             }
         }
     }
+
+    /** One point in metres from the route end → pixels: the camera centre (end + pan) at the middle, north up. */
+    fun toPx(m: Pan, widthPx: Float, heightPx: Float, pan: Pan): Px {
+        val mpp = metresPerPixel(widthPx, heightPx)
+        return Px(
+            x = (widthPx / 2 + (m.eastMetres - pan.eastMetres) / mpp).toFloat(),
+            y = (heightPx / 2 - (m.northMetres - pan.northMetres) / mpp).toFloat(),
+        )
+    }
+
+    /** Every segment as pixel points, the centre at the middle of the view, north up. */
+    fun project(route: Route, widthPx: Float, heightPx: Float, pan: Pan): List<List<Px>> =
+        metres(route).map { segment -> segment.map { toPx(it, widthPx, heightPx, pan) } }
 
     /** A finger drag of (dx, dy) pixels moves the camera the other way: drag right = look west. */
     fun dragToPan(dxPx: Float, dyPx: Float, widthPx: Float, heightPx: Float): Pan {

@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.RunSessionHandle
-import com.jakubfronczyk.northform.ui.run.PrimaryButton
 import com.jakubfronczyk.northform.ui.run.RunFlow
 
 /**
@@ -59,6 +58,6 @@ fun TodayScreen(startRun: () -> Unit, openSensor: () -> Unit) {
         Text("No runs yet", style = Type.secondaryText, color = Theme.text2)
         Text("Sensor", color = Theme.text2, modifier = Modifier.clickable(onClick = openSensor).padding(vertical = 12.dp))
         Spacer(Modifier.weight(1f))
-        PrimaryButton("Start run", startRun)
+        BigButton("Start run", startRun)
     }
 }

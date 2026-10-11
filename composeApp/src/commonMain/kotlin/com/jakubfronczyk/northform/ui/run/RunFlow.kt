@@ -1,16 +1,12 @@
 package com.jakubfronczyk.northform.ui.run
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -31,6 +27,7 @@ import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.engine.run.RunSessionHandle
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
+import com.jakubfronczyk.northform.ui.BigButton
 import com.jakubfronczyk.northform.ui.RunFormat
 import com.jakubfronczyk.northform.ui.Theme
 import com.jakubfronczyk.northform.ui.Type
@@ -56,9 +53,12 @@ fun RunFlow(
     val scope = rememberCoroutineScope()
     val snapshot by session.snapshots.collectAsState()
     val route by session.routes.collectAsState()
-    val send: (UserAction) -> Unit = { action ->
-        val tappedAt = session.wallClock.now() // the tap's time, on the run's clock, before any hop
-        scope.launch { session.send(action, tappedAt) }
+    // Remembered so the screens below see the same lambda on every 1 Hz snapshot and can skip.
+    val send: (UserAction) -> Unit = remember(session, scope) {
+        { action ->
+            val tappedAt = session.wallClock.now() // the tap's time, on the run's clock, before any hop
+            scope.launch { session.send(action, tappedAt) }
+        }
     }
 
     // One camera for the whole run (survives phase switches); the map and the re-center button share it.
@@ -110,7 +110,7 @@ fun StoppedScreen(snapshot: RunSnapshot, skip: () -> Unit) = BareScreen {
     Text("${RunFormat.time(snapshot.totalTime)} · ${RunFormat.distance(snapshot.distance)} km", style = Type.number22, color = Theme.text2)
     Text("Cool-down: measuring heart-rate recovery", style = Type.secondaryText, color = Theme.text3)
     Spacer(Modifier.weight(1f))
-    PrimaryButton("Skip", skip)
+    BigButton("Skip", skip)
 }
 
 /** `RunView.swift:89`. */
@@ -120,18 +120,5 @@ fun DoneScreen(snapshot: RunSnapshot, close: () -> Unit) = BareScreen {
     Text("Saved", style = Type.screenTitle, color = Theme.text)
     Text("${RunFormat.distance(snapshot.distance)} km · ${RunFormat.time(snapshot.totalTime)}", style = Type.number22, color = Theme.text2)
     Spacer(Modifier.weight(1f))
-    PrimaryButton("Done", close)
-}
-
-/** `RunView.swift:107`. */
-@Composable
-fun PrimaryButton(title: String, action: () -> Unit) {
-    Box(
-        Modifier.fillMaxWidth().height(68.dp)
-            .background(Theme.primary, RoundedCornerShape(16.dp))
-            .clickable(onClick = action),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(title, style = Type.sheetTitle, color = Theme.text)
-    }
+    BigButton("Done", close)
 }

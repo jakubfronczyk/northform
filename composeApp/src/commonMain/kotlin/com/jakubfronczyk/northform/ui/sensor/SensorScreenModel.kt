@@ -164,15 +164,13 @@ class SensorScreenModel(
         scanJob?.cancel()
         userSearching = true
         notFound = false
-        _ui.update { it.copy(nearby = emptyList()) }
-        render()
+        _ui.update { rendered(it.copy(nearby = emptyList())) }
         scanJob = scope?.launch {
             val found = withTimeoutOrNull(searchTimeout) {
                 try {
                     sensor.search().collect { d ->
                         rssi[d.id] = d.rssi
-                        _ui.update { ui -> ui.copy(nearby = sorted((ui.nearby.filter { it.id != d.id } + d))) }
-                        render()
+                        _ui.update { ui -> rendered(ui.copy(nearby = sorted(ui.nearby.filter { it.id != d.id } + d))) }
                     }
                 } catch (e: CancellationException) { throw e } catch (e: Exception) { fail("Search failed: ${e.message}") }
             }
@@ -191,7 +189,10 @@ class SensorScreenModel(
 
     private fun fail(message: String) = _ui.update { it.copy(error = message) }
 
-    private fun render() {
+    private fun render() = _ui.update(::rendered)
+
+    /** [ui] with every field the port and the link decide brought up to date (one `update`, one emission). */
+    private fun rendered(ui: Ui): Ui {
         val s = state
         val paired = details.paired.value
         val firmware = details.firmware.value
@@ -205,17 +206,15 @@ class SensorScreenModel(
             s is SensorState.Connecting || s == SensorState.Disconnected(DisconnectReason.Lost) -> Mode.Searching
             else -> Mode.Disconnected
         }
-        _ui.update {
-            it.copy(
-                mode = mode,
-                paired = paired,
-                bpm = if (mode == Mode.Connected) it.bpm else null,
-                battery = (s as? SensorState.Connected)?.battery,
-                firmware = firmware,
-                firmwareTooOld = firmware?.let(SensorLink::firmwareTooOld) ?: false,
-                signal = paired?.let { p -> rssi[p.id] }?.let(Signal::of),
-            )
-        }
+        return ui.copy(
+            mode = mode,
+            paired = paired,
+            bpm = if (mode == Mode.Connected) ui.bpm else null,
+            battery = (s as? SensorState.Connected)?.battery,
+            firmware = firmware,
+            firmwareTooOld = firmware?.let(SensorLink::firmwareTooOld) ?: false,
+            signal = paired?.let { p -> rssi[p.id] }?.let(Signal::of),
+        )
     }
 
     companion object {
