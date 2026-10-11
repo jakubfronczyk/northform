@@ -270,6 +270,12 @@ object RunReducer {
             val flight = b.inFlight ?: return
             if (flight.seq != seq) return
             b = b.copy(inFlight = null) // data stays; the next persist retries it
+            // A flush asked for meanwhile goes out now, as after a success: its waiter (`backgrounded`)
+            // must not wait for the next heartbeat. One retry per request, so no storm on a failing store.
+            b.flushRequestedAt?.let { requestedAt ->
+                b = b.copy(flushRequestedAt = null)
+                requestPersist(requestedAt)
+            }
         }
 
         // ── Helpers ─────────────────────────────────────────────────────────────────────────

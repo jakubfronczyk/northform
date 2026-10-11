@@ -180,6 +180,37 @@ class RunReducerTest {
         assertTrue(afterAck.effects.any { it is RunEffect.Persist }, "the requested flush follows the confirmation")
     }
 
+    /**
+     * A flush asked for while one was in flight goes out as soon as that one is answered — also when the
+     * answer is a failure. Waiting for the next 5 s tick kept a `backgrounded` waiter (and, in Done, the
+     * BeginComputing behind an extra empty flush) waiting for nothing.
+     */
+    @Test
+    fun a_failed_batch_with_a_flush_requested_retries_at_once() {
+        var state = RunState(RunHarness.config)
+        state = RunReducer.reduce(state, user(UserAction.Start, 0.0)).state
+        state = RunReducer.reduce(state, tick(5.0)).state
+        val first = RunReducer.reduce(state, tick(10.0)); state = first.state
+        val seq = assertNotNull(first.effects.persistSeq())
+        state = RunReducer.reduce(state, user(UserAction.Pause, 11.5)).state
+        val failed = RunReducer.reduce(state, RunInput.PersistFailed(seq))
+        val retry = assertNotNull(failed.effects.batch(), "the requested flush follows the failure")
+        assertEquals(seq + 1, failed.effects.persistSeq())
+        assertEquals(at(11.5), retry.persistedAt)
+        assertTrue(retry.events.any { it.kind == EventKind.Pause }, "the failed batch's data and the newer data together")
+        assertNull(failed.state.buffer.flushRequestedAt)
+    }
+
+    @Test
+    fun a_failed_batch_with_nothing_requested_waits_for_the_next_heartbeat() {
+        var state = RunState(RunHarness.config)
+        state = RunReducer.reduce(state, user(UserAction.Start, 0.0)).state
+        state = RunReducer.reduce(state, tick(5.0)).state
+        val first = RunReducer.reduce(state, tick(10.0)); state = first.state
+        val failed = RunReducer.reduce(state, RunInput.PersistFailed(assertNotNull(first.effects.persistSeq())))
+        assertTrue(failed.effects.none { it is RunEffect.Persist }, "no retry storm against a failing store")
+    }
+
     @Test
     fun delayed_flush_keeps_the_time_it_was_requested() {
         var state = RunState(RunHarness.config)
