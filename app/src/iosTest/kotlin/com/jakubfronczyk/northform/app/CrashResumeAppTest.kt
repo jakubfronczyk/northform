@@ -120,8 +120,8 @@ class CrashResumeAppTest {
             val after = assertNotNull(store.load(run.id))
             assertEquals(flushed.hr, after.hr.take(flushed.hr.size), "nothing flushed before the kill was lost or reordered")
             assertEquals(flushed.fixes, after.fixes.take(flushed.fixes.size))
-            val gap = after.events.drop(flushed.events.size).map { it.kind }.take(3) // the replay sensor may already be back behind them
-            assertEquals(listOf(EventKind.HrLost, EventKind.GpsLost, EventKind.CrashRecovered), gap)
+            val gap = after.events.drop(flushed.events.size).map { it.kind }.take(5) // the replay sensor may already be back behind them
+            assertEquals(listOf(EventKind.Pause, EventKind.HrLost, EventKind.GpsLost, EventKind.Resume, EventKind.CrashRecovered), gap) // D40: the gap is a pause
             // Lost at the first whole-second tick 5 s / 10 s after the last stored sample, not at reopen (samples sit at x.5 s).
             val hrLostAfter = after.events.first { it.kind == EventKind.HrLost }.t - flushed.hr.last().t
             assertTrue(hrLostAfter >= 5.seconds && hrLostAfter < 6.seconds, "HR lost $hrLostAfter after the last stored sample")

@@ -32,16 +32,19 @@ class CrashResumeTest {
     )
 
     @Test
-    fun the_gap_until_reopen_counts_as_hr_lost_and_gps_lost_and_total_time_keeps_running() {
+    fun the_gap_until_reopen_is_a_pause_counted_as_hr_lost_and_gps_lost_and_total_time_keeps_running() {
         val resumed = RunReducer.resumed(RunReducer.rebuild(config, stored()), at = at(362))
 
         assertEquals(RunPhase.Active, resumed.progress.phase)
-        assertEquals(357.seconds, resumed.snapshot.totalTime, "5 s → 362 s, the gap included")
+        assertEquals(357.seconds, resumed.snapshot.totalTime, "5 s → 362 s, the gap included (total time keeps pauses)")
+        assertEquals(57.seconds, resumed.progress.activeTime(at(362)), "D40: the gap 62 → 362 s is a pause, out of active time")
         assertTrue(resumed.snapshot.hrLost && resumed.snapshot.gpsLost)
         assertEquals(
             listOf(
+                RecordingEvent(at(62), EventKind.Pause, EventSource.Auto), // D40: at the last heartbeat, not tapped
                 RecordingEvent(at(65), EventKind.HrLost, EventSource.Auto), // 5 s after the last sample, not at reopen
                 RecordingEvent(at(70), EventKind.GpsLost, EventSource.Auto), // 10 s after the last fix
+                RecordingEvent(at(362), EventKind.Resume, EventSource.Auto), // at Continue
                 RecordingEvent(at(362), EventKind.CrashRecovered, EventSource.Auto),
             ),
             resumed.buffer.events,
@@ -55,7 +58,7 @@ class CrashResumeTest {
         // The first live tick persists the gap's events at once.
         val (_, effects) = RunReducer.reduce(resumed, RunInput.Tick(at(363)))
         val persist = effects.filterIsInstance<RunEffect.Persist>().single()
-        assertEquals(listOf(EventKind.HrLost, EventKind.GpsLost, EventKind.CrashRecovered), persist.batch.events.map { it.kind })
+        assertEquals(listOf(EventKind.Pause, EventKind.HrLost, EventKind.GpsLost, EventKind.Resume, EventKind.CrashRecovered), persist.batch.events.map { it.kind })
         assertEquals(at(363), persist.batch.persistedAt)
     }
 
@@ -72,7 +75,9 @@ class CrashResumeTest {
         assertEquals(
             listOf(
                 RecordingEvent(at(65), EventKind.HrLost, EventSource.Auto),
+                RecordingEvent(at(65.6), EventKind.Pause, EventSource.Auto),
                 RecordingEvent(at(70.6), EventKind.GpsLost, EventSource.Auto), // the catch-up ticks run from the heartbeat
+                RecordingEvent(at(362), EventKind.Resume, EventSource.Auto),
                 RecordingEvent(at(362), EventKind.CrashRecovered, EventSource.Auto),
             ),
             resumed.buffer.events,
@@ -83,7 +88,7 @@ class CrashResumeTest {
     fun a_loss_already_stored_is_not_written_twice() {
         val withLoss = stored(events = listOf(RecordingEvent(at(65), EventKind.HrLost, EventSource.Auto))).copy(lastPersistedAt = at(65.6))
         val resumed = RunReducer.resumed(RunReducer.rebuild(config, withLoss), at = at(362))
-        assertEquals(listOf(EventKind.GpsLost, EventKind.CrashRecovered), resumed.buffer.events.map { it.kind })
+        assertEquals(listOf(EventKind.Pause, EventKind.GpsLost, EventKind.Resume, EventKind.CrashRecovered), resumed.buffer.events.map { it.kind })
     }
 
     @Test
@@ -95,7 +100,7 @@ class CrashResumeTest {
         assertEquals(RunPhase.Paused(since = at(50)), resumed.progress.phase)
         assertEquals(595.seconds, resumed.snapshot.totalTime)
         assertEquals(45.seconds, resumed.progress.activeTime(at(600)), "paused since 50 s: active time stopped there")
-        assertEquals(EventKind.CrashRecovered, resumed.buffer.events.last().kind)
+        assertEquals(listOf(EventKind.HrLost, EventKind.GpsLost, EventKind.CrashRecovered), resumed.buffer.events.map { it.kind }, "already paused: no second pause")
     }
 
     @Test

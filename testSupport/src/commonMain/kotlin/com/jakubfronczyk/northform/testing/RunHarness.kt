@@ -16,6 +16,8 @@ import com.jakubfronczyk.northform.engine.run.RunInput
 import com.jakubfronczyk.northform.engine.run.RunReducer
 import com.jakubfronczyk.northform.engine.run.RunState
 import com.jakubfronczyk.northform.engine.run.StoreEffectInterpreter
+import com.jakubfronczyk.northform.engine.run.rebuild
+import com.jakubfronczyk.northform.engine.run.resumed
 import com.jakubfronczyk.northform.engine.run.time
 import com.jakubfronczyk.northform.engine.store.InMemoryRecordingStore
 import com.jakubfronczyk.northform.engine.store.MemoryRecords
@@ -63,6 +65,15 @@ class RunHarness(config: RunConfig, var confirmAfter: Int = 0) {
         inputs += 1
         queue(reduce(input))
         runStoreEffects(dueBy = inputs)
+    }
+
+    /**
+     * R28: the app dies now (whatever the store has not confirmed is lost) and is reopened at [at], where the user
+     * taps Continue: the run goes on from `resumed(rebuild(store))`, the production path, over the same store.
+     */
+    fun crashAndContinue(at: Instant) {
+        pending.clear()
+        state = RunReducer.resumed(RunReducer.rebuild(state.config, stored), at)
     }
 
     /** Runs every store effect still waiting, in order (the end of a replay). */

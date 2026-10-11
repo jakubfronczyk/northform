@@ -46,17 +46,12 @@ data class RunSummary(
     val pausedTime: Duration,
     /** Total − paused (spec 08). */
     val activeTime: Duration,
-    /**
-     * The time a crash took out of the run that the user then continued (R28): from the run's last stored
-     * sign of life before each `CrashRecovered` to that event, less any pause it fell in. Total and active
-     * time keep it (the clock ran on); [avgPace] does not, or a 5 min crash makes a 5 min/km run look like 10.
-     */
-    val crashGap: Duration,
-    /** [activeTime] − [crashGap]: the time the runner could have been moving, what [avgPace] divides. */
-    val movingTime: Duration,
     /** Metres counted (D111). */
     val distance: Double,
-    /** Moving seconds per km ([movingTime]); null under `Splits.paceMinDistance`. */
+    /**
+     * Seconds per km over [activeTime]; null under `Splits.paceMinDistance`. A continued crash is a stored
+     * pause (D40, `RunReducer.resumed`), so its gap is out of active time and out of distance alike.
+     */
     val avgPace: Double?,
     /** H1 over the effort (samples ≤ stop, valid only); null when the sensor never delivered. */
     val hrAvg: Int?,
@@ -115,7 +110,6 @@ data class RunSummary(
             val totalTime = stoppedAt - startedAt
             val pausedTime = Pauses.pausedWithin(pauses, startedAt, stoppedAt)
             val activeTime = totalTime - pausedTime
-            val crashGap = crashGap(data, pauses, stoppedAt)
             // D111: the same tracker the live run counted with, replayed over the stored fixes.
             val distance = RunReducer.distance(data)
             val effort = data.hr.filter { it.t <= stoppedAt && HeartRate.isValid(it.bpm) }
@@ -128,9 +122,8 @@ data class RunSummary(
             return RunSummary(
                 recording = recording, profile = profile, stoppedAt = stoppedAt,
                 totalTime = totalTime, pausedTime = pausedTime, activeTime = activeTime,
-                crashGap = crashGap, movingTime = activeTime - crashGap,
                 distance = distance,
-                avgPace = Splits.pace(activeTime - crashGap, distance),
+                avgPace = Splits.pace(activeTime, distance),
                 hrAvg = HeartRate.mean(effort),
                 hrMax = effort.maxOfOrNull { it.bpm },
                 timeInZone = timeInZone,
@@ -143,23 +136,6 @@ data class RunSummary(
                 quality = quality(data, stoppedAt),
                 samples = data.hr, cooldownEndedAt = cooldownEndedAt,
             )
-        }
-
-        /**
-         * [RunSummary.crashGap]. A gap opens at the latest moment the store holds anything from before the crash
-         * (a sample, a fix, an event the run itself wrote, an earlier `CrashRecovered`) and closes at the
-         * `CrashRecovered` the reopen wrote. The heartbeat itself is not kept per flush (`lastPersistedAt` is the
-         * latest only), so this is the last sign of life: within one 5 s flush of it while HR or GPS delivered.
-         * `HrLost`/`GpsLost` are left out: `resumed` stamps them inside the gap. A `CrashRecovered` at or after
-         * the stop (Save after a crash, D32: the run ends at its heartbeat, D30) has no gap inside the run.
-         */
-        private fun crashGap(data: RecordingData, pauses: List<Pause>, stoppedAt: Instant): Duration {
-            val signsOfLife = (data.hr.map { it.t } + data.fixes.map { it.t } +
-                data.events.filter { it.kind != EventKind.HrLost && it.kind != EventKind.GpsLost }.map { it.t }).sorted()
-            return data.events.filter { it.kind == EventKind.CrashRecovered && it.t < stoppedAt }.fold(Duration.ZERO) { sum, reopen ->
-                val lastAlive = signsOfLife.lastOrNull { it < reopen.t } ?: data.recording.startUtc
-                sum + Pauses.activeBetween(pauses, lastAlive, reopen.t)
-            }
         }
 
         /** The reliability log's counts (R29), with an HR loss still open at the stop closed there. */

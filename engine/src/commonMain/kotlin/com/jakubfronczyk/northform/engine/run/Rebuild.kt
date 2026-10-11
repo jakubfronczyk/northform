@@ -138,19 +138,29 @@ fun RunReducer.distance(data: RecordingData): Double {
 
 /**
  * R28 "Continue": the run as it stands when the user reopens the app at [at], from a [rebuild] state.
- * The gap since the last heartbeat is 1 Hz ticks through the same pure reducer, so what the reducer
- * derives on a live run it derives here: HR lost 5 s after the last sample, GPS lost 10 s after the
- * last fix (unless it was stationary, D102), total time running, a paused run still paused. Nothing
- * is written: the `Persist` effects the ticks would have asked for are dropped and the in-flight
- * mark cleared; the HR-lost alert is swallowed too (the user caused this gap). `lastPersistAt` stays
- * the old heartbeat, so the session's first tick flushes at once — the derived events plus the
- * `CrashRecovered` event appended here (the reducer has no input for "the user chose Continue").
+ * D40: the gap is a pause. A run that was active at its last heartbeat is paused there and resumed at
+ * [at], both through the reducer (`User(Pause)` / `User(Resume)`), so the gap becomes one stored pause
+ * interval and every consumer that honours pauses (active time, splits, sRPE, average pace, distance
+ * anchoring: the resume restarts the tracker, so the gap's distance is never bridged) leaves it out the
+ * same way. The reducer stamps a user action `Manual`; these two are relabelled `Auto` (the user did not
+ * tap them, D40). A run already paused stays paused, nothing added.
+ *
+ * In between, the gap is 1 Hz ticks through the same pure reducer, so what the reducer derives on a live
+ * run it derives here: HR lost 5 s after the last sample, GPS lost 10 s after the last fix (unless it was
+ * stationary, D102), total time running (pauses included). Nothing is written: the `Persist` effects are
+ * dropped and the in-flight mark cleared; the HR-lost alert is swallowed too (the user caused this gap).
+ * `lastPersistAt` stays the old heartbeat, so the session's first tick flushes at once: the derived
+ * events, the pause pair, and the `CrashRecovered` appended here (the reducer has no input for "the user
+ * chose Continue").
  */
 fun RunReducer.resumed(rebuilt: RunState, at: Instant): RunState {
     val heartbeat = rebuilt.buffer.lastPersistAt ?: rebuilt.progress.startedAt ?: return rebuilt
     var state = rebuilt
+    val gapIsPause = state.progress.phase == RunPhase.Active && at > heartbeat
+    if (gapIsPause) state = autoUser(state, UserAction.Pause, heartbeat)
     ticks(after = heartbeat, before = at).forEach { state = reduce(state, RunInput.Tick(it)).state }
     if (at > heartbeat) state = reduce(state, RunInput.Tick(at)).state
+    if (gapIsPause) state = autoUser(state, UserAction.Resume, at)
     val buffer = state.buffer
     return state.copy(
         buffer = buffer.copy(
@@ -160,6 +170,16 @@ fun RunReducer.resumed(rebuilt: RunState, at: Instant): RunState {
             lastPersistAt = heartbeat,
         ),
     )
+}
+
+/** A user action the app takes for the user (D40): reduced as the tap would be, its event stored as `Auto`. */
+private fun RunReducer.autoUser(state: RunState, action: UserAction, at: Instant): RunState {
+    val next = reduce(state, RunInput.User(action, at)).state
+    val before = state.buffer.events.size
+    val events = next.buffer.events.mapIndexed { i, event ->
+        if (i >= before && event.source == EventSource.Manual) event.copy(source = EventSource.Auto) else event
+    }
+    return next.copy(buffer = next.buffer.copy(events = events))
 }
 
 /**

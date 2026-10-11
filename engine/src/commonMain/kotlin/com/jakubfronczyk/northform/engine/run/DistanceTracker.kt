@@ -78,8 +78,13 @@ data class DistanceTracker(
         return Step(d.freeze(), segment)
     }
 
-    /** `DistanceTracker.swift:137` — restart the smoothing at resume, so paused walking is never counted. */
-    fun resume(): DistanceTracker = copy(smoothing = emptyList(), smoothed = emptyList())
+    /**
+     * `DistanceTracker.swift:137` — restart the smoothing at resume, so paused walking is never counted. The
+     * anchor goes too (D40: a pause is a route break): the first fix after the resume starts the line again,
+     * so a pause with no fixes in it (a continued crash, `RunReducer.resumed`) is never bridged as a GPS gap.
+     * A pause with fixes already moved the anchor along without counting, so it loses nothing.
+     */
+    fun resume(): DistanceTracker = copy(anchor = null, smoothing = emptyList(), smoothed = emptyList())
 
     private class Draft(t: DistanceTracker) {
         var anchor = t.anchor
