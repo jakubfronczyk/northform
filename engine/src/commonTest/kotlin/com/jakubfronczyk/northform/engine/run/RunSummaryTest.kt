@@ -193,6 +193,14 @@ class RunSummaryTest {
     }
 
     @Test
+    fun save_after_crash_counts_the_crash_in_the_summary() {
+        // D32/D40: the Save path writes CrashRecovered at the answer, after the run's end (savedUntil = stoppedAt, D30).
+        val data = played().stored
+        val saved = data.copy(events = data.events + RecordingEvent(at(500), EventKind.CrashRecovered, EventSource.Auto))
+        assertEquals(1, RunSummary.compute(saved, profile).quality.crashes, "a saved crashed run must not look like a normal finish")
+    }
+
+    @Test
     fun rebuild_after_a_continued_crash_still_matches_live() {
         val run = crashedAndContinued()
         val afterResume = run.checkpoints.filter { it.data.events.any { e -> e.kind == EventKind.CrashRecovered } }

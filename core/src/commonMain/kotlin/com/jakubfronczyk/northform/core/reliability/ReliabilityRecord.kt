@@ -50,7 +50,8 @@ data class ReliabilityRecord(
          * @param closeAt overrides that end, and nothing after it counts: an event later than [closeAt] is
          *   skipped, so a `Back` in the cool-down cannot stretch a loss past it and a drop there is no drop.
          *   The run summary's "Data ·" line passes the stop: it describes the effort, and the cool-down is
-         *   not part of it.
+         *   not part of it. A `CrashRecovered` counts wherever it lies (D40, D32): a Save after a crash writes it
+         *   at the answer, after the run's end (its last heartbeat, D30), and that run still went through a crash.
          */
         fun of(data: RecordingData, closeAt: Instant? = null): ReliabilityRecord {
             val end = closeAt ?: data.lastPersistedAt ?: data.recording.endUtc ?: data.events.lastOrNull()?.t ?: data.recording.startUtc
@@ -64,6 +65,7 @@ data class ReliabilityRecord(
             val gps = Loss()
             for (event in data.events) {
                 val t = event.t
+                if (event.kind == EventKind.CrashRecovered) { crashes += 1; continue }
                 if (closeAt != null && t > closeAt) continue
                 when (event.kind) {
                     EventKind.SensorLost -> { drops += 1; if (dropOpenedAt == null) dropOpenedAt = t }
@@ -77,7 +79,7 @@ data class ReliabilityRecord(
                     EventKind.HrBack -> hr.back(t)
                     EventKind.GpsLost -> gps.lost(t)
                     EventKind.GpsBack -> gps.back(t)
-                    EventKind.CrashRecovered -> crashes += 1
+                    EventKind.CrashRecovered -> Unit // counted above, whatever closeAt says
                     EventKind.Pause, EventKind.Resume, is EventKind.Split, EventKind.Stop, EventKind.CooldownEnd -> Unit
                 }
             }

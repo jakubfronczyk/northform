@@ -102,6 +102,13 @@ class ReliabilityRecordTest {
     }
 
     @Test
+    fun a_crash_after_close_at_still_counts() {
+        // D40/D32: Save after a crash marks it at the answer (300 s), after the run's end at its heartbeat (110 s).
+        val saved = data(110 to EventKind.Stop, 300 to EventKind.CrashRecovered, heartbeat = 110, end = 110)
+        assertEquals(1, ReliabilityRecord.of(saved, closeAt = at(110)).crashes)
+    }
+
+    @Test
     fun with_close_at_the_cool_down_counts_nothing() {
         // HR lost at 100, stop at 110, HR back at 140 in the cool-down: the effort lost 10 s, not 40 s.
         val gap = data(100 to EventKind.HrLost, 110 to EventKind.Stop, 140 to EventKind.HrBack, heartbeat = 170, end = 110)
