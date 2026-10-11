@@ -5,7 +5,6 @@ import com.jakubfronczyk.northform.core.HrSample
 import com.jakubfronczyk.northform.core.LocationFix
 import com.jakubfronczyk.northform.core.RecordingEvent
 import com.jakubfronczyk.northform.core.inSecondsDouble
-import com.jakubfronczyk.northform.core.roundedHalfAwayFromZero
 import kotlin.time.Duration
 import kotlin.time.Instant
 
@@ -26,6 +25,13 @@ object Splits {
 
     /** D102: a split pace means something only from here on. */
     const val paceMinDistance = 50.0
+
+    /**
+     * Seconds per km over [metres] covered in active [time]; null under [paceMinDistance] (D102). The ONE
+     * pace rule: the live split pace, the summary's average pace and each split row read it.
+     */
+    fun pace(time: Duration, metres: Double): Double? =
+        if (metres >= paceMinDistance) time.inSecondsDouble / metres * distance else null
 
     /**
      * D121, the shared interpolation (`RunReducer.swift:249`): a counted segment of [metres] from
@@ -68,6 +74,7 @@ object Splits {
      * @param totalDistance the run's counted distance in metres (the live `distance`, or the rebuilt one: the same number, D111).
      * @param pauses [Pauses.intervals] of the recording's events.
      * @param hr the recording's heart-rate samples; [fixes] its GPS fixes (both in time order).
+     * @param steps [Elevation.steps] of [fixes] over [pauses]; pass it when the caller already has it.
      */
     fun table(
         marks: List<Mark>,
@@ -77,31 +84,47 @@ object Splits {
         pauses: List<Pause>,
         hr: List<HrSample>,
         fixes: List<LocationFix>,
+        steps: List<Elevation.Step> = Elevation.steps(fixes, pauses),
     ): List<Row> {
-        val steps = Elevation.steps(fixes, pauses)
         val rows = ArrayList<Row>()
+        val cursor = Cursor(hr, steps)
         var start = startedAt
         for (mark in marks) {
-            rows += row(mark.index, start, mark.at, distance, pauses, hr, steps, partial = false)
+            rows += cursor.row(mark.index, start, mark.at, distance, pauses, partial = false)
             start = mark.at
         }
         val remainder = totalDistance - marks.size * distance
-        if (remainder > 0 && stoppedAt > start) rows += row(marks.size + 1, start, stoppedAt, remainder, pauses, hr, steps, partial = true)
+        if (remainder > 0 && stoppedAt > start) rows += cursor.row(marks.size + 1, start, stoppedAt, remainder, pauses, partial = true)
         return rows
     }
 
-    private fun row(
-        index: Int, start: Instant, end: Instant, metres: Double,
-        pauses: List<Pause>, hr: List<HrSample>, steps: List<Elevation.Step>, partial: Boolean,
-    ): Row {
-        val time = Pauses.activeBetween(pauses, start, end)
-        val samples = hr.filter { it.t >= start && it.t < end && HeartRate.isValid(it.bpm) }
-        val climb = Elevation.totals(steps.filter { it.at >= start && it.at < end })
-        return Row(
-            index = index, startAt = start, endAt = end, distance = metres, time = time,
-            pace = if (metres >= paceMinDistance) time.inSecondsDouble / metres * distance else null,
-            avgHr = if (samples.isEmpty()) null else (samples.sumOf { it.bpm }.toDouble() / samples.size).roundedHalfAwayFromZero().toInt(),
-            ascent = climb.ascent, descent = climb.descent, partial = partial,
-        )
+    /**
+     * The rows are consecutive `[start, end)` windows and both streams are in time order, so one forward
+     * pass reads them: each window starts where the last one stopped (two-pointer walk, O(rows + samples)).
+     */
+    private class Cursor(private val hr: List<HrSample>, private val steps: List<Elevation.Step>) {
+        private var h = 0
+        private var s = 0
+
+        fun row(index: Int, start: Instant, end: Instant, metres: Double, pauses: List<Pause>, partial: Boolean): Row {
+            while (h < hr.size && hr[h].t < start) h++
+            var sum = 0
+            var count = 0
+            while (h < hr.size && hr[h].t < end) {
+                val bpm = hr[h++].bpm
+                if (HeartRate.isValid(bpm)) { sum += bpm; count++ }
+            }
+            while (s < steps.size && steps[s].at < start) s++
+            val from = s
+            while (s < steps.size && steps[s].at < end) s++
+            val climb = Elevation.totals(steps.subList(from, s))
+            val time = Pauses.activeBetween(pauses, start, end)
+            return Row(
+                index = index, startAt = start, endAt = end, distance = metres, time = time,
+                pace = pace(time, metres),
+                avgHr = HeartRate.mean(sum, count),
+                ascent = climb.ascent, descent = climb.descent, partial = partial,
+            )
+        }
     }
 }

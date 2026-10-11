@@ -46,10 +46,18 @@ object RecordingMetrics {
 
     fun compute(input: Input, profile: Profile): List<MetricResult> {
         val effort = input.samples.filter { it.t <= input.stoppedAt }
+        return compute(input, profile, TimeInZone.compute(effort, profile), Trimp.compute(effort, profile))
+    }
+
+    /**
+     * [compute] with H3 and H5 already computed by the caller (the summary shows them too), so the HR
+     * stream is not walked again. Both must be of `input.samples` up to `input.stoppedAt`, with [profile].
+     */
+    fun compute(input: Input, profile: Profile, timeInZone: Map<Zone, Duration>, trimp: Double): List<MetricResult> {
         fun result(id: MetricId, value: Double) = MetricResult(id, version, value, profile)
         val out = ArrayList<MetricResult>()
-        for ((zone, time) in TimeInZone.compute(effort, profile)) out += result(Ids.timeInZone(zone.number), time.toDouble(DurationUnit.SECONDS))
-        out += result(Ids.trimp, Trimp.compute(effort, profile))
+        for ((zone, time) in timeInZone) out += result(Ids.timeInZone(zone.number), time.toDouble(DurationUnit.SECONDS))
+        out += result(Ids.trimp, trimp)
         input.rpe?.let { out += result(Ids.sRpe, Trimp.sRpe(it, input.activeTime)) }
         if (input.recoveryApplies) {
             HrRecovery.compute(input.samples, input.stoppedAt, input.cooldownEndedAt)?.let { out += result(Ids.hrRecovery, it.toDouble()) }

@@ -28,6 +28,18 @@ class SplitsTest {
         assertEquals(at(20), Splits.markReachedAt(1000.0, before = 950.0, metres = 50.0, from = at(10), to = at(20)), "a mark at its end")
     }
 
+    // ── The shared rules ──────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun pace_is_seconds_per_km_from_50_m_and_the_mean_rounds_half_away_from_zero() {
+        assertEquals(300.0, Splits.pace(150.seconds, 500.0))
+        assertEquals(1000.0, Splits.pace(50.seconds, 50.0), "exactly the bar")
+        assertNull(Splits.pace(49.seconds, 49.9), "under the bar (D102)")
+        assertEquals(145, HeartRate.mean(sum = 289, count = 2), "144.5 → 145")
+        assertEquals(145, HeartRate.mean(listOf(HrSample(at(0), 140), HrSample(at(1), 149))))
+        assertNull(HeartRate.mean(0, 0))
+    }
+
     // ── Pauses ────────────────────────────────────────────────────────────────────────────────
 
     @Test

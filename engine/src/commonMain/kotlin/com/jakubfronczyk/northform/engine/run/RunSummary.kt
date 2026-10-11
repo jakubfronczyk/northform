@@ -7,7 +7,6 @@ import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.Recording
 import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.RunTag
-import com.jakubfronczyk.northform.core.inSecondsDouble
 import com.jakubfronczyk.northform.core.metrics.Elevation
 import com.jakubfronczyk.northform.core.metrics.HeartRate
 import com.jakubfronczyk.northform.core.metrics.HrMaxSuggestion
@@ -22,7 +21,7 @@ import com.jakubfronczyk.northform.core.metrics.Trimp
 import com.jakubfronczyk.northform.core.metrics.Zone
 import com.jakubfronczyk.northform.core.ports.RecordingData
 import com.jakubfronczyk.northform.core.ports.RecordingStore
-import com.jakubfronczyk.northform.core.roundedHalfAwayFromZero
+import com.jakubfronczyk.northform.core.reliability.ReliabilityRecord
 import kotlin.time.Duration
 import kotlin.time.Instant
 
@@ -70,7 +69,7 @@ data class RunSummary(
     /** SU6: a higher HRmax seen for 10 s, to offer; null when none. */
     val hrMaxSuggestion: Int?,
     val quality: DataQuality,
-    /** The samples the catalogue runs on (cool-down included), kept so [metrics] needs nothing else. */
+    /** The samples the catalogue runs on (cool-down included), kept so [metrics] needs nothing else ([timeInZone] and [trimp] are reused). */
     private val samples: List<HrSample>,
     private val cooldownEndedAt: Instant?,
 ) {
@@ -92,7 +91,7 @@ data class RunSummary(
             samples = samples, stoppedAt = stoppedAt, cooldownEndedAt = cooldownEndedAt, activeTime = activeTime, rpe = rpe,
             recoveryApplies = recording.type == RecordingType.Run || recording.type == RecordingType.Walk, // D32
         ),
-        profile,
+        profile, timeInZone, trimp,
     )
 
     companion object {
@@ -109,44 +108,41 @@ data class RunSummary(
             val pausedTime = Pauses.pausedWithin(pauses, startedAt, stoppedAt)
             val activeTime = totalTime - pausedTime
             // D111: the same tracker the live run counted with, replayed over the stored fixes.
-            val config = RunConfig(recording.id, recording.type, profile, recording.tzOffset)
-            val distance = RunReducer.rebuild(config, data).progress.distance
+            val distance = RunReducer.distance(data)
             val effort = data.hr.filter { it.t <= stoppedAt && HeartRate.isValid(it.bpm) }
             val cooldownEndedAt = data.events.firstOrNull { it.kind == EventKind.CooldownEnd }?.t
-            val climb = Elevation.compute(data.fixes.filter { it.t <= stoppedAt }, pauses)
+            // One altitude pass for the run and its rows: steps depend only on earlier fixes, so the
+            // steps up to the stop are the steps of the fixes up to the stop.
+            val steps = Elevation.steps(data.fixes, pauses)
+            val climb = Elevation.totals(steps.filter { it.at <= stoppedAt })
+            val timeInZone = TimeInZone.compute(effort, profile)
             return RunSummary(
                 recording = recording, profile = profile, stoppedAt = stoppedAt,
                 totalTime = totalTime, pausedTime = pausedTime, activeTime = activeTime,
                 distance = distance,
-                avgPace = if (distance >= Splits.paceMinDistance) activeTime.inSecondsDouble / distance * 1000 else null,
-                hrAvg = if (effort.isEmpty()) null else (effort.sumOf { it.bpm }.toDouble() / effort.size).roundedHalfAwayFromZero().toInt(),
+                avgPace = Splits.pace(activeTime, distance),
+                hrAvg = HeartRate.mean(effort),
                 hrMax = effort.maxOfOrNull { it.bpm },
-                timeInZone = TimeInZone.compute(effort, profile),
+                timeInZone = timeInZone,
                 trimp = Trimp.compute(effort, profile),
                 hrRecovery = if (recording.type == RecordingType.Run || recording.type == RecordingType.Walk) HrRecovery.compute(data.hr, stoppedAt, cooldownEndedAt) else null,
-                splits = Splits.table(Splits.marks(data.events), startedAt, stoppedAt, distance, pauses, data.hr, data.fixes),
+                splits = Splits.table(Splits.marks(data.events), startedAt, stoppedAt, distance, pauses, data.hr, data.fixes, steps),
                 ascent = climb.ascent, descent = climb.descent,
-                suggestedTag = RunTagSuggestion.suggest(recording.type, effort, profile, totalTime, distance),
+                suggestedTag = RunTagSuggestion.suggest(recording.type, effort, profile, totalTime, distance, timeInZone),
                 hrMaxSuggestion = HrMaxSuggestion.detect(effort, profile),
                 quality = quality(data, stoppedAt),
                 samples = data.hr, cooldownEndedAt = cooldownEndedAt,
             )
         }
 
+        /** The reliability log's counts (R29), with an HR loss still open at the stop closed there. */
         private fun quality(data: RecordingData, stoppedAt: Instant): DataQuality {
-            var gap = Duration.ZERO
-            var lostSince: Instant? = null
-            for (event in data.events) when (event.kind) {
-                EventKind.HrLost -> if (lostSince == null) lostSince = event.t
-                EventKind.HrBack -> lostSince?.let { gap += maxOf(Duration.ZERO, event.t - it); lostSince = null }
-                else -> Unit
-            }
-            lostSince?.let { gap += maxOf(Duration.ZERO, stoppedAt - it) }
+            val log = ReliabilityRecord.of(data, closeAt = stoppedAt)
             return DataQuality(
-                sensorDrops = data.events.count { it.kind == EventKind.SensorLost },
-                hrGap = gap,
-                gpsLosses = data.events.count { it.kind == EventKind.GpsLost },
-                crashes = data.events.count { it.kind == EventKind.CrashRecovered },
+                sensorDrops = log.drops,
+                hrGap = log.hrLost,
+                gpsLosses = data.events.count { it.kind == EventKind.GpsLost }, // a count; the log keeps GPS lost time
+                crashes = log.recoveries,
             )
         }
     }

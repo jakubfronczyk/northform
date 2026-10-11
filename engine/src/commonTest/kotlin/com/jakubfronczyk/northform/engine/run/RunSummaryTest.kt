@@ -80,6 +80,14 @@ class RunSummaryTest {
     }
 
     @Test
+    fun the_distance_fold_counts_exactly_what_the_rebuild_counts() {
+        for (run in listOf(played(), played(skipCooldown = true))) {
+            val stored = run.stored
+            assertEquals(RunReducer.rebuild(RunHarness.config, stored).progress.distance, RunReducer.distance(stored), "D111, bit for bit")
+        }
+    }
+
+    @Test
     fun a_skipped_cooldown_has_no_recovery() {
         val summary = RunSummary.compute(played(skipCooldown = true).stored, profile)
         assertNull(summary.hrRecovery)

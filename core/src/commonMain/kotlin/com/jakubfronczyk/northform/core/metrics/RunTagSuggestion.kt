@@ -37,18 +37,33 @@ object RunTagSuggestion {
      * @param totalTime stop − start, pauses included (spec 08 "Total time").
      * @param distance metres counted (the live distance).
      */
-    fun suggest(type: RecordingType, samples: List<HrSample>, profile: Profile, totalTime: Duration, distance: Double): RunTag? = when (type) {
+    fun suggest(type: RecordingType, samples: List<HrSample>, profile: Profile, totalTime: Duration, distance: Double): RunTag? =
+        suggest(type, samples, profile, totalTime, distance) { TimeInZone.compute(samples, profile) }
+
+    /** [suggest] with H3 of [samples] already computed by the caller (the summary shows it too). */
+    fun suggest(
+        type: RecordingType, samples: List<HrSample>, profile: Profile, totalTime: Duration, distance: Double,
+        timeInZone: Map<Zone, Duration>,
+    ): RunTag? = suggest(type, samples, profile, totalTime, distance) { timeInZone }
+
+    /** H3 is asked for lazily: only a run that is not intervals reads it. */
+    private inline fun suggest(
+        type: RecordingType, samples: List<HrSample>, profile: Profile, totalTime: Duration, distance: Double,
+        timeInZone: () -> Map<Zone, Duration>,
+    ): RunTag? = when (type) {
         RecordingType.Walk -> null
         RecordingType.Run -> when {
             countSwings(samples, profile) >= swings -> RunTag.Intervals
-            timeInTempoZones(samples, profile) >= tempoTime -> RunTag.Tempo
+            timeInTempoZones(timeInZone()) >= tempoTime -> RunTag.Tempo
             totalTime >= longTime || distance >= longDistance -> RunTag.Long
             else -> RunTag.Easy
         }
     }
 
-    fun timeInTempoZones(samples: List<HrSample>, profile: Profile): Duration =
-        TimeInZone.compute(samples, profile).filterKeys { it.number in tempoZones }.values.fold(Duration.ZERO) { a, b -> a + b }
+    fun timeInTempoZones(samples: List<HrSample>, profile: Profile): Duration = timeInTempoZones(TimeInZone.compute(samples, profile))
+
+    private fun timeInTempoZones(timeInZone: Map<Zone, Duration>): Duration =
+        timeInZone.filterKeys { it.number in tempoZones }.values.fold(Duration.ZERO) { a, b -> a + b }
 
     private enum class Leg { High, Low }
 

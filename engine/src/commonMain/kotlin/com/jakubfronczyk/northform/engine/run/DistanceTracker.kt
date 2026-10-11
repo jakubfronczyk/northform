@@ -2,6 +2,7 @@ package com.jakubfronczyk.northform.engine.run
 
 import com.jakubfronczyk.northform.core.LocationFix
 import com.jakubfronczyk.northform.core.inSecondsDouble
+import com.jakubfronczyk.northform.core.metrics.Elevation
 import com.jakubfronczyk.northform.core.metrics.Geo
 import kotlin.math.max
 import kotlin.math.pow
@@ -197,8 +198,8 @@ data class DistanceTracker(
     }
 
     companion object {
-        /** A fix must be at least this accurate to count for distance (D102). */
-        const val distanceAccuracy = 20.0
+        /** A fix must be at least this accurate to count for distance (D102): spec 08's one point filter, which altitude reads too. */
+        const val distanceAccuracy = Elevation.maxAccuracy
         /** After a GPS gap, the next point is bridged only if the gap is short and plausible (D34). */
         const val bridgeMaxDistance = 200.0
         const val bridgeMaxSpeed = 25 / 3.6

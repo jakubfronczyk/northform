@@ -4,9 +4,9 @@ import com.jakubfronczyk.northform.core.HrSample
 import com.jakubfronczyk.northform.core.LocationFix
 import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.RecordingEvent
-import com.jakubfronczyk.northform.core.inSecondsDouble
+import com.jakubfronczyk.northform.core.metrics.HeartRate
+import com.jakubfronczyk.northform.core.metrics.Splits
 import com.jakubfronczyk.northform.core.metrics.zoneOf
-import com.jakubfronczyk.northform.core.roundedHalfAwayFromZero
 import kotlin.time.Duration
 import kotlin.time.Instant
 
@@ -113,10 +113,10 @@ data class RunProgress(
             startedAt = startedAt,
             totalTime = total,
             distance = distance,
-            splitPace = if (splitDistance >= RunReducer.splitPaceMinDistance) splitActive.inSecondsDouble / splitDistance * 1000 else null,
+            splitPace = Splits.pace(splitActive, splitDistance),
             currentPace = currentPace.pace(now = lastTick, active = phase == RunPhase.Active),
             hrNow = hrNow,
-            hrAvg = if (hrCount > 0) (hrSum.toDouble() / hrCount.toDouble()).roundedHalfAwayFromZero().toInt() else null,
+            hrAvg = HeartRate.mean(hrSum, hrCount),
             hrMax = hrMax,
             zone = hrNow?.let { profile.zoneOf(it) },
             hrLost = if (atTheGate) !gateHrReady else hrLost,

@@ -39,9 +39,12 @@ data class ReliabilityRecord(
          * share one instant). A loss still open at the end closes at the latest moment the store knows about:
          * the heartbeat (`lastPersistedAt`, never older than the data it covers — ADR 0006), else the stop, else
          * the last event. A `Back` with no `Lost` open, and a second `Lost` while one is open, change nothing.
+         *
+         * @param closeAt overrides that end. The run summary's "Data ·" line passes the stop: it describes
+         *   the effort, and the cool-down is not part of it.
          */
-        fun of(data: RecordingData): ReliabilityRecord {
-            val end = data.lastPersistedAt ?: data.recording.endUtc ?: data.events.lastOrNull()?.t ?: data.recording.startUtc
+        fun of(data: RecordingData, closeAt: Instant? = null): ReliabilityRecord {
+            val end = closeAt ?: data.lastPersistedAt ?:data.recording.endUtc ?: data.events.lastOrNull()?.t ?: data.recording.startUtc
             var drops = 0
             var reconnects = 0
             var recoveries = 0

@@ -17,7 +17,7 @@ object Elevation {
     /** D25 ◻: the band GPS altitude must leave before a change counts. */
     const val hysteresis = 2.0
 
-    /** Spec 08 "Point filter", the same 20 m a fix needs to count for distance (`DistanceTracker.distanceAccuracy`), restated so `:core` stays below `:engine`. */
+    /** Spec 08 "Point filter": the ONE 20 m a fix needs to count, for altitude here and for distance (`DistanceTracker.distanceAccuracy` reads it). */
     const val maxAccuracy = 20.0
 
     /** One counted altitude change at the fix that confirmed it: positive up, negative down. */
