@@ -40,11 +40,13 @@ data class ReliabilityRecord(
          * the heartbeat (`lastPersistedAt`, never older than the data it covers — ADR 0006), else the stop, else
          * the last event. A `Back` with no `Lost` open, and a second `Lost` while one is open, change nothing.
          *
-         * @param closeAt overrides that end. The run summary's "Data ·" line passes the stop: it describes
-         *   the effort, and the cool-down is not part of it.
+         * @param closeAt overrides that end, and nothing after it counts: an event later than [closeAt] is
+         *   skipped, so a `Back` in the cool-down cannot stretch a loss past it and a drop there is no drop.
+         *   The run summary's "Data ·" line passes the stop: it describes the effort, and the cool-down is
+         *   not part of it.
          */
         fun of(data: RecordingData, closeAt: Instant? = null): ReliabilityRecord {
-            val end = closeAt ?: data.lastPersistedAt ?:data.recording.endUtc ?: data.events.lastOrNull()?.t ?: data.recording.startUtc
+            val end = closeAt ?: data.lastPersistedAt ?: data.recording.endUtc ?: data.events.lastOrNull()?.t ?: data.recording.startUtc
             var drops = 0
             var reconnects = 0
             var recoveries = 0
@@ -54,6 +56,7 @@ data class ReliabilityRecord(
             val gps = Loss()
             for (event in data.events) {
                 val t = event.t
+                if (closeAt != null && t > closeAt) continue
                 when (event.kind) {
                     EventKind.SensorLost -> { drops += 1; if (dropOpenedAt == null) dropOpenedAt = t }
                     EventKind.SensorReconnected -> {

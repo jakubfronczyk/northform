@@ -90,4 +90,16 @@ class ReliabilityRecordTest {
     fun a_crash_the_user_continued_is_a_recovery() {
         assertEquals(2, ReliabilityRecord.of(data(100 to EventKind.CrashRecovered, 300 to EventKind.CrashRecovered)).recoveries)
     }
+
+    @Test
+    fun with_close_at_the_cool_down_counts_nothing() {
+        // HR lost at 100, stop at 110, HR back at 140 in the cool-down: the effort lost 10 s, not 40 s.
+        val gap = data(100 to EventKind.HrLost, 110 to EventKind.Stop, 140 to EventKind.HrBack, heartbeat = 170, end = 110)
+        assertEquals(10.seconds, ReliabilityRecord.of(gap, closeAt = at(110)).hrLost)
+        // A drop in the cool-down is not the effort's either.
+        val drop = data(110 to EventKind.Stop, 130 to EventKind.SensorLost, 150 to EventKind.SensorReconnected, heartbeat = 170, end = 110)
+        assertEquals(ReliabilityRecord.none, ReliabilityRecord.of(drop, closeAt = at(110)))
+        // Without closeAt the whole stored run counts.
+        assertEquals(40.seconds, ReliabilityRecord.of(gap).hrLost)
+    }
 }
