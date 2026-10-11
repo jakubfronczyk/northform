@@ -9,6 +9,7 @@ import com.jakubfronczyk.northform.core.gatt.Gatt
 import com.jakubfronczyk.northform.core.ports.BleCentral
 import com.jakubfronczyk.northform.core.ports.BleEvent
 import com.jakubfronczyk.northform.core.ports.GattUuid
+import com.jakubfronczyk.northform.testing.HeartRateSensorContract
 import com.jakubfronczyk.northform.testing.virtualWallClock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -34,10 +35,16 @@ import kotlin.time.Instant
 /**
  * The `HeartRateSensor` port's contract, proven on the real `GattHeartRateSensor` over a scripted
  * `BleCentral`. The pure link machine is an internal seam; these tests cross the port the app crosses.
+ * The state-delivery cases every implementation shares (D36) are inherited from [HeartRateSensorContract];
+ * the ones here are the Bluetooth link's own.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class HeartRateSensorContractTest {
-    private val start = Instant.fromEpochSeconds(1_800_000_000)
+class HeartRateSensorContractTest : HeartRateSensorContract() {
+    // D36: the shared cases, run on this implementation.
+    @Test override fun a_drop_is_delivered_as_lost_then_connecting_at_one_instant_then_connected() = super.a_drop_is_delivered_as_lost_then_connecting_at_one_instant_then_connected()
+    @Test override fun bluetooth_off_then_on_is_delivered_change_by_change() = super.bluetooth_off_then_on_is_delivered_change_by_change()
+    @Test override fun a_user_disconnect_is_delivered_and_is_not_a_drop() = super.a_user_disconnect_is_delivered_and_is_not_a_drop()
+
     private val polar = SensorId("3F2504E0-4F89-11D3-9A0C-0305E82C3301")
     private val other = SensorId("9B2E0B20-7E0A-4C5B-8A2E-0D3B2C4F5A61")
 
@@ -71,6 +78,22 @@ class HeartRateSensorContractTest {
         }
 
     private fun ScriptedCentral.linkUp(id: SensorId) { radio(BleEvent.Connected(id)); radio(ready(id)) }
+
+    /** D36 on the Bluetooth link: the radio's own events make each step. */
+    override fun TestScope.connected(): Driver {
+        val central = ScriptedCentral().apply { known += polar }
+        val sensor = sensor(central)
+        central.radio(BleEvent.PowerOn)
+        launch { sensor.connect(polar) }
+        runCurrent(); central.linkUp(polar); runCurrent()
+        return object : Driver {
+            override val sensor = sensor
+            override suspend fun drop() = central.radio(BleEvent.Disconnected(polar, isReconnecting = true, message = "The connection has timed out unexpectedly."))
+            override suspend fun relink() = central.linkUp(polar)
+            override suspend fun bluetoothOff() { central.radio(BleEvent.PowerOff); central.radio(BleEvent.Disconnected(polar, isReconnecting = false, message = "powered off")) }
+            override suspend fun bluetoothOn() = central.radio(BleEvent.PowerOn)
+        }
+    }
 
     @Test
     fun connect_to_a_known_sensor_returns_once_the_link_is_connected() = runTest {
@@ -166,23 +189,11 @@ class HeartRateSensorContractTest {
     }
 
     @Test
-    fun a_drop_the_system_reconnects_is_delivered_as_lost_then_connecting_then_connected_with_its_times() = runTest {
+    fun a_drop_the_system_reconnects_needs_no_second_connect() = runTest {
         val central = ScriptedCentral().apply { known += polar }
-        val seen = ArrayList<SensorStateChange>()
-        connected(central, seen)
-        advanceTimeBy(10.seconds)
+        connected(central, ArrayList())
         central.radio(BleEvent.Disconnected(polar, isReconnecting = true, message = "The connection has timed out unexpectedly.")); runCurrent()
-        assertEquals(
-            listOf(SensorState.Connected(null), SensorState.Disconnected(DisconnectReason.Lost), SensorState.Connecting),
-            seen.map { it.state },
-            "Lost must reach the collector even though Connecting follows in the same reduce: it is the drop the log counts",
-        )
-        assertEquals(start + 10.seconds, seen[1].at, "the drop is stamped when the radio reported it")
-        assertEquals(1, central.calls.count { it.startsWith("connect") }, "the system re-links by itself; no second connect: ${central.calls}")
-        advanceTimeBy(30.seconds)
-        central.linkUp(polar); runCurrent()
-        assertEquals(SensorState.Connected(null), seen.last().state)
-        assertEquals(30.seconds, seen.last().at - seen[1].at, "reconnect time = Connected.at − Lost.at")
+        assertEquals(1, central.calls.count { it.startsWith("connect") }, "the system re-links by itself: ${central.calls}")
     }
 
     @Test
@@ -196,7 +207,7 @@ class HeartRateSensorContractTest {
     }
 
     @Test
-    fun a_user_disconnect_is_not_a_drop() = runTest {
+    fun the_radios_own_disconnect_after_a_user_disconnect_adds_nothing() = runTest {
         val central = ScriptedCentral().apply { known += polar }
         val seen = ArrayList<SensorStateChange>()
         val sensor = connected(central, seen)
@@ -204,19 +215,6 @@ class HeartRateSensorContractTest {
         assertEquals(listOf(SensorState.Disconnected(DisconnectReason.User)), seen.drop(1).map { it.state })
         central.radio(BleEvent.Disconnected(polar, isReconnecting = false, message = null)); runCurrent()
         assertEquals(1, seen.size - 1, "the radio's own disconnect after ours adds nothing: ${seen.map { it.state }}")
-    }
-
-    @Test
-    fun bluetooth_off_is_reported_apart_from_a_drop_and_power_on_relinks() = runTest {
-        val central = ScriptedCentral().apply { known += polar }
-        val seen = ArrayList<SensorStateChange>()
-        connected(central, seen)
-        central.radio(BleEvent.PowerOff); runCurrent()
-        central.radio(BleEvent.Disconnected(polar, isReconnecting = false, message = "powered off")); runCurrent()
-        assertEquals(listOf(SensorState.BluetoothOff), seen.drop(1).map { it.state }, "no Lost while the radio is off (D120 of the Swift build)")
-        central.radio(BleEvent.PowerOn); runCurrent()
-        central.linkUp(polar); runCurrent()
-        assertEquals(listOf(SensorState.BluetoothOff, SensorState.Connecting, SensorState.Connected(null)), seen.drop(1).map { it.state })
     }
 
     // ── SU3 pairing through the port (adapters/01) ───────────────────────────────────────────

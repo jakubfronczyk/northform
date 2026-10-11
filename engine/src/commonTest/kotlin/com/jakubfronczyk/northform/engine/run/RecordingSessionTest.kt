@@ -1,30 +1,24 @@
 package com.jakubfronczyk.northform.engine.run
 
-import com.jakubfronczyk.northform.core.DiscoveredSensor
 import com.jakubfronczyk.northform.core.HrSample
 import com.jakubfronczyk.northform.core.LocationFix
 import com.jakubfronczyk.northform.core.Recording
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingState
-import com.jakubfronczyk.northform.core.SensorId
-import com.jakubfronczyk.northform.core.SensorState
-import com.jakubfronczyk.northform.core.SensorStateChange
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.ports.Alert
 import com.jakubfronczyk.northform.core.ports.FlushBatch
-import com.jakubfronczyk.northform.core.ports.HeartRateSensor
 import com.jakubfronczyk.northform.core.ports.LocationProvider
 import com.jakubfronczyk.northform.core.ports.RecordingStore
 import com.jakubfronczyk.northform.engine.store.InMemoryRecordingStore
 import com.jakubfronczyk.northform.testing.RecordedAlerts
 import com.jakubfronczyk.northform.testing.RunHarness
+import com.jakubfronczyk.northform.testing.ScriptedHeartRateSensor
 import com.jakubfronczyk.northform.testing.tap
 import com.jakubfronczyk.northform.testing.virtualWallClock
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -47,16 +41,6 @@ import kotlin.time.Instant
 @OptIn(ExperimentalCoroutinesApi::class)
 class RecordingSessionTest {
     private val start = Instant.fromEpochSeconds(1_800_000_000)
-
-    private class FakeSensor : HeartRateSensor {
-        val hr = MutableSharedFlow<HrSample>(extraBufferCapacity = 64)
-        val state = MutableStateFlow(SensorStateChange(SensorState.Connected(80), Instant.fromEpochSeconds(0)))
-        override fun states(): Flow<SensorStateChange> = state
-        override fun heartRate(): Flow<HrSample> = hr
-        override fun search(): Flow<DiscoveredSensor> = emptyFlow()
-        override suspend fun connect(id: SensorId) {}
-        override suspend fun disconnect() {}
-    }
 
     private object NoLocation : LocationProvider {
         override fun fixes(): Flow<LocationFix> = emptyFlow()
@@ -90,7 +74,7 @@ class RecordingSessionTest {
     }
 
 
-    private fun TestScope.session(sensor: FakeSensor, store: Store, alerts: RecordedAlerts = RecordedAlerts()) =
+    private fun TestScope.session(sensor: ScriptedHeartRateSensor, store: Store, alerts: RecordedAlerts = RecordedAlerts()) =
         RecordingSession(RunHarness.config, sensor, NoLocation, store, alerts, virtualWallClock(start))
 
     /**
@@ -99,7 +83,7 @@ class RecordingSessionTest {
      */
     @Test
     fun run_cancelled_before_the_mailbox_starts_still_answers_backgrounded_and_end() = runTest {
-        val session = session(FakeSensor(), Store())
+        val session = session(ScriptedHeartRateSensor(), Store())
         val job = launch(start = CoroutineStart.UNDISPATCHED) { session.run() } // children launched, none dispatched yet
         job.cancel()
         runCurrent()
@@ -112,7 +96,7 @@ class RecordingSessionTest {
     /** Crash resume (R28): a session started from a rebuilt state is already active and keeps the old total time. */
     @Test
     fun a_session_started_from_a_rebuilt_state_continues_the_run() = runTest {
-        val sensor = FakeSensor()
+        val sensor = ScriptedHeartRateSensor()
         val store = Store()
         val startedAt = start - 10.minutes
         val resumed = RunState(
@@ -132,7 +116,7 @@ class RecordingSessionTest {
 
     @Test
     fun countdown_then_samples_flushed_every_5s_and_confirmed_through_the_inbox() = runTest {
-        val sensor = FakeSensor()
+        val sensor = ScriptedHeartRateSensor()
         val store = Store()
         val alerts = RecordedAlerts()
         val session = session(sensor, store, alerts)
@@ -156,7 +140,7 @@ class RecordingSessionTest {
 
     @Test
     fun a_failed_flush_is_retried_without_loss() = runTest {
-        val sensor = FakeSensor()
+        val sensor = ScriptedHeartRateSensor()
         val store = Store()
         val session = session(sensor, store)
         val job = launch { session.run() }
@@ -177,7 +161,7 @@ class RecordingSessionTest {
     /** persistence/02: the first row fails ⇒ "not saving" at once, and it stays, because every flush fails on a missing recording. */
     @Test
     fun a_failed_create_shows_not_saving_from_the_start() = runTest {
-        val sensor = FakeSensor()
+        val sensor = ScriptedHeartRateSensor()
         val store = Store().apply { failCreate = true }
         val session = session(sensor, store)
         val job = launch { session.run() }
@@ -195,7 +179,7 @@ class RecordingSessionTest {
 
     @Test
     fun stop_then_skip_cooldown_ends_the_run_after_begin_computing() = runTest {
-        val sensor = FakeSensor()
+        val sensor = ScriptedHeartRateSensor()
         val store = Store()
         val session = session(sensor, store)
         val job = launch { session.run() }
@@ -218,7 +202,7 @@ class RecordingSessionTest {
     /** A stop the store refused is retried until it lands; until then the screen says "not saving" and the run is not over. */
     @Test
     fun a_failed_stop_is_retried_until_the_run_is_stopped_and_computing() = runTest {
-        val sensor = FakeSensor()
+        val sensor = ScriptedHeartRateSensor()
         val store = Store().apply { failStops = Int.MAX_VALUE } // the disk is full until we say so
         val session = session(sensor, store)
         val job = launch { session.run() }
@@ -249,7 +233,7 @@ class RecordingSessionTest {
     /** The last store effect has no later one to carry its retry: the writer retries it on its own. */
     @Test
     fun a_failed_begin_computing_is_retried_by_the_writer_alone() = runTest {
-        val sensor = FakeSensor()
+        val sensor = ScriptedHeartRateSensor()
         val store = Store().apply { failComputing = true }
         val session = session(sensor, store)
         val job = launch { session.run() }
