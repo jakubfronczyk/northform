@@ -25,6 +25,7 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
+            implementation(project(":testSupport")) // D36: the HeartRateSensor contract, run on FakeHeartRateSensor too
         }
     }
 }

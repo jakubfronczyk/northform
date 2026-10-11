@@ -7,6 +7,7 @@ import com.jakubfronczyk.northform.core.SensorId
 import com.jakubfronczyk.northform.core.SensorState
 import com.jakubfronczyk.northform.core.SensorStateChange
 import com.jakubfronczyk.northform.core.ports.HeartRateSensor
+import com.jakubfronczyk.northform.core.ports.SensorStateBroadcaster
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -21,14 +22,15 @@ import kotlin.time.Instant
  * link keeps trying until told to stop); a test answers it by setting [state] to `Connected`.
  */
 class FakeHeartRateSensor(initial: SensorState = SensorState.Disconnected(DisconnectReason.User)) : HeartRateSensor {
-    val state = MutableStateFlow(SensorStateChange(initial, Instant.fromEpochSeconds(0)))
+    /** D36: every change in order, none merged, as the real sensors publish them (a `StateFlow` would conflate Lost → Connecting). */
+    private val broadcaster = SensorStateBroadcaster(SensorStateChange(initial, Instant.fromEpochSeconds(0)))
     val samples = MutableSharedFlow<HrSample>(extraBufferCapacity = 16)
     val adverts = MutableSharedFlow<DiscoveredSensor>(extraBufferCapacity = 16)
     val calls = ArrayList<String>()
 
-    fun set(state: SensorState, at: Instant = Instant.fromEpochSeconds(0)) { this.state.value = SensorStateChange(state, at) }
+    fun set(state: SensorState, at: Instant = Instant.fromEpochSeconds(0)) { broadcaster.publish(SensorStateChange(state, at)) }
 
-    override fun states(): Flow<SensorStateChange> = state
+    override fun states(): Flow<SensorStateChange> = broadcaster.changes
     override fun heartRate(): Flow<HrSample> = samples
     override fun search(): Flow<DiscoveredSensor> = adverts.onStart { calls += "search on" }.onCompletion { calls += "search off" }
     override suspend fun connect(id: SensorId) { calls += "connect ${id.value}"; awaitCancellation() }
