@@ -5,51 +5,20 @@ import com.jakubfronczyk.northform.core.EventSource
 import com.jakubfronczyk.northform.core.HrSample
 import com.jakubfronczyk.northform.core.Recording
 import com.jakubfronczyk.northform.core.RecordingEvent
-import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RecordingState.Active
-import com.jakubfronczyk.northform.core.RecordingState.Computing
-import com.jakubfronczyk.northform.core.RecordingState.Stopping
 import com.jakubfronczyk.northform.core.ports.RecordingData
-import com.jakubfronczyk.northform.engine.run.CrashChoice.Continue
-import com.jakubfronczyk.northform.engine.run.CrashChoice.Delete
-import com.jakubfronczyk.northform.engine.run.CrashChoice.Save
 import com.jakubfronczyk.northform.testing.RunHarness
 import com.jakubfronczyk.northform.testing.at
 import com.jakubfronczyk.northform.testing.fix
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
-/** R28 crash resume: the prompt rule (Swift D75 restated) and the gap the resumed run carries. */
+/** R28 crash resume: the gap the resumed run carries (the prompt rule is `CrashPromptTest`). */
 class CrashResumeTest {
     private val config = RunHarness.config
-
-    // ── The prompt rule ───────────────────────────────────────────────────────────────────
-
-    @Test
-    fun the_prompt_offers_continue_first_only_for_a_fresh_active_run() {
-        data class Row(val state: RecordingState, val gap: Duration, val choices: List<CrashChoice>, val main: CrashChoice)
-        val table = listOf(
-            Row(Active, 0.seconds, listOf(Continue, Save, Delete), Continue),
-            Row(Active, 4.minutes, listOf(Continue, Save, Delete), Continue),
-            Row(Active, 10.minutes - 1.seconds, listOf(Continue, Save, Delete), Continue),
-            Row(Active, 10.minutes, listOf(Save, Continue, Delete), Save), // `CrashPromptLate`: at the limit Save leads
-            Row(Active, 40.minutes, listOf(Save, Continue, Delete), Save),
-            Row(Stopping, 1.minutes, listOf(Save, Delete), Save), // hold-to-stop happened: the run is over
-            Row(Computing, 1.minutes, listOf(Save, Delete), Save), // every write was done
-        )
-        for (row in table) {
-            val prompt = CrashPrompt.of(row.state, row.gap)
-            assertEquals(row.choices, prompt.choices, "$row")
-            assertEquals(row.main, prompt.main, "$row")
-        }
-        assertFailsWith<IllegalStateException> { CrashPrompt.of(RecordingState.Saved, 1.minutes) }
-    }
 
     // ── The gap ────────────────────────────────────────────────────────────────────────────
 

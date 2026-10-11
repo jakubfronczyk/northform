@@ -184,7 +184,7 @@ object NorthformApp {
             sensorScreen = { close -> SensorScreen(remember { SensorScreenModel(sensor, sensorDetails) }, onClose = close) },
             gateSensor = gateSensor,
             connectSensor = ::connectPairedSensor,
-            crashPrompt = unfinished?.let { run -> { CrashPromptScreen(run.facts, onChoice = model::resolveUnfinished) } },
+            crashPrompt = unfinished?.let { run -> { CrashPromptScreen(run.facts, now = IosWallClock::now, onChoice = model::resolveUnfinished) } },
         )
     }
 }

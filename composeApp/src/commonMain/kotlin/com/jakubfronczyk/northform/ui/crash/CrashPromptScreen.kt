@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,17 +38,23 @@ import com.jakubfronczyk.northform.ui.Theme
 import com.jakubfronczyk.northform.ui.Type
 import com.jakubfronczyk.northform.ui.VDivider
 import com.jakubfronczyk.northform.ui.ValueCell
+import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 /**
  * The R28 crash prompt (`design/canvas/project/CrashPrompt.dc.html`, `CrashPromptLate` = the same board
  * past 10 minutes): a scrim over Today and a bottom sheet with what is saved and the three answers.
- * Which answer leads is [CrashPrompt.of]'s call, not the screen's. Delete asks twice (R27), in place.
+ * Which answers are offered and which one leads is [CrashPrompt.of]'s call, not the screen's: it is asked again
+ * every second from the wall clock [now] (D30), so a prompt left up past 10 min turns to Save-first and past 2 h
+ * drops Continue while it is on screen. Delete asks twice (R27), in place.
  */
 @Composable
-fun CrashPromptScreen(facts: CrashFacts, onChoice: (CrashChoice) -> Unit) {
-    val prompt = remember(facts) { CrashPrompt.of(facts) }
-    val now = facts.savedUntil + facts.interruptedFor
-    val minutesAgo = facts.interruptedFor.inWholeMinutes
+fun CrashPromptScreen(facts: CrashFacts, now: () -> Instant, onChoice: (CrashChoice) -> Unit) {
+    var at by remember { mutableStateOf(now()) }
+    LaunchedEffect(facts) { while (true) { at = now(); delay(1.seconds) } }
+    val prompt = CrashPrompt.of(facts, at)
+    val minutesAgo = facts.interruptedFor(at).inWholeMinutes
     // The scrim takes every touch: Today's buttons under it stay out of reach until the prompt is answered.
     // A background alone has no pointer node, so hit-testing would fall through to the screen below. A no-op,
     // no-indication clickable is a hit target that yields to the sheet's own buttons (they consume the down first);
@@ -81,7 +88,7 @@ fun CrashPromptScreen(facts: CrashFacts, onChoice: (CrashChoice) -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Gap until now counts as sensor + GPS lost", style = GapTitle, color = Theme.text)
                     Text(
-                        "${RunFormat.localTime(facts.savedUntil, facts.tzOffset)} to ${RunFormat.localTime(now, facts.tzOffset)} · total time keeps running",
+                        "${RunFormat.localTime(facts.savedUntil, facts.tzOffset)} to ${RunFormat.localTime(at, facts.tzOffset)} · total time keeps running",
                         style = Type.tertiaryText, color = Theme.text2,
                     )
                 }

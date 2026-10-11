@@ -3,6 +3,7 @@ package com.jakubfronczyk.northform.app
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.engine.run.CrashChoice
+import com.jakubfronczyk.northform.engine.run.CrashPrompt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -71,6 +72,13 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     fun resolveUnfinished(choice: CrashChoice) {
         val run = _unfinished.value ?: return
         val id = run.id.value.take(8)
+        // D30: the interruption is measured now, at the tap: a prompt left up past the cap no longer offers Continue,
+        // and a late tap on a Continue still drawn from an older render is refused here (the prompt stays up).
+        val now = deps.wallClock.now()
+        if (choice !in CrashPrompt.of(run.facts, now).choices) {
+            deps.log("run $id crash: $choice refused (not offered after ${run.facts.interruptedFor(now).inWholeMinutes} min)")
+            return
+        }
         when (choice) {
             // Continue only resumes a recording the store still holds as `active`: one already stopped (a crash after
             // the stop, or a Save that got halfway) has nothing to resume, so the answer is saved instead.

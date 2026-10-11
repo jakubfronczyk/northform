@@ -30,7 +30,7 @@ class UnfinishedRun(val data: RecordingData, val rebuilt: RunState, val facts: C
             val facts = CrashFacts(
                 state = recording.state, startedAt = recording.startUtc, tzOffset = recording.tzOffset,
                 distance = snapshot.distance, totalTime = snapshot.totalTime,
-                savedUntil = savedUntil, interruptedFor = deps.wallClock.now() - savedUntil,
+                savedUntil = savedUntil,
             )
             return UnfinishedRun(data, rebuilt, facts)
         }

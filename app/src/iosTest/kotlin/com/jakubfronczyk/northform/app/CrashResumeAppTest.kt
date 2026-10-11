@@ -36,6 +36,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -49,10 +50,10 @@ import kotlin.time.Instant
 class CrashResumeAppTest {
     private fun straightRun(): ReplayScript = Fixture.parse(BundledFixtureText.STRAIGHT_RUN_3MIN)
 
-    private fun TestScope.replayDeps(script: ReplayScript, store: RecordingStore, log: (String) -> Unit = {}) = AppDeps(
+    private fun TestScope.replayDeps(script: ReplayScript, store: RecordingStore, clockStart: Instant = script.meta.start, log: (String) -> Unit = {}) = AppDeps(
         source = RunSource.Replay { script },
         store = store,
-        wallClock = virtualWallClock(script.meta.start),
+        wallClock = virtualWallClock(clockStart),
         alerts = RecordedAlerts(),
         log = log,
         newRecordingId = { "00000000-0000-0000-0000-00000000000c" },
@@ -96,9 +97,10 @@ class CrashResumeAppTest {
             assertEquals(RecordingState.Active, facts.state)
             assertEquals(heartbeat, facts.savedUntil)
             assertEquals(live.startedAt, facts.startedAt)
-            assertTrue(facts.interruptedFor >= 5.minutes && facts.interruptedFor < 6.minutes, "${facts.interruptedFor}")
+            val reopen = virtualWallClock(script.meta.start).now()
+            assertTrue(facts.interruptedFor(reopen) >= 5.minutes && facts.interruptedFor(reopen) < 6.minutes, "${facts.interruptedFor(reopen)}")
             assertTrue(facts.distance > 100 && facts.distance <= live.distance, "what is saved: ${facts.distance} m of ${live.distance} m")
-            assertEquals(CrashChoice.Continue, CrashPrompt.of(facts).main, "< 10 min: Continue leads")
+            assertEquals(CrashChoice.Continue, CrashPrompt.of(facts, reopen).main, "< 10 min: Continue leads")
 
             // Continue: the same run, the gap counted as lost, total time including it.
             second.resolveUnfinished(CrashChoice.Continue); runCurrent()
@@ -146,12 +148,12 @@ class CrashResumeAppTest {
     }
 
     @Test
-    fun save_ends_the_run_at_the_last_heartbeat_and_hands_it_to_computing() = runTest {
+    fun save_ends_the_run_at_the_last_heartbeat_not_at_reopen_and_hands_it_to_computing() = runTest {
         val driver = inMemoryDriver("crash-resume-save")
         try {
             val store = SqlRecordingStore(driver, io = EmptyCoroutineContext)
             seed(store)
-            val deps = replayDeps(straightRun(), store)
+            val deps = replayDeps(straightRun(), store, clockStart = t0 + 3.hours) // reopened 3 h later: the gap is not the run's
             val model = AppModel(deps, backgroundScope)
             model.checkUnfinished(); runCurrent()
             val facts = assertNotNull(model.unfinished.value).facts
@@ -181,12 +183,43 @@ class CrashResumeAppTest {
             model.checkUnfinished(); runCurrent()
             val facts = assertNotNull(model.unfinished.value).facts
             assertEquals(RecordingState.Stopping, facts.state)
-            assertEquals(listOf(CrashChoice.Save, CrashChoice.Delete), CrashPrompt.of(facts).choices)
+            assertEquals(listOf(CrashChoice.Save, CrashChoice.Delete), CrashPrompt.of(facts, t0 + 1.minutes).choices)
 
             model.resolveUnfinished(CrashChoice.Save); runCurrent()
             val saved = assertNotNull(store.load(seeded))
             assertEquals(RecordingState.Computing, saved.recording.state)
             assertEquals(t0 + 31.seconds, saved.recording.endUtc, "the stop that was written stands")
+        } finally {
+            driver.close()
+        }
+    }
+
+    // ── D30: the interruption is measured at the tap ─────────────────────────────────────
+
+    @Test
+    fun continue_tapped_2_h_after_the_last_heartbeat_is_refused_though_the_prompt_was_built_at_5_min() = runTest {
+        val driver = inMemoryDriver("crash-resume-continue-cap")
+        try {
+            val store = SqlRecordingStore(driver, io = EmptyCoroutineContext)
+            seed(store) // heartbeat at t0 + 30 s
+            val heartbeat = t0 + 30.seconds
+            val log = ArrayList<String>()
+            val model = AppModel(replayDeps(straightRun(), store, clockStart = heartbeat + 5.minutes) { log += it }, backgroundScope)
+            model.checkUnfinished(); runCurrent()
+            val facts = assertNotNull(model.unfinished.value).facts
+            assertEquals(CrashChoice.Continue, CrashPrompt.of(facts, heartbeat + 5.minutes).main, "built at 5 min: Continue leads")
+
+            advanceTimeBy(2.hours - 5.minutes - 1.seconds); runCurrent() // 1:59:59, the prompt still up
+            assertTrue(CrashChoice.Continue in CrashPrompt.of(facts, heartbeat + 2.hours - 1.seconds).choices)
+            advanceTimeBy(1.seconds); runCurrent() // 2:00:00
+            model.resolveUnfinished(CrashChoice.Continue); runCurrent()
+            assertNull(model.activeRun.value, "past 2 h nothing is continued, however late the tap")
+            assertNotNull(model.unfinished.value, "the prompt stays up: Save or Delete")
+            assertEquals(RecordingState.Active, assertNotNull(store.load(seeded)).recording.state, "nothing was written")
+            assertTrue(log.any { "Continue refused" in it }, "$log")
+
+            model.resolveUnfinished(CrashChoice.Save); runCurrent()
+            assertEquals(RecordingState.Computing, assertNotNull(store.load(seeded)).recording.state)
         } finally {
             driver.close()
         }
