@@ -15,7 +15,7 @@ data class LiveActivityContent(
     val totalTimeSec: Long,
     val distanceM: Double,
     /**
-     * The shown current pace, s/km, a multiple of 5 (D22, D28, D38): always [shownPace] of the snapshot. null =
+     * The shown current pace, s/km, a multiple of 5 (D22, D28, D38): [ShownPace.round] of the snapshot's, as [of] fills it. null =
      * no current pace (paused, under 20 m, 15 s without counted distance: `RunSnapshot.currentPace`).
      */
     val paceSecPerKm: Int?,
@@ -24,8 +24,30 @@ data class LiveActivityContent(
     val gpsLost: Boolean,
 ) {
     companion object {
-        /** D38: the pace field from a snapshot, through the run screen's own rounding (D22). */
-        fun shownPace(snapshot: RunSnapshot): Int? = ShownPace.round(snapshot.currentPace)?.toInt()
+        /**
+         * The one way to build the content: every field from the run's snapshot, the pace through the run screen's own
+         * rounding (D22, D38). null before the run starts (gate, countdown): there is no Live Activity yet. The
+         * cool-down is `Done`: hold-to-stop ended the run, the lock screen stops counting with it.
+         */
+        fun of(snapshot: RunSnapshot): LiveActivityContent? {
+            val startedAt = snapshot.startedAt ?: return null
+            val phase = when (snapshot.phase) {
+                RunPhase.Gate, is RunPhase.Countdown -> return null
+                RunPhase.Active -> LiveActivityPhase.Active
+                is RunPhase.Paused -> LiveActivityPhase.Paused
+                is RunPhase.Cooldown, RunPhase.Done -> LiveActivityPhase.Done
+            }
+            return LiveActivityContent(
+                phase = phase,
+                startedAtEpochMs = startedAt.toEpochMilliseconds(),
+                totalTimeSec = snapshot.totalTime.inWholeSeconds,
+                distanceM = snapshot.distance,
+                paceSecPerKm = ShownPace.round(snapshot.currentPace)?.toInt(),
+                hrBpm = snapshot.hrNow,
+                hrLost = snapshot.hrLost,
+                gpsLost = snapshot.gpsLost,
+            )
+        }
     }
 }
 
