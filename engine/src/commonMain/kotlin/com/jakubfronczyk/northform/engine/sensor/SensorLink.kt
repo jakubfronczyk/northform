@@ -40,11 +40,11 @@ object SensorLink {
         val wanted: SensorId? = null,
         /**
          * The sensor the user chose (SU3, D52: one paired sensor). Set by `Connect`, kept through
-         * `Disconnect`, drops and a connect timeout; cleared only by `Forget`. The app persists it
-         * through [Command.Remember]/[Command.Forget] and reconnects it at launch.
+         * `Disconnect`, drops and a connect timeout; cleared only by `Forget`. The app seeds it from
+         * what it stored, persists every change of it and reconnects it at launch.
          */
         val paired: SensorId? = null,
-        /** Advertised names seen this process, so `Remember` can carry one ("Polar Sense ABC123"). */
+        /** Advertised names ("Polar Sense ABC123"): seeded with the stored pairing's, then every one seen. */
         val knownNames: Map<SensorId, String> = emptyMap(),
         val connected: SensorId? = null,
         val ready: Boolean = false,
@@ -96,9 +96,6 @@ object SensorLink {
         /** The connect attempt timed out (15 s); `connect()` callers throw. */
         data class ConnectTimedOut(val id: SensorId) : Command
         data object Unauthorized : Command
-        /** Persist this id as the paired sensor (idempotent: emitted only when it changes). */
-        data class Remember(val id: SensorId, val name: String?) : Command
-        data object Forget : Command
     }
 
     /**
@@ -137,10 +134,9 @@ object SensorLink {
     private fun connect(s: State, id: SensorId, at: Instant): Result {
         if (s.connected == id) return Result(s, emptyList())
         val next = s.copy(wanted = id, paired = id, attempt = 0, connectRequestedAt = at)
+        // Paired at the moment of choosing, so a first connect that times out still leaves the
+        // sensor paired (the link keeps trying; the next launch reconnects it).
         val cmds = buildList {
-            // Remembered at the moment of choosing, so a first connect that times out still leaves the
-            // sensor paired (the link keeps trying; the next launch reconnects it).
-            if (s.paired != id) add(Command.Remember(id, s.knownNames[id]))
             if (s.powered) add(report(SensorState.Connecting, at))
             // The transport decides scan-vs-direct: `isKnown` is answered by the adapter when it
             // executes Connect (iOS: retrievePeripherals(withIdentifiers:) → connect; else scan).
@@ -157,16 +153,16 @@ object SensorLink {
             report(SensorState.Disconnected(DisconnectReason.User), at),
         )
         val reset = State(
-            paired = s.paired, powered = s.powered, centralState = s.centralState, centralReady = s.centralReady,
+            paired = s.paired, knownNames = s.knownNames, powered = s.powered, centralState = s.centralState, centralReady = s.centralReady,
             scanWanted = s.scanWanted, scanning = false, listeners = s.listeners,
         )
         return Result(reset.reported(cmds), cmds)
     }
 
-    /** Forget = disconnect (if linked) + drop the pairing; `Command.Forget` even when nothing was linked. */
+    /** Forget = disconnect (if linked) + drop the pairing, also when nothing was linked. */
     private fun forget(s: State, at: Instant): Result {
         val (afterDisconnect, cmds) = disconnect(s, at)
-        return Result(afterDisconnect.copy(paired = null), cmds + Command.Forget)
+        return Result(afterDisconnect.copy(paired = null), cmds)
     }
 
     /** Scan exactly when someone wants it AND the central is powered on; otherwise remember the wish. */

@@ -46,8 +46,8 @@ class GattHeartRateSensor(
     private val central: BleCentral,
     private val wallClock: WallClock,
     private val tickEvery: kotlin.time.Duration = 1.seconds,
-    /** SU3 pairing (adapters/01): the sensor to persist as paired (id + advertised name if seen), `null` on forget. Called from the mailbox coroutine. */
-    private val onPaired: (id: SensorId?, name: String?) -> Unit = { _, _ -> },
+    /** Where the link starts: the app seeds `paired`/`knownNames` from the pairing it stored (SU3, adapters/01). */
+    private val initial: SensorLink.State = SensorLink.State(),
 ) : HeartRateSensor {
 
     private val inbox = Channel<SensorLink.Input>(Channel.UNLIMITED)
@@ -67,8 +67,8 @@ class GattHeartRateSensor(
     private val timeouts = MutableSharedFlow<SensorId>(extraBufferCapacity = 8)
     private val unauthorized = MutableStateFlow(false)
     /** The link's state after every reduce; `connect()` watches `connected` here, not the reported `SensorState`. */
-    private val link = MutableStateFlow(SensorLink.State())
-    /** Read-only view of the link for what the frozen port does not carry: firmware (E16), the paired id. */
+    private val link = MutableStateFlow(initial)
+    /** Read-only view of the link for what the frozen port does not carry: firmware (E16), the pairing (persisted by the app from here). */
     val linkState: StateFlow<SensorLink.State> = link.asStateFlow()
 
     private var owner: Job? = null
@@ -85,7 +85,7 @@ class GattHeartRateSensor(
             launch { central.events.collect { inbox.send(SensorLink.Input.Ble(it, wallClock.now())) } }
             launch { samples.subscriptionCount.collect { inbox.send(SensorLink.Input.Listeners(it, wallClock.now())) } }
             launch { while (true) { delay(tickEvery); inbox.send(SensorLink.Input.Tick(wallClock.now())) } }
-            var state = SensorLink.State()
+            var state = initial
             for (input in inbox) {
                 val (next, commands) = SensorLink.reduce(state, input)
                 state = next
@@ -124,8 +124,6 @@ class GattHeartRateSensor(
             }
             is SensorLink.Command.ConnectTimedOut -> timeouts.tryEmit(c.id)
             SensorLink.Command.Unauthorized -> unauthorized.value = true
-            is SensorLink.Command.Remember -> onPaired(c.id, c.name)
-            SensorLink.Command.Forget -> onPaired(null, null)
         }
     }
 

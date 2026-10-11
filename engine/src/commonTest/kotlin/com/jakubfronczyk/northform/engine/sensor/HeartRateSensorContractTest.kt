@@ -14,7 +14,10 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -59,8 +62,13 @@ class HeartRateSensorContractTest {
         BleEvent.Characteristic(Gatt.heartRateService, Gatt.heartRateMeasurement, notify = true, read = false),
     ))
 
-    private fun TestScope.sensor(central: ScriptedCentral, onPaired: (SensorId?, String?) -> Unit = { _, _ -> }): GattHeartRateSensor =
-        GattHeartRateSensor(central, virtualWallClock(start), onPaired = onPaired).also { it.start(backgroundScope); runCurrent() }
+    /** [onPaired] hears every change of the link's pairing after the start, as the app's one persisting collector does. */
+    private fun TestScope.sensor(central: ScriptedCentral, onPaired: (SensorId?) -> Unit = {}): GattHeartRateSensor =
+        GattHeartRateSensor(central, virtualWallClock(start)).also { sensor ->
+            sensor.start(backgroundScope)
+            backgroundScope.launch { sensor.linkState.map { it.paired }.distinctUntilChanged().drop(1).collect(onPaired) }
+            runCurrent()
+        }
 
     private fun ScriptedCentral.linkUp(id: SensorId) { radio(BleEvent.Connected(id)); radio(ready(id)) }
 
@@ -217,7 +225,7 @@ class HeartRateSensorContractTest {
     fun the_chosen_sensor_is_remembered_when_connect_is_called_even_if_it_times_out() = runTest {
         val central = ScriptedCentral().apply { known += polar }
         val paired = ArrayList<SensorId?>()
-        val sensor = sensor(central) { id, _ -> paired += id }
+        val sensor = sensor(central) { paired += it }
         central.radio(BleEvent.PowerOn)
         val connecting = async { runCatching { sensor.connect(polar) } }
         runCurrent()
@@ -231,7 +239,7 @@ class HeartRateSensorContractTest {
     fun forget_stops_the_link_and_clears_the_pairing() = runTest {
         val central = ScriptedCentral().apply { known += polar }
         val paired = ArrayList<SensorId?>()
-        val sensor = sensor(central) { id, _ -> paired += id }
+        val sensor = sensor(central) { paired += it }
         central.radio(BleEvent.PowerOn)
         launch { sensor.connect(polar) }
         runCurrent(); central.linkUp(polar); runCurrent()

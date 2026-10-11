@@ -33,7 +33,8 @@ class SensorLinkTest {
     fun connect_reports_connecting_and_issues_connect() {
         val (s, c) = run(SensorLink.Input.Connect(sensor, t0))
         assertEquals(sensor, s.wanted)
-        assertEquals(listOf(SensorLink.Command.Remember(sensor, null), SensorLink.Command.Report(SensorState.Connecting, t0), SensorLink.Command.Connect(sensor)), c)
+        assertEquals(sensor, s.paired, "paired at the moment of choosing")
+        assertEquals(listOf(SensorLink.Command.Report(SensorState.Connecting, t0), SensorLink.Command.Connect(sensor)), c)
     }
 
     @Test
@@ -218,10 +219,8 @@ class SensorLinkTest {
             SensorLink.Input.Disconnect(t0 + 5.seconds),
             SensorLink.Input.Connect(sensor, t0 + 6.seconds),
         )
-        assertEquals(1, c.count { it is SensorLink.Command.Remember }, "remembered once, not on every connect: $c")
-        assertEquals(SensorLink.Command.Remember(sensor, "Polar Sense ABC123"), c.first { it is SensorLink.Command.Remember }, "with the advertised name")
         assertEquals(sensor, s.paired)
-        assertTrue(c.none { it == SensorLink.Command.Forget })
+        assertEquals("Polar Sense ABC123", s.knownNames[sensor], "with the advertised name, kept through the disconnect")
     }
 
     @Test
@@ -245,7 +244,7 @@ class SensorLinkTest {
         )
         assertNull(s.paired)
         assertNull(s.wanted)
-        assertEquals(listOf(SensorLink.Command.CancelConnect(sensor), SensorLink.Command.Report(SensorState.Disconnected(DisconnectReason.User), t0 + 5.seconds), SensorLink.Command.Forget), c.takeLast(3))
+        assertEquals(listOf(SensorLink.Command.CancelConnect(sensor), SensorLink.Command.Report(SensorState.Disconnected(DisconnectReason.User), t0 + 5.seconds)), c.takeLast(2))
     }
 
     @Test

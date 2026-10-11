@@ -14,7 +14,6 @@ import com.jakubfronczyk.northform.adapters.location.LocationAuthorizationMonito
 import com.jakubfronczyk.northform.adapters.location.openAppSettings
 import com.jakubfronczyk.northform.adapters.location.LocationUpdates
 import com.jakubfronczyk.northform.adapters.location.requestWhenInUseAuthorization
-import com.jakubfronczyk.northform.core.SensorId
 import com.jakubfronczyk.northform.engine.sensor.GattHeartRateSensor
 import com.jakubfronczyk.northform.persistence.SqlRecordingStore
 import com.jakubfronczyk.northform.persistence.nativeDriver
@@ -92,8 +91,9 @@ object NorthformApp {
 
         // 3  the sensor mailbox is alive before any radio event can be delivered (delegate callbacks are
         //    dispatched on the BLE queue only after CBCentralManager's init returns)
-        // SU3: the link decides when a sensor counts as paired (adapters/01); the app only persists and shows it.
-        sensor = GattHeartRateSensor(central, wallClock) { id, name -> sensorDetails.remember(id, name) }
+        // SU3: the link decides when a sensor counts as paired (adapters/01); the app seeds it from what it
+        // stored, and only persists and shows it.
+        sensor = GattHeartRateSensor(central, wallClock, initial = LinkSensorDetails.storedLinkState())
         sensorDetails = LinkSensorDetails(sensor, scope)
         sensor.start(scope)
         scope.launch { sensor.states().collect { DeviceLog.polar.notice("state ${it.state}") } }
@@ -120,7 +120,7 @@ object NorthformApp {
             model.appWentToBackground()
         }
         // The remembered sensor reconnects at launch (`AppDeps.swift:34-36`).
-        if (live) PairedSensor.id?.let { id -> scope.launch { runCatching { sensor.connect(SensorId(id)) } } }
+        if (live) sensor.linkState.value.paired?.let { id -> scope.launch { runCatching { sensor.connect(id) } } }
 
         isBooted = true
         DeviceLog.app.notice("boot() end in ${started.elapsedNow()}") // 5

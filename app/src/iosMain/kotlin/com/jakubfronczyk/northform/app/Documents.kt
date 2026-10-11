@@ -35,8 +35,8 @@ object Documents {
 
 /**
  * The paired sensor, remembered so the app reconnects at launch (`AppDeps.swift:20,40-42`; SU3, D52:
- * one sensor). Written only from the link's `Remember`/`Forget` commands (adapters/01), never by a
- * screen. The name is kept so the Sensor screen can say "Polar Verity Sense · A1B2C3D4" before it is seen again.
+ * one sensor). Seeds the link at boot; written only by `LinkSensorDetails`' one collector on the link's
+ * pairing (adapters/01), never by a screen. The name is kept so the Sensor screen can say "Polar Verity Sense · A1B2C3D4" before it is seen again.
  */
 object PairedSensor {
     private const val KEY = "pairedSensorID"
