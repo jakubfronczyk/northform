@@ -90,6 +90,33 @@ class CrashResumeTest {
         assertEquals(at(363), persist.batch.persistedAt)
     }
 
+    /**
+     * Backgrounded at 65.6 s, after a live tick at 64.9 s: the store holds no HrLost, but rebuild's own
+     * tick at 65 s derives it. That loss is not durable yet, so Continue must still write it, or a later
+     * HrBack closes a loss the store never opened and reliability misses the gap.
+     */
+    @Test
+    fun a_loss_rebuild_derives_after_the_last_stored_event_is_still_written_on_continue() {
+        val rebuilt = RunReducer.rebuild(config, stored().copy(lastPersistedAt = at(65.6)))
+        assertTrue(rebuilt.progress.hrLost)
+        val resumed = RunReducer.resumed(rebuilt, at = at(362))
+        assertEquals(
+            listOf(
+                RecordingEvent(at(65), EventKind.HrLost, EventSource.Auto),
+                RecordingEvent(at(70.6), EventKind.GpsLost, EventSource.Auto), // the catch-up ticks run from the heartbeat
+                RecordingEvent(at(362), EventKind.CrashRecovered, EventSource.Auto),
+            ),
+            resumed.buffer.events,
+        )
+    }
+
+    @Test
+    fun a_loss_already_stored_is_not_written_twice() {
+        val withLoss = stored(events = listOf(RecordingEvent(at(65), EventKind.HrLost, EventSource.Auto))).copy(lastPersistedAt = at(65.6))
+        val resumed = RunReducer.resumed(RunReducer.rebuild(config, withLoss), at = at(362))
+        assertEquals(listOf(EventKind.GpsLost, EventKind.CrashRecovered), resumed.buffer.events.map { it.kind })
+    }
+
     @Test
     fun a_run_paused_at_the_crash_stays_paused_and_its_active_time_does_not_grow() {
         val paused = stored(events = listOf(RecordingEvent(at(50), EventKind.Pause, EventSource.Manual)))

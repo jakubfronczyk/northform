@@ -40,14 +40,47 @@ fun RunReducer.rebuild(config: RunConfig, data: RecordingData): RunState {
         ticks(after = start, before = end).forEach { inputs += RunInput.Tick(it) }
         inputs += RunInput.Tick(end)
     }
+    // The latest HR/GPS lost-or-back event rebuild itself derived, per signal (see `notStored`).
+    val derived = HashMap<Signal, RecordingEvent>()
     for (input in InputOrder.sorted(inputs)) {
         val next = reduce(state, input).state
+        for (event in next.buffer.events) Signal.of(event.kind)?.let { derived[it] = event }
         // Nothing here answers a `Persist`, so the buffer would hold every sample of the run and each
         // append (`b.hr + sample`) would copy it: O(n²). Its contents never reach `progress` (only the
         // persist bookkeeping reads them) and the buffer is replaced below, so it is emptied as we go.
         state = next.copy(buffer = next.buffer.copy(hr = emptyList(), fixes = emptyList(), events = emptyList()))
     }
-    return state.copy(buffer = PersistBuffer(lastPersistAt = data.lastPersistedAt ?: start))
+    val progress = state.progress
+    val notStored = listOfNotNull(
+        notStored(Signal.Hr, lost = progress.hrLost, data.events, derived),
+        notStored(Signal.Gps, lost = progress.gpsLost, data.events, derived),
+    ).sortedBy { it.t }
+    return state.copy(buffer = PersistBuffer(events = notStored, lastPersistAt = data.lastPersistedAt ?: start))
+}
+
+/** HR and GPS each derive a lost/back pair; the flag the reducer keeps is whichever came last. */
+private enum class Signal(val lost: EventKind, val back: EventKind) {
+    Hr(EventKind.HrLost, EventKind.HrBack),
+    Gps(EventKind.GpsLost, EventKind.GpsBack);
+
+    companion object {
+        fun of(kind: EventKind): Signal? = entries.firstOrNull { kind == it.lost || kind == it.back }
+    }
+}
+
+/**
+ * Rebuild's 1 s ticks need not land where the live ticks did, so its closing tick can derive a loss
+ * the live run never reached before the last flush (backgrounded 0.6 s after a tick, say). The
+ * rebuilt flag then says "lost" while the store holds no HrLost. Dropping that event would leave the
+ * flag set with nothing durable behind it: `resumed` never derives it again, a later HrBack closes a
+ * loss the store never opened, and reliability misses the gap. So when the rebuilt flag disagrees
+ * with the last stored event of its signal, the event rebuild derived for it stays in the buffer —
+ * not durable yet — and the first flush after Continue writes it.
+ */
+private fun notStored(signal: Signal, lost: Boolean, stored: List<RecordingEvent>, derived: Map<Signal, RecordingEvent>): RecordingEvent? {
+    val storedLost = stored.lastOrNull { Signal.of(it.kind) == signal }?.kind == signal.lost
+    if (lost == storedLost) return null
+    return derived[signal]?.takeIf { it.kind == (if (lost) signal.lost else signal.back) }
 }
 
 /**
