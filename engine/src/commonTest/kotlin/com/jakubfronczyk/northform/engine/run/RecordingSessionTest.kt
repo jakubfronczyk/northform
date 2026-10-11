@@ -4,6 +4,7 @@ import com.jakubfronczyk.northform.core.DiscoveredSensor
 import com.jakubfronczyk.northform.core.HrSample
 import com.jakubfronczyk.northform.core.LocationFix
 import com.jakubfronczyk.northform.core.Recording
+import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.SensorId
 import com.jakubfronczyk.northform.core.SensorState
@@ -66,6 +67,17 @@ class RecordingSessionTest {
         var failNext = false
         /** The first row cannot be written (persistence/02): every later flush fails too, there is no recording. */
         var failCreate = false
+        /** How many `stop` calls fail before one goes through. */
+        var failStops = 0
+        var failComputing = false
+        override suspend fun beginComputing(id: RecordingId) {
+            if (failComputing) error("disk full")
+            inner.beginComputing(id)
+        }
+        override suspend fun stop(id: RecordingId, endUtc: Instant) {
+            if (failStops > 0) { failStops -= 1; error("disk full") }
+            inner.stop(id, endUtc)
+        }
         override suspend fun create(recording: Recording) {
             if (failCreate) error("disk full")
             inner.create(recording)
@@ -201,5 +213,61 @@ class RecordingSessionTest {
         assertEquals(RecordingState.Computing, data.recording.state)
         assertEquals(start + 7.seconds, data.recording.endUtc)
         assertTrue(job.isCompleted, "run() ends once BeginComputing is confirmed")
+    }
+
+    /** A stop the store refused is retried until it lands; until then the screen says "not saving" and the run is not over. */
+    @Test
+    fun a_failed_stop_is_retried_until_the_run_is_stopped_and_computing() = runTest {
+        val sensor = FakeSensor()
+        val store = Store().apply { failStops = Int.MAX_VALUE } // the disk is full until we say so
+        val session = session(sensor, store)
+        val job = launch { session.run() }
+        runCurrent()
+        session.tap(UserAction.Start)
+        advanceTimeBy(5.seconds); runCurrent()
+        sensor.hr.emit(HrSample(session.wallClock.now(), 140))
+        advanceTimeBy(2.seconds)
+        session.tap(UserAction.Stop)
+        runCurrent()
+        assertTrue(session.notSaving.value, "the stop did not land")
+        session.tap(UserAction.SkipCooldown)
+        advanceTimeBy(10.seconds); runCurrent()
+        assertTrue(session.notSaving.value, "still retrying")
+        assertFalse(job.isCompleted, "the run is not over while its stop is not durable")
+        assertEquals(RecordingState.Active, store.data().recording.state)
+
+        store.failStops = 0 // space freed
+        advanceTimeBy(2.seconds); runCurrent()
+        val data = store.data()
+        assertEquals(RecordingState.Computing, data.recording.state)
+        assertEquals(start + 7.seconds, data.recording.endUtc)
+        assertEquals(listOf(140), data.hr.map { it.bpm }, "the batches held back behind the stop landed too")
+        assertFalse(session.notSaving.value)
+        assertTrue(job.isCompleted)
+    }
+
+    /** The last store effect has no later one to carry its retry: the writer retries it on its own. */
+    @Test
+    fun a_failed_begin_computing_is_retried_by_the_writer_alone() = runTest {
+        val sensor = FakeSensor()
+        val store = Store().apply { failComputing = true }
+        val session = session(sensor, store)
+        val job = launch { session.run() }
+        runCurrent()
+        session.tap(UserAction.Start)
+        advanceTimeBy(5.seconds); runCurrent()
+        session.tap(UserAction.Stop)
+        runCurrent()
+        session.tap(UserAction.SkipCooldown)
+        advanceTimeBy(10.seconds); runCurrent()
+        assertEquals(RecordingState.Stopping, store.data().recording.state)
+        assertTrue(session.notSaving.value)
+        assertFalse(job.isCompleted)
+
+        store.failComputing = false
+        advanceTimeBy(1.seconds); runCurrent()
+        assertEquals(RecordingState.Computing, store.data().recording.state)
+        assertFalse(session.notSaving.value)
+        assertTrue(job.isCompleted)
     }
 }

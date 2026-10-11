@@ -1,6 +1,7 @@
 package com.jakubfronczyk.northform.testing
 
 import com.jakubfronczyk.northform.core.EventKind
+import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.ports.Alert
@@ -39,17 +40,27 @@ class RecordedAlerts : AlertPlayer {
 suspend fun RunSessionHandle.tap(action: UserAction) = send(action, wallClock.now())
 
 /**
- * The production in-memory store with a switch that fails the next flush once ("disk full"). Kotlin
- * interface delegation (`by inner`) forwards every other port method untouched.
+ * The production in-memory store with a switch that fails the next flush once ("disk full"), and a
+ * count of `stop` calls to fail. Kotlin interface delegation (`by inner`) forwards every other port
+ * method untouched.
  */
 class FlakyStore(val inner: InMemoryRecordingStore = InMemoryRecordingStore()) : RecordingStore by inner {
     var failNext = false
+    /** How many `stop` calls still fail before one goes through. */
+    var failStops = 0
     override suspend fun flush(batch: FlushBatch) {
         if (failNext) {
             failNext = false
             error("disk full")
         }
         inner.flush(batch)
+    }
+    override suspend fun stop(id: RecordingId, endUtc: Instant) {
+        if (failStops > 0) {
+            failStops -= 1
+            error("disk full")
+        }
+        inner.stop(id, endUtc)
     }
 }
 

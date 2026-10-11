@@ -11,6 +11,7 @@ import com.jakubfronczyk.northform.testing.at
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -54,5 +55,34 @@ class StoreEffectInterpreterTest {
         assertEquals(1, failures.size)
         assertEquals(RunEffect.Stop(at(101)), failures.single().first)
         assertTrue(failures.single().second is RecordingStoreError.IllegalTransition)
+    }
+
+    /** A failed stop is not lost: it is retried, in order, before anything after it reaches the store. */
+    @Test
+    fun a_failed_stop_is_retried_before_the_flush_and_computing_after_it() = runTest {
+        val store = FlakyStore().apply { failStops = 1 }
+        val interpreter = StoreEffectInterpreter(store, id)
+        interpreter.perform(RunEffect.Create(recording))
+        assertNull(interpreter.perform(RunEffect.Stop(at(100))))
+        assertTrue(interpreter.pending, "the stop did not land")
+        assertEquals(RunInput.Persisted(1), interpreter.perform(batch(1)), "the stop went through first, then the flush")
+        assertFalse(interpreter.pending)
+        interpreter.perform(RunEffect.BeginComputing)
+        val stored = store.inner.records.load(id)!!.recording
+        assertEquals(RecordingState.Computing, stored.state)
+        assertEquals(at(100), stored.endUtc)
+    }
+
+    @Test
+    fun while_a_stop_is_pending_a_flush_is_not_attempted_and_computing_waits_behind_it() = runTest {
+        val store = FlakyStore().apply { failStops = 2 }
+        val interpreter = StoreEffectInterpreter(store, id)
+        interpreter.perform(RunEffect.Create(recording))
+        interpreter.perform(RunEffect.Stop(at(100)))
+        assertEquals(RunInput.PersistFailed(1), interpreter.perform(batch(1)), "the stop failed again: the batch stays with the reducer")
+        assertTrue(store.inner.records.load(id)!!.hr.isEmpty())
+        interpreter.perform(RunEffect.BeginComputing) // the stop lands now; computing right after it
+        assertFalse(interpreter.pending)
+        assertEquals(RecordingState.Computing, store.inner.records.load(id)!!.recording.state)
     }
 }

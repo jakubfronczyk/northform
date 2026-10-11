@@ -78,9 +78,10 @@ class RecordingSession(
     private val _notSaving = MutableStateFlow(false)
     /**
      * The one store-effect interpreter (also what the test harness runs). A failed create/stop/computing
-     * cannot be retried by seq; it is rethrown so the writer marks the run "not saving" (Swift logged it).
+     * cannot be retried by seq: the interpreter keeps it pending and retries it in order, and the writer
+     * shows "not saving" until it lands.
      */
-    private val storeEffects = StoreEffectInterpreter(store, config.recordingId, onFailure = { _, e -> throw e })
+    private val storeEffects = StoreEffectInterpreter(store, config.recordingId)
 
     /** Every change of what the run screen shows (`RecordingSession.swift:67`). */
     override val snapshots: StateFlow<RunSnapshot> = _snapshots.asStateFlow()
@@ -88,7 +89,7 @@ class RecordingSession(
     override val routes: StateFlow<Route> = _routes.asStateFlow()
     /** `RecordingSession.swift:76`. */
     val snapshot: RunSnapshot get() = _snapshots.value
-    /** persistence/02: the last store write failed; cleared by the next confirmed flush. */
+    /** persistence/02: the last store write failed, or a create/stop/computing is still being retried; cleared by the next confirmed flush once none is. */
     override val notSaving: StateFlow<Boolean> = _notSaving.asStateFlow()
 
     /** Set by the first `end()` (`RecordingSession.swift:39`); atomic because `end()` may read it from another coroutine. */
@@ -252,23 +253,28 @@ class RecordingSession(
             // "On cancel the writer finishes the effect it is on and returns" (D112): the store call
             // itself is not interruptible; the check above is where cancellation takes effect.
             // The writer reporting back (`Persisted`/`PersistFailed`) is just another mail (D5). It is
-            // also the one place the store's health is written: a flush answers it, a thrown
-            // create/stop/computing marks it failed, and nothing else clears it (persistence/02).
+            // also the one place the store's health is written: a failed flush marks it failed, and so
+            // does a create/stop/computing the interpreter is still retrying; only a confirmed flush with
+            // nothing pending clears it (persistence/02).
             withContext(NonCancellable) {
-                val outcome = runCatching { storeEffects.perform(effect) }
-                _notSaving.value = outcome.fold(
-                    onSuccess = { answer ->
-                        when (answer) {
-                            is RunInput.Persisted -> false
-                            is RunInput.PersistFailed -> true
-                            else -> _notSaving.value
-                        }
-                    },
-                    onFailure = { true },
-                )
-                outcome.getOrNull()?.let(::receive)
+                val answer = storeEffects.perform(effect)
+                _notSaving.value = when (answer) {
+                    is RunInput.Persisted -> storeEffects.pending
+                    is RunInput.PersistFailed -> true
+                    else -> _notSaving.value || storeEffects.pending
+                }
+                answer?.let(::receive)
             }
-            if (effect == RunEffect.BeginComputing) return // the last store effect: the run is over (`:277`)
+            if (effect == RunEffect.BeginComputing) {
+                // The last store effect: the run is over (`:277`) once it, and the stop before it, landed.
+                // No later effect will carry a retry, so the writer retries on its own until they do or
+                // the run is dropped (`run()` cancelled).
+                while (storeEffects.pending) {
+                    delay(storeRetryEvery)
+                    withContext(NonCancellable) { _notSaving.value = !storeEffects.retryPending() }
+                }
+                return
+            }
         }
     }
 
@@ -300,3 +306,6 @@ class RecordingSession(
         }
     }
 }
+
+/** How often the writer retries a stop/computing the store refused, once no later effect will carry the retry. */
+private val storeRetryEvery = 1.seconds
