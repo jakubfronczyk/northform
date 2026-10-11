@@ -263,7 +263,7 @@ private fun NearbyCard(nearby: List<DiscoveredSensor>, pair: (com.jakubfronczyk.
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(info.displayName, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Theme.text)
-                    Text("${info.code} · ${d.rssi} dBm", style = Type.tertiaryText, color = Theme.text2)
+                    Text(nearbyDetail(info.code, d.rssi, scanning), style = Type.tertiaryText, color = Theme.text2)
                 }
                 Box(
                     Modifier.height(44.dp).background(Theme.primary, RoundedCornerShape(12.dp)).clickable { pair(d.id) }.padding(horizontal = 18.dp),
@@ -320,3 +320,6 @@ private fun OutlineButton(title: String, action: () -> Unit, modifier: Modifier)
     BigButton(title, action, modifier, fill = null, textStyle = OutlineLabel, contentPadding = 22.dp)
 
 private val OutlineLabel = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+
+/** A nearby row's second line: the advert's signal only while the scan runs (D34: a last-seen dBm is not current). */
+internal fun nearbyDetail(code: String, rssi: Int, scanning: Boolean): String = if (scanning) "$code · $rssi dBm" else code
