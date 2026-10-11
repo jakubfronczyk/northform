@@ -8,6 +8,9 @@ import com.jakubfronczyk.northform.engine.run.LiveActivityContent
  * so a typed listener is the dependency-free way across. Swift's `LiveActivityController` implements
  * `LiveActivityListener` and maps the three calls to ActivityKit `request / update / end` — ActivityKit
  * has no Obj-C API, which is the whole reason this file has a Swift counterpart.
+ *
+ * The content is copied field by field into `NorthformAttributes.ContentState` (`iosApp/Widget`): a field renamed here
+ * (D38: `splitPaceSecPerKm` → `paceSecPerKm`, the shown current pace) is renamed there in the same commit.
  */
 interface LiveActivityListener {
     fun onStart(content: LiveActivityContent)

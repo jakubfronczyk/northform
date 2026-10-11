@@ -49,7 +49,7 @@ private struct LockScreenView: View {
             Spacer()
             VStack(alignment: .trailing) {
                 Text(state.hrBpm.map { "\($0) bpm" } ?? (state.hrLost ? "HR lost" : "—"))
-                Text(state.splitPaceSecPerKm.map(Self.pace) ?? (state.gpsLost ? "GPS lost" : "—"))
+                Text(state.paceSecPerKm.map(Self.pace) ?? (state.gpsLost ? "GPS lost" : "—"))
             }
         }
     }

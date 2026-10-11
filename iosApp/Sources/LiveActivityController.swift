@@ -52,7 +52,7 @@ final class LiveActivityController: NSObject, LiveActivityListener {
             startedAt: Date(timeIntervalSince1970: TimeInterval(c.startedAtEpochMs) / 1000),
             totalTimeSec: Int(c.totalTimeSec),
             distanceM: c.distanceM,
-            splitPaceSecPerKm: c.splitPaceSecPerKm.map { Int(truncating: $0) },
+            paceSecPerKm: c.paceSecPerKm.map { Int(truncating: $0) },
             hrBpm: c.hrBpm.map { Int(truncating: $0) },
             hrLost: c.hrLost,
             gpsLost: c.gpsLost,

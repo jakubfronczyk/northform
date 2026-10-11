@@ -8,7 +8,7 @@ struct NorthformAttributes: ActivityAttributes {
         var startedAt: Date
         var totalTimeSec: Int
         var distanceM: Double
-        var splitPaceSecPerKm: Int?
+        var paceSecPerKm: Int?
         var hrBpm: Int?
         var hrLost: Bool
         var gpsLost: Bool
