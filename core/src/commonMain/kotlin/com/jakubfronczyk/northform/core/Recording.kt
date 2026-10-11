@@ -72,6 +72,13 @@ sealed interface EventKind {
     /** Bluetooth link dropped / came back. Counted in the reliability log. */
     data object SensorLost : EventKind
     data object SensorReconnected : EventKind
+    /**
+     * The phone's Bluetooth radio was off while the run needed the sensor (D31): recorded INSTEAD of
+     * [SensorLost], so the reliability log counts it apart from drops (a stored event is permanent: an
+     * off radio recorded as a drop would overcount drops for good). The link coming back is a
+     * [SensorReconnected] as after a drop.
+     */
+    data object BluetoothOff : EventKind
     /** Hold-to-stop. Written only by `RecordingStore.stop`, together with `Recording.endUtc`. */
     data object Stop : EventKind
     /** End of the 60 s heart-rate cool-down, or the skip. */
@@ -92,6 +99,7 @@ val EventKind.wire: String
         EventKind.GpsBack -> "gpsBack"
         EventKind.SensorLost -> "sensorLost"
         EventKind.SensorReconnected -> "sensorReconnected"
+        EventKind.BluetoothOff -> "bluetoothOff"
         EventKind.Stop -> "stop"
         EventKind.CooldownEnd -> "cooldownEnd"
         EventKind.CrashRecovered -> "crashRecovered"

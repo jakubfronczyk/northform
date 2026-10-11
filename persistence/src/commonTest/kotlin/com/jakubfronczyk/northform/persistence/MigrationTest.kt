@@ -62,7 +62,7 @@ class MigrationTest {
 
             // v2 (1.sqm, engine/03): the migrated database takes a reliability row for the v1 run and reads it back.
             assertNull(store.reliability(id), "no log yet for a v1 run")
-            val record = ReliabilityRecord(drops = 2, reconnects = 1, reconnectTimes = listOf(30.878.seconds), hrLost = 41.seconds, gpsLost = Duration.ZERO, recoveries = 1)
+            val record = ReliabilityRecord(drops = 2, reconnects = 1, reconnectTimes = listOf(30.878.seconds), hrLost = 41.seconds, gpsLost = Duration.ZERO, recoveries = 1, bluetoothOff = 3)
             store.saveReliability(id, record)
             assertEquals(record, store.reliability(id))
             store.saveReliability(id, ReliabilityRecord.none)
@@ -70,6 +70,30 @@ class MigrationTest {
             assertFailsWith<RecordingStoreError.NotFound> { store.saveReliability(RecordingId("nobody"), record) }
             store.delete(id)
             assertNull(store.reliability(id), "delete takes the log with the recording")
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun a_v2_database_migrates_to_v3_and_its_stale_reliability_rows_are_recomputed_not_misread() = runTest {
+        // v2 -> v3 (2.sqm, D31): the reliability cache gains `bluetooth_off`; a v2 row counted Bluetooth-off as a drop.
+        val driver = inMemoryDriver(schema = SchemaV2)
+        try {
+            driver.execute(null, "INSERT INTO recording(id, user_id, type, state, start_utc, tz_offset_s) VALUES ('v1-rec', 1, 'run', 'saved', ${t0.toNanos()}, 0)", 0)
+            driver.execute(null, "INSERT INTO event(recording_id, seq, t, kind, source, split_index) VALUES ('v1-rec', 0, ${(t0 + 1.seconds).toNanos()}, 'bluetoothOff', 'auto', NULL)", 0)
+            driver.execute(null, "INSERT INTO reliability VALUES ('v1-rec', 1, 1, 0, '', 0, 0, 0)", 0)
+
+            NorthformDb.Schema.migrate(driver, oldVersion = SchemaV2.version, newVersion = NorthformDb.Schema.version)
+
+            val store = SqlRecordingStore(driver, io = EmptyCoroutineContext)
+            assertNull(store.reliability(id), "the v2 row (a drop that was Bluetooth-off) is gone: recompute from the events")
+            val data = assertNotNull(store.load(id))
+            assertEquals(listOf(RecordingEvent(t0 + 1.seconds, EventKind.BluetoothOff, EventSource.Auto)), data.events)
+            val record = ReliabilityRecord.of(data)
+            assertEquals(ReliabilityRecord.none.copy(bluetoothOff = 1), record)
+            store.saveReliability(id, record)
+            assertEquals(record, store.reliability(id))
         } finally {
             driver.close()
         }

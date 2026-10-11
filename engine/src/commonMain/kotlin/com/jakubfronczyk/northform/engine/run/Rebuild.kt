@@ -32,6 +32,7 @@ fun RunReducer.rebuild(config: RunConfig, data: RecordingData): RunState {
             EventKind.CooldownEnd -> if (event.source == EventSource.Manual) RunInput.User(UserAction.SkipCooldown, event.t) else null
             EventKind.SensorLost -> RunInput.Sensor(SensorState.Disconnected(DisconnectReason.Lost), event.t)
             EventKind.SensorReconnected -> RunInput.Sensor(SensorState.Connected(battery = null), event.t)
+            EventKind.BluetoothOff -> RunInput.Sensor(SensorState.BluetoothOff, event.t) // D31
             is EventKind.Split, EventKind.HrLost, EventKind.HrBack, EventKind.GpsLost, EventKind.GpsBack, EventKind.CrashRecovered -> null
         }
         if (input != null) inputs += input

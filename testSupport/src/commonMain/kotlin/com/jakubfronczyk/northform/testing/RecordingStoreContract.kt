@@ -90,7 +90,7 @@ class RecordingStoreContract(private val store: RecordingStore) {
         store.create(recording())
         val kinds = listOf(
             EventKind.Pause, EventKind.Resume, EventKind.Split(12), EventKind.HrLost, EventKind.HrBack, EventKind.GpsLost, EventKind.GpsBack,
-            EventKind.SensorLost, EventKind.SensorReconnected, EventKind.CooldownEnd, EventKind.CrashRecovered,
+            EventKind.SensorLost, EventKind.SensorReconnected, EventKind.BluetoothOff, EventKind.CooldownEnd, EventKind.CrashRecovered,
         )
         val events = kinds.mapIndexed { i, k -> RecordingEvent(t0 + i.seconds, k, if (i % 2 == 0) EventSource.Auto else EventSource.Manual) }
         store.flush(FlushBatch(id, events = events, persistedAt = t0 + 20.seconds))

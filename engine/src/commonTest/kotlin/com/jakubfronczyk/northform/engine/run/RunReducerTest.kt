@@ -1,8 +1,10 @@
 package com.jakubfronczyk.northform.engine.run
 
+import com.jakubfronczyk.northform.core.DisconnectReason
 import com.jakubfronczyk.northform.core.EventKind
 import com.jakubfronczyk.northform.core.HrSample
 import com.jakubfronczyk.northform.core.LocationFix
+import com.jakubfronczyk.northform.core.SensorState
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.inSecondsDouble
 import com.jakubfronczyk.northform.core.metrics.Geo
@@ -244,6 +246,18 @@ class RunReducerTest {
         run.send(tick(11.0))
         assertNull(run.state.snapshot.hrNow)
         assertEquals(150, run.state.snapshot.hrMax)
+    }
+
+    /** D31: Bluetooth off is recorded as `BluetoothOff`, never as a drop; a drop while it is off adds nothing. */
+    @Test
+    fun bluetooth_off_is_recorded_as_bluetooth_off_not_as_a_drop() {
+        val run = activeRun()
+        run.send(RunInput.Sensor(SensorState.BluetoothOff, at(7)))
+        run.send(RunInput.Sensor(SensorState.Disconnected(DisconnectReason.Lost), at(8)))
+        run.send(RunInput.Sensor(SensorState.Connected(battery = null), at(20)))
+        run.send(RunInput.Sensor(SensorState.Disconnected(DisconnectReason.Lost), at(30)))
+        val sensor = run.recordedEvents.filter { it.kind in listOf(EventKind.BluetoothOff, EventKind.SensorLost, EventKind.SensorReconnected) }
+        assertEquals(listOf(EventKind.BluetoothOff to at(7), EventKind.SensorReconnected to at(20), EventKind.SensorLost to at(30)), sensor.map { it.kind to it.t })
     }
 
     /** D117: a pause tapped at 10.25 s arriving after a fix stamped 11.0 s is saved with a heartbeat ≥ 11.0 s. */

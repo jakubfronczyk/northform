@@ -38,7 +38,7 @@ class BackupCodecTest {
 
     private val everyKind = listOf(
         EventKind.Pause, EventKind.Resume, EventKind.Split(3), EventKind.HrLost, EventKind.HrBack, EventKind.GpsLost, EventKind.GpsBack,
-        EventKind.SensorLost, EventKind.SensorReconnected, EventKind.Stop, EventKind.CooldownEnd, EventKind.CrashRecovered,
+        EventKind.SensorLost, EventKind.SensorReconnected, EventKind.BluetoothOff, EventKind.Stop, EventKind.CooldownEnd, EventKind.CrashRecovered,
     )
 
     /** A saved run with everything set and the doubles that break naive formatting. */

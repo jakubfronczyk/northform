@@ -58,6 +58,16 @@ class ReliabilityRecordTest {
     }
 
     @Test
+    fun bluetooth_off_is_counted_apart_and_is_never_a_drop() {
+        // D31: radio off at 100, link back at 130 — a reconnect, but no drop opened, so no reconnect time.
+        val record = ReliabilityRecord.of(data(100 to EventKind.BluetoothOff, 130 to EventKind.SensorReconnected, 200 to EventKind.SensorLost, 210 to EventKind.SensorReconnected))
+        assertEquals(1, record.bluetoothOff)
+        assertEquals(1, record.drops)
+        assertEquals(2, record.reconnects)
+        assertEquals(listOf(10.seconds), record.reconnectTimes)
+    }
+
+    @Test
     fun lost_seconds_sum_every_lost_to_back_interval_per_signal() {
         val record = ReliabilityRecord.of(data(
             10 to EventKind.HrLost, 15 to EventKind.HrBack, 40 to EventKind.HrLost, 52 to EventKind.HrBack,

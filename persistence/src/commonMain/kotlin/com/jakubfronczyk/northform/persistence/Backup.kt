@@ -213,7 +213,7 @@ object BackupCodec {
         if (kind == "split") return EventKind.Split(int("splitIndex") ?: throw BackupError.Malformed("$path.splitIndex", "a split needs its index"))
         return listOf(
             EventKind.Pause, EventKind.Resume, EventKind.HrLost, EventKind.HrBack, EventKind.GpsLost, EventKind.GpsBack,
-            EventKind.SensorLost, EventKind.SensorReconnected, EventKind.Stop, EventKind.CooldownEnd, EventKind.CrashRecovered,
+            EventKind.SensorLost, EventKind.SensorReconnected, EventKind.BluetoothOff, EventKind.Stop, EventKind.CooldownEnd, EventKind.CrashRecovered,
         ).firstOrNull { it.wire == kind } ?: throw BackupError.Malformed("$path.kind", "unknown event kind $kind")
     }
 

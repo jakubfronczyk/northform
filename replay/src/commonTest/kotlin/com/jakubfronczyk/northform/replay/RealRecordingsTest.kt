@@ -1,9 +1,11 @@
 package com.jakubfronczyk.northform.replay
 
 import com.jakubfronczyk.northform.core.EventKind
+import com.jakubfronczyk.northform.core.HrSample
 import com.jakubfronczyk.northform.core.LocationFix
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RecordingType
+import com.jakubfronczyk.northform.core.SensorState
 import com.jakubfronczyk.northform.core.Sex
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.inSecondsDouble
@@ -264,6 +266,33 @@ class RealRecordingsTest {
         inputs += ReplayInput.User(UserAction.SkipCooldown, at(126))
         val script = ReplayScript(ReplayMeta(RecordingType.Run, t0, 187, 60, Sex.Male), inputs)
         checkRebuild(script, "gap near 10 s", 0.7.seconds, minimumFlushes = 21)
+    }
+
+    /**
+     * D31: Bluetooth switched off mid-run is stored as `BluetoothOff` (not a drop), and the rebuild replays it
+     * as the same sensor state, so live and rebuilt progress agree through the off → reconnect.
+     */
+    @Test
+    fun rebuild_matches_live_across_bluetooth_off() {
+        val inputs = ArrayList<ReplayInput>()
+        inputs += ReplayInput.User(UserAction.Start, at(0))
+        inputs += ReplayInput.Sensor(SensorState.Connected(battery = 90), at(1))
+        inputs += ReplayInput.Fix(fix(4, north = 0.0))
+        for (s in 6..90) {
+            inputs += ReplayInput.Fix(fix(s, north = 3.0 * (s - 5)))
+            if (s !in 31..49) inputs += ReplayInput.Hr(HrSample(at(s + 0.5), 140))
+        }
+        inputs += ReplayInput.Sensor(SensorState.BluetoothOff, at(30.7))
+        inputs += ReplayInput.Sensor(SensorState.Connecting, at(48.2))
+        inputs += ReplayInput.Sensor(SensorState.Connected(battery = 90), at(49.9))
+        inputs += ReplayInput.User(UserAction.Stop, at(91))
+        inputs += ReplayInput.User(UserAction.SkipCooldown, at(92))
+        val script = ReplayScript(ReplayMeta(RecordingType.Run, t0, 187, 60, Sex.Male), inputs.sortedBy { it.t })
+        checkRebuild(script, "bluetooth off", 0.3.seconds, minimumFlushes = 15)
+
+        val kinds = play(script).stored.events.map { it.kind }
+        assertTrue(EventKind.BluetoothOff in kinds && EventKind.SensorLost !in kinds, "$kinds")
+        assertEquals(1, kinds.count { it == EventKind.SensorReconnected })
     }
 
     // ── PaceCharacterizationTests.swift — today's pace and splits on the real recordings, pinned ──

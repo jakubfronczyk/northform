@@ -200,7 +200,7 @@ object RunReducer {
             if (p.startedAt == null || p.phase == RunPhase.Done) return
             when (state) {
                 is SensorState.Disconnected -> if (state.reason == DisconnectReason.Lost) lost(t)
-                SensorState.BluetoothOff -> lost(t)
+                SensorState.BluetoothOff -> lost(t, EventKind.BluetoothOff) // D31: not a drop
                 is SensorState.Connected -> if (p.sensorLost) {
                     p = p.copy(sensorLost = false)
                     record(EventKind.SensorReconnected, t)
@@ -209,10 +209,14 @@ object RunReducer {
             }
         }
 
-        private fun lost(t: Instant) {
+        /**
+         * The link is gone: one event per loss, whichever cause came first ([EventKind.SensorLost] for a drop,
+         * [EventKind.BluetoothOff] for the radio, D31); the next `Connected` records the reconnect either way.
+         */
+        private fun lost(t: Instant, kind: EventKind = EventKind.SensorLost) {
             if (!p.sensorLost) {
                 p = p.copy(sensorLost = true)
-                record(EventKind.SensorLost, t)
+                record(kind, t)
             }
         }
 

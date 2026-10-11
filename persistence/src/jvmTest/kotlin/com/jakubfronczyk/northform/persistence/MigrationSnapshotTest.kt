@@ -37,7 +37,7 @@ class MigrationSnapshotTest {
             store.create(recording)
             assertEquals(recording, assertNotNull(store.load(recording.id)).recording)
             // v2 (1.sqm): the real v1 file, migrated, takes the reliability row too.
-            val record = ReliabilityRecord(drops = 1, reconnects = 1, reconnectTimes = listOf(30.seconds), hrLost = 35.seconds, gpsLost = 0.seconds, recoveries = 0)
+            val record = ReliabilityRecord(drops = 1, reconnects = 1, reconnectTimes = listOf(30.seconds), hrLost = 35.seconds, gpsLost = 0.seconds, recoveries = 0, bluetoothOff = 1)
             store.saveReliability(recording.id, record)
             assertEquals(record, store.reliability(recording.id))
         } finally {
@@ -50,6 +50,13 @@ class MigrationSnapshotTest {
     fun the_pinned_v1_ddl_matches_the_committed_snapshot_column_for_column() {
         val pinned = inMemoryDriver(schema = SchemaV1).use { it.columns() }
         val committed = JdbcSqliteDriver("jdbc:sqlite:${snapshot.path}").use { it.columns() }
+        assertEquals(committed, pinned)
+    }
+
+    @Test
+    fun the_pinned_v2_ddl_matches_the_committed_snapshot_column_for_column() {
+        val pinned = inMemoryDriver(schema = SchemaV2).use { it.columns() }
+        val committed = JdbcSqliteDriver("jdbc:sqlite:src/commonMain/sqldelight/databases/2.db").use { it.columns() }
         assertEquals(committed, pinned)
     }
 

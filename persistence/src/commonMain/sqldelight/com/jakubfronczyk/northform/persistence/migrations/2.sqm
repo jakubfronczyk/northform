@@ -1,0 +1,16 @@
+-- v2 → v3 (D31): the reliability log learns `bluetooth_off`. The table is a cache of `ReliabilityRecord.of(load(id))`
+-- and `ReliabilityRecord.version` was bumped with the rule, so every v2 row would be read as stale anyway: the
+-- table is recreated empty rather than altered (no DEFAULT to carry into the fresh `.sq`); the next read
+-- recomputes from the events. Must end at exactly what `Reliability.sq` creates fresh. Never edit once shipped.
+DROP TABLE reliability;
+CREATE TABLE reliability (
+    recording_id TEXT NOT NULL PRIMARY KEY,
+    version INTEGER NOT NULL,
+    drops INTEGER NOT NULL,
+    reconnects INTEGER NOT NULL,
+    reconnect_times TEXT NOT NULL,
+    hr_lost INTEGER NOT NULL,
+    gps_lost INTEGER NOT NULL,
+    recoveries INTEGER NOT NULL,
+    bluetooth_off INTEGER NOT NULL
+);
