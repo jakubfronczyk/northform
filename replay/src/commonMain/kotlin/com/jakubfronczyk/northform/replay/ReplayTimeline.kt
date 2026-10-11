@@ -10,6 +10,7 @@ import com.jakubfronczyk.northform.core.SensorState
 import com.jakubfronczyk.northform.core.SensorStateChange
 import com.jakubfronczyk.northform.core.ports.HeartRateSensor
 import com.jakubfronczyk.northform.core.ports.LocationProvider
+import com.jakubfronczyk.northform.core.ports.SensorStateBroadcaster
 import com.jakubfronczyk.northform.core.ports.WallClock
 import com.jakubfronczyk.northform.core.roundedToMillis
 import kotlinx.coroutines.delay
@@ -32,22 +33,20 @@ import kotlin.time.Instant
  * [play] begins) plus its offset in the fixture, so replayed samples line up with live ticks.
  *
  * Swift `Broadcaster.events()` (deliver to whoever listens now) → `MutableSharedFlow` with a buffer;
- * `Broadcaster.state()` (replay the latest) → `MutableSharedFlow(replay = 1)`, not a `StateFlow`: the port
+ * `Broadcaster.state()` (replay the latest) → [SensorStateBroadcaster], not a `StateFlow`: the port
  * promises every state change in order, none merged (D36), and a fixture's drop is `lost` and `connecting`
  * at one instant — a conflating `StateFlow` handed collectors only the `connecting`.
  */
 class ReplayTimeline(val script: ReplayScript, val wallClock: WallClock) {
 
-    private val _sensorStates = MutableSharedFlow<SensorStateChange>(replay = 1, extraBufferCapacity = Int.MAX_VALUE)
-    /** The current state: what [next] compares against and a new collector starts with. */
-    private var latest = SensorStateChange(initialSensorState(script), wallClock.now()).also { _sensorStates.tryEmit(it) }
+    private val states = SensorStateBroadcaster(SensorStateChange(initialSensorState(script), wallClock.now()))
     private val _heartRate = MutableSharedFlow<HrSample>(extraBufferCapacity = 1024)
     private val _fixes = MutableSharedFlow<LocationFix>(extraBufferCapacity = 1024)
     private val _userActions = MutableSharedFlow<ReplayInput.User>(extraBufferCapacity = 64)
     private val playing = Mutex()
 
     /** Every sensor state change in order, starting with the current one (D36). */
-    val sensorStates: SharedFlow<SensorStateChange> = _sensorStates.asSharedFlow()
+    val sensorStates: SharedFlow<SensorStateChange> = states.changes
     val heartRate = _heartRate.asSharedFlow()
     val fixes = _fixes.asSharedFlow()
 
@@ -86,12 +85,9 @@ class ReplayTimeline(val script: ReplayScript, val wallClock: WallClock) {
 
     internal fun setSensorState(state: SensorState) = publish(state, wallClock.now())
 
-    /** One change, never merged with the next (D36); an equal change is no change, as the `StateFlow` it replaced had it. */
+    /** One change, never merged with the next (D36); the same state again is no change, whatever its time (D100). */
     private fun publish(state: SensorState, at: Instant) {
-        val change = next(state, at, latest)
-        if (change == latest) return
-        latest = change
-        check(_sensorStates.tryEmit(change)) { "unbounded state buffer refused an emit" }
+        states.publish(next(state, at, states.latest))
     }
 
     companion object {

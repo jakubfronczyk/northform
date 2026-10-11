@@ -29,6 +29,7 @@ import com.jakubfronczyk.northform.core.SensorStateChange
 import com.jakubfronczyk.northform.core.gatt.Gatt
 import com.jakubfronczyk.northform.core.ports.BleCentral
 import com.jakubfronczyk.northform.core.ports.HeartRateSensor
+import com.jakubfronczyk.northform.core.ports.SensorStateBroadcaster
 import com.jakubfronczyk.northform.core.ports.WallClock
 import kotlin.time.Duration.Companion.seconds
 
@@ -54,12 +55,10 @@ class GattHeartRateSensor(
     /**
      * Every state change, none skipped: a drop is `Disconnected(Lost)` immediately followed by `Connecting`
      * in ONE reduce, and a `StateFlow` (conflating by design) handed collectors only the `Connecting`, so
-     * the run never recorded `SensorLost` from the real sensor (adapters/02, R29). `replay = 1` keeps the
-     * port's "starts with the current value"; the unbounded extra buffer keeps `tryEmit` from ever
-     * dropping a change on a slow collector. [latest] is what D100's "same state twice = one change" compares against.
+     * the run never recorded `SensorLost` from the real sensor (adapters/02, R29). [SensorStateBroadcaster]
+     * keeps the rule (D36, and D100's "same state twice = one change").
      */
-    private val states = MutableSharedFlow<SensorStateChange>(replay = 1, extraBufferCapacity = Int.MAX_VALUE)
-    private var latest = SensorStateChange(SensorState.Disconnected(DisconnectReason.User), wallClock.now()).also { states.tryEmit(it) }
+    private val states = SensorStateBroadcaster(SensorStateChange(SensorState.Disconnected(DisconnectReason.User), wallClock.now()))
     /** Unbounded so a slow collector can never drop a sample (samples are persisted downstream). */
     private val samples = MutableSharedFlow<HrSample>(extraBufferCapacity = Int.MAX_VALUE)
     private val discoveries = MutableSharedFlow<DiscoveredSensor>(extraBufferCapacity = 64)
@@ -108,10 +107,7 @@ class GattHeartRateSensor(
             is SensorLink.Command.Read -> central.read(c.id, c.characteristic)
             is SensorLink.Command.Report -> {
                 // D100: the same state twice in a row is one change and keeps its first time.
-                if (latest.state != c.state) {
-                    latest = SensorStateChange(c.state, c.at)
-                    check(states.tryEmit(latest)) { "unbounded state buffer refused an emit" }
-                }
+                states.publish(SensorStateChange(c.state, c.at))
             }
             is SensorLink.Command.Emit -> check(samples.tryEmit(c.sample)) { "unbounded sample buffer refused an emit" }
             is SensorLink.Command.Discovered -> {
@@ -129,7 +125,7 @@ class GattHeartRateSensor(
 
     // ── HeartRateSensor ─────────────────────────────────────────────────────────────────────
 
-    override fun states(): Flow<SensorStateChange> = states
+    override fun states(): Flow<SensorStateChange> = states.changes
 
     /**
      * Live samples only; stays open through drops and Bluetooth off/on; ends on cancel; throws
