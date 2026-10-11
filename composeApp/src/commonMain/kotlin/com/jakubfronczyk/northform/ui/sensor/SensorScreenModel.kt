@@ -95,7 +95,11 @@ class SensorScreenModel(
             catch (e: Exception) { fail("Heart rate unavailable: ${e.message}") }
         }
         // The screen opened onto a link that is already trying (launch reconnect, a drop): give it the same 30 s.
-        if (state is SensorState.Connecting || state == SensorState.Disconnected(DisconnectReason.Lost)) watch(details.paired.value?.id)
+        // It is the search job like any other, so cancel() and connect() stop it (a stale watch would disconnect a fresh try).
+        if (state is SensorState.Connecting || state == SensorState.Disconnected(DisconnectReason.Lost)) {
+            val id = details.paired.value?.id
+            searchJob = launch { watch(id) }
+        }
         if (details.paired.value == null) findNearby()
     }
 
@@ -174,11 +178,11 @@ class SensorScreenModel(
                     }
                 } catch (e: CancellationException) { throw e } catch (e: Exception) { fail("Search failed: ${e.message}") }
             }
-            if (found == null && _ui.value.nearby.isEmpty()) {
-                userSearching = false
-                notFound = true
-                render()
-            }
+            // The scan has stopped either way (timeout or the flow ended): stop showing Searching. With adverts in
+            // hand the list stays up to pick from; with none, not found.
+            userSearching = false
+            notFound = _ui.value.nearby.isEmpty()
+            render()
         }
     }
 

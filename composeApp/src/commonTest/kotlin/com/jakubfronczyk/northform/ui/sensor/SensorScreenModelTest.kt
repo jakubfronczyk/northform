@@ -148,7 +148,8 @@ class SensorScreenModelTest {
         assertEquals(listOf(stranger), model.ui.value.nearby)
         advanceTimeBy(60.seconds); runCurrent()
         assertTrue(sensor.calls.none { it.startsWith("connect") }, "a stranger is never connected by itself: ${sensor.calls}")
-        assertEquals(Mode.Searching, model.ui.value.mode, "something was found: keep listing, no not-found")
+        assertEquals(Mode.Disconnected, model.ui.value.mode, "the scan ended with something found: no not-found, no endless searching")
+        assertEquals(listOf(stranger), model.ui.value.nearby, "the list stays up to pick from")
 
         model.pair(stranger.id); runCurrent()
         assertEquals(listOf("search on", "search off", "connect ${stranger.id.value}"), sensor.calls, "the scan stops when a sensor is picked")
@@ -157,6 +158,36 @@ class SensorScreenModelTest {
         assertEquals(Mode.Connected, model.ui.value.mode)
         assertEquals("FFEE11", model.ui.value.paired?.code)
         assertEquals(Signal.Fair, model.ui.value.signal, "from the advert that was seen (-80 dBm)")
+    }
+
+    @Test
+    fun a_scan_that_found_something_stops_searching_at_30_s_and_find_sensor_scans_again() = runTest {
+        val sensor = FakeHeartRateSensor()
+        val model = open(sensor, FakeSensorDetails(paired = null))
+        sensor.adverts.tryEmit(stranger); runCurrent()
+        advanceTimeBy(29.seconds); runCurrent()
+        assertEquals(Mode.Searching, model.ui.value.mode, "still inside the 30 s")
+        advanceTimeBy(2.seconds); runCurrent()
+        assertEquals(listOf("search on", "search off"), sensor.calls, "the scan stopped at 30 s")
+        assertEquals(Mode.Disconnected, model.ui.value.mode, "a stopped scan never reads Searching")
+        model.connect(); runCurrent() // "Find sensor"
+        assertEquals(Mode.Searching, model.ui.value.mode)
+        assertEquals("search on", sensor.calls.last())
+    }
+
+    @Test
+    fun cancel_then_try_again_is_not_killed_by_the_watch_started_on_open() = runTest {
+        val sensor = FakeHeartRateSensor(SensorState.Connecting) // the screen opens during the launch reconnect
+        val model = open(sensor, FakeSensorDetails(paired))
+        assertEquals(Mode.Searching, model.ui.value.mode)
+        advanceTimeBy(20.seconds); runCurrent()
+        model.cancel(); runCurrent()
+        advanceTimeBy(5.seconds); runCurrent()
+        model.connect(); runCurrent() // "try again" at 25 s
+        sensor.calls.clear()
+        advanceTimeBy(6.seconds); runCurrent() // t = 31 s: the opening watch's 30 s has passed, the try-again is 6 s old
+        assertEquals(emptyList(), sensor.calls, "nothing disconnects the user's try-again")
+        assertEquals(Mode.Searching, model.ui.value.mode)
     }
 
     @Test

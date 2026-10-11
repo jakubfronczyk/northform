@@ -92,8 +92,10 @@ fun SensorScreenContent(
                     ConnectedCard(ui)
                     if (ui.firmwareTooOld) FirmwareWarning(ui.firmware ?: "")
                 }
-                Mode.Searching -> if (ui.paired != null) SearchingCard(ui.paired.code) else NearbyCard(ui.nearby, pair)
-                Mode.Disconnected -> ui.paired?.let { PairedCard(it, ui.firmware) }
+                Mode.Searching -> if (ui.paired != null) SearchingCard(ui.paired.code) else NearbyCard(ui.nearby, pair, scanning = true)
+                Mode.Disconnected ->
+                    if (ui.paired != null) PairedCard(ui.paired, ui.firmware)
+                    else if (ui.nearby.isNotEmpty()) NearbyCard(ui.nearby, pair, scanning = false) // the scan ended with sensors to pick
                 Mode.NotFound -> TipsCard()
                 Mode.BluetoothOff, Mode.Unauthorized -> {}
             }
@@ -268,9 +270,9 @@ private fun SearchingCard(code: String) = Card {
 
 /** `SetupPair.dc.html` scanning rows: every Polar advert, a Pair button each; nothing connects by itself. */
 @Composable
-private fun NearbyCard(nearby: List<DiscoveredSensor>, pair: (com.jakubfronczyk.northform.core.SensorId) -> Unit) = Card {
+private fun NearbyCard(nearby: List<DiscoveredSensor>, pair: (com.jakubfronczyk.northform.core.SensorId) -> Unit, scanning: Boolean) = Card {
     Column {
-        Text("Scanning…", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Theme.text, modifier = Modifier.padding(bottom = 12.dp))
+        Text(if (scanning) "Scanning…" else "Found nearby", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Theme.text, modifier = Modifier.padding(bottom = 12.dp))
         if (nearby.isEmpty()) Text("Nothing yet. Press the sensor button until its light blinks.", style = Type.rowLabel, color = Theme.text2)
         for (d in nearby) {
             val info = PairedSensorInfo(d.id, d.name)
