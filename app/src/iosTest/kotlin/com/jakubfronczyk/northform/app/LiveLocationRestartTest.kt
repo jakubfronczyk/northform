@@ -50,7 +50,7 @@ class LiveLocationRestartTest {
         val updates = FakeUpdates()
         val log = ArrayList<String>()
         val received = ArrayList<LocationFix>()
-        val live = LiveLocation(updates, virtualWallClock(start), log::add, MutableStateFlow(LocationAuthorization.WhenInUse))
+        val live = LiveLocation(updates, virtualWallClock(start), MutableStateFlow(LocationAuthorization.WhenInUse), log::add)
         val job = live.fixes().onEach { received += it }.launchIn(backgroundScope)
         runCurrent()
         assertEquals(1, updates.starts)
@@ -78,7 +78,7 @@ class LiveLocationRestartTest {
     @Test
     fun caps_the_backoff_at_30_seconds() = runTest {
         val updates = FakeUpdates()
-        val live = LiveLocation(updates, virtualWallClock(start), {}, MutableStateFlow(LocationAuthorization.WhenInUse))
+        val live = LiveLocation(updates, virtualWallClock(start), MutableStateFlow(LocationAuthorization.WhenInUse))
         live.fixes().launchIn(backgroundScope); runCurrent()
         for (wait in listOf(2, 4, 8, 16, 30, 30, 30)) {
             val before = updates.starts
@@ -93,7 +93,7 @@ class LiveLocationRestartTest {
     fun does_not_restart_when_location_is_denied() = runTest {
         val updates = FakeUpdates()
         val log = ArrayList<String>()
-        val live = LiveLocation(updates, virtualWallClock(start), log::add, MutableStateFlow(LocationAuthorization.Denied))
+        val live = LiveLocation(updates, virtualWallClock(start), MutableStateFlow(LocationAuthorization.Denied), log::add)
         live.fixes().launchIn(backgroundScope); runCurrent()
         updates.end(); advanceTimeBy(120.seconds); runCurrent()
         assertEquals(1, updates.starts)
@@ -106,7 +106,7 @@ class LiveLocationRestartTest {
     fun does_not_restart_when_location_is_restricted() = runTest {
         val updates = FakeUpdates()
         val log = ArrayList<String>()
-        val live = LiveLocation(updates, virtualWallClock(start), log::add, MutableStateFlow(LocationAuthorization.Restricted))
+        val live = LiveLocation(updates, virtualWallClock(start), MutableStateFlow(LocationAuthorization.Restricted), log::add)
         live.fixes().launchIn(backgroundScope); runCurrent()
         updates.end(); advanceTimeBy(120.seconds); runCurrent()
         assertEquals(1, updates.starts)
@@ -118,7 +118,7 @@ class LiveLocationRestartTest {
         val updates = FakeUpdates()
         val log = ArrayList<String>()
         val authorization = MutableStateFlow(LocationAuthorization.Denied)
-        val live = LiveLocation(updates, virtualWallClock(start), log::add, authorization)
+        val live = LiveLocation(updates, virtualWallClock(start), authorization, log::add)
         live.fixes().launchIn(backgroundScope); runCurrent()
         updates.end(); advanceTimeBy(120.seconds); runCurrent()
         assertEquals(1, updates.starts, "denied: GPS stays off")
@@ -137,7 +137,7 @@ class LiveLocationRestartTest {
     fun a_grant_cancels_a_pending_backoff_and_a_grant_after_the_collector_left_does_nothing() = runTest {
         val updates = FakeUpdates()
         val authorization = MutableStateFlow(LocationAuthorization.NotDetermined)
-        val live = LiveLocation(updates, virtualWallClock(start), {}, authorization)
+        val live = LiveLocation(updates, virtualWallClock(start), authorization)
         val job = live.fixes().launchIn(backgroundScope); runCurrent()
         updates.end(); updates.end(); // attempt 2: a 4 s wait is pending (not-determined still restarts, as before)
         advanceTimeBy(2.seconds); runCurrent()

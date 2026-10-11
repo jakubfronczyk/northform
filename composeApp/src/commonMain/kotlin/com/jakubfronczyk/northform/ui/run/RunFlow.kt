@@ -47,8 +47,10 @@ fun RunFlow(
     session: RunSessionHandle,
     onClose: () -> Unit,
     map: @Composable (route: Route) -> Unit,
-    /** E1: the sensor's connection + battery for the gate; null until the composition root supplies it. */
+    /** E1: the sensor's connection + battery for the gate; null = unknown (previews, replay). */
     gateSensor: GateSensor? = null,
+    /** The gate's "Connect" next to a sensor that is not connected; null hides it. */
+    connectSensor: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val snapshot by session.snapshots.collectAsState()
@@ -66,7 +68,7 @@ fun RunFlow(
     CompositionLocalProvider(LocalMapCamera provides camera) {
         Box(Modifier.fillMaxSize().background(Theme.bg)) {
             when (val phase = snapshot.phase) {
-                RunPhase.Gate -> GateScreen(snapshot, route, map, start = { send(UserAction.Start) }, close = onClose, sensor = gateSensor)
+                RunPhase.Gate -> GateScreen(snapshot, route, map, start = { send(UserAction.Start) }, close = onClose, sensor = gateSensor, connectSensor = connectSensor)
                 is RunPhase.Countdown -> CountdownScreen(phase.endsAt, session.wallClock)
                 RunPhase.Active, is RunPhase.Paused -> LiveRunScreen(snapshot, route, session.wallClock, send, map)
                 is RunPhase.Cooldown -> StoppedScreen(snapshot, skip = { send(UserAction.SkipCooldown) })

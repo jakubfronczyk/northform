@@ -14,18 +14,23 @@ import com.jakubfronczyk.northform.adapters.location.LocationAuthorizationMonito
 import com.jakubfronczyk.northform.adapters.location.openAppSettings
 import com.jakubfronczyk.northform.adapters.location.LocationUpdates
 import com.jakubfronczyk.northform.adapters.location.requestWhenInUseAuthorization
+import com.jakubfronczyk.northform.core.SensorState
 import com.jakubfronczyk.northform.engine.sensor.GattHeartRateSensor
 import com.jakubfronczyk.northform.persistence.SqlRecordingStore
 import com.jakubfronczyk.northform.persistence.nativeDriver
 import com.jakubfronczyk.northform.replay.RecordingTap
 import com.jakubfronczyk.northform.ui.AppRoot
 import com.jakubfronczyk.northform.ui.crash.CrashPromptScreen
+import com.jakubfronczyk.northform.ui.run.GateSensor
 import com.jakubfronczyk.northform.ui.sensor.SensorScreen
 import com.jakubfronczyk.northform.ui.sensor.SensorScreenModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.Foundation.NSNotificationCenter
@@ -83,7 +88,7 @@ object NorthformApp {
         val wallClock = IosWallClock
         alerts = NotificationAlertPlayer(scope, DeviceLog.run::notice)
         locationAuthorization = LocationAuthorizationMonitor() // main thread: boot() runs in didFinishLaunching
-        location = LiveLocation(locationUpdates, wallClock, DeviceLog.location::notice, locationAuthorization.state)
+        location = LiveLocation(locationUpdates, wallClock, locationAuthorization.state, DeviceLog.location::notice)
 
         // 2  the central manager is created HERE, so willRestoreState lands in a live Kotlin delegate
         central = CoreBluetoothCentral(BLE_RESTORE_ID, DeviceLog.polar::notice)
@@ -120,7 +125,7 @@ object NorthformApp {
             model.appWentToBackground()
         }
         // The remembered sensor reconnects at launch (`AppDeps.swift:34-36`).
-        if (live) sensor.linkState.value.paired?.let { id -> scope.launch { runCatching { sensor.connect(id) } } }
+        if (live) connectPairedSensor()
 
         isBooted = true
         DeviceLog.app.notice("boot() end in ${started.elapsedNow()}") // 5
@@ -145,6 +150,20 @@ object NorthformApp {
     /** The Settings deep link the gate offers next to a `Denied` hint (`LocationHint.canOpenSettings`). */
     fun openLocationSettings() = openAppSettings()
 
+    /** Connects the paired sensor, if any; a timeout is not an error here (the link keeps trying). */
+    private fun connectPairedSensor() {
+        val id = sensor.linkState.value.paired ?: return
+        scope.launch { runCatching { sensor.connect(id) } }
+    }
+
+    /** E1: what the gate shows about the sensor. Replay has no link, so it says nothing (null = unknown). */
+    private fun gateSensorStates(): Flow<GateSensor?> =
+        if (!live) flowOf(null)
+        else sensor.states().map { change ->
+            val connected = change.state as? SensorState.Connected
+            GateSensor(connected = connected != null, batteryPercent = connected?.battery)
+        }
+
     /** `KeepAlive` is an `:adapters` class; `RunKeepAlive` is the app's seam for it (a fake in tests). */
     private fun KeepAlive.asRunKeepAlive() = object : RunKeepAlive {
         override fun hold() = this@asRunKeepAlive.hold()
@@ -155,6 +174,7 @@ object NorthformApp {
     fun rootViewController(): UIViewController = ComposeUIViewController {
         val activeRun by model.activeRun.collectAsState()
         val unfinished by model.unfinished.collectAsState()
+        val gateSensor by remember { gateSensorStates() }.collectAsState(null)
         AppRoot(
             activeRun = activeRun?.session,
             onStartRun = model::startRun,
@@ -162,6 +182,8 @@ object NorthformApp {
             map = { route -> RouteMap(route, showsUserLocation = live) },
             // One model per opening (SU10): its collectors and 30 s search live exactly as long as the screen.
             sensorScreen = { close -> SensorScreen(remember { SensorScreenModel(sensor, sensorDetails) }, onClose = close) },
+            gateSensor = gateSensor,
+            connectSensor = ::connectPairedSensor,
             crashPrompt = unfinished?.let { run -> { CrashPromptScreen(run.facts, onChoice = model::resolveUnfinished) } },
         )
     }

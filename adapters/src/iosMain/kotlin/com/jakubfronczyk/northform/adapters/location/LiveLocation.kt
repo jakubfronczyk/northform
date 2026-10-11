@@ -9,7 +9,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.drop
@@ -38,8 +37,9 @@ import kotlin.time.Instant
 class LiveLocation(
     private val updates: LocationUpdates,
     private val wallClock: WallClock,
+    /** Required: a snapshot that never changes would silently turn off restart-on-grant (adapters/03). */
+    private val authorization: StateFlow<LocationAuthorization>,
     private val log: (String) -> Unit = {},
-    private val authorization: StateFlow<LocationAuthorization> = MutableStateFlow(LocationAuthorization.current()),
 ) : LocationProvider {
 
     /** A cold stream per call; `awaitClose` is mandatory in `callbackFlow` and is where the forwarder stops. */

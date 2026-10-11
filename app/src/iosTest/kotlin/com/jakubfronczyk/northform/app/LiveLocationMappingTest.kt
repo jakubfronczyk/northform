@@ -61,7 +61,7 @@ class LiveLocationMappingTest {
     private fun TestScope.fixFrom(location: CLLocation, stationary: Boolean): LocationFix {
         val updates = FakeUpdates()
         val received = ArrayList<LocationFix>()
-        val live = LiveLocation(updates, virtualWallClock(start), {}, MutableStateFlow(LocationAuthorization.WhenInUse))
+        val live = LiveLocation(updates, virtualWallClock(start), MutableStateFlow(LocationAuthorization.WhenInUse))
         live.fixes().onEach { received += it }.launchIn(backgroundScope)
         runCurrent()
         updates.sink!!.onUpdate(location, stationary)

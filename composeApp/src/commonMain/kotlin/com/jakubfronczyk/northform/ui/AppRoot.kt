@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.RunSessionHandle
+import com.jakubfronczyk.northform.ui.run.GateSensor
 import com.jakubfronczyk.northform.ui.run.RunFlow
 
 /**
@@ -33,13 +34,17 @@ fun AppRoot(
     onCloseRun: () -> Unit,
     map: @Composable (route: Route) -> Unit,
     sensorScreen: @Composable (close: () -> Unit) -> Unit,
+    /** E1: the gate's sensor row, from the real link; null = unknown (replay has no link to ask). Required so the root can't forget it. */
+    gateSensor: GateSensor?,
+    /** The gate's "Connect" for a sensor that is not connected. */
+    connectSensor: () -> Unit,
     /** The R28 crash prompt while a recording waits for the user's choice: a sheet over Today that cannot be dismissed (Swift D77 restated). */
     crashPrompt: (@Composable () -> Unit)? = null,
 ) {
     var showSensor by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         when {
-            activeRun != null -> RunFlow(activeRun, onClose = onCloseRun, map = map)
+            activeRun != null -> RunFlow(activeRun, onClose = onCloseRun, map = map, gateSensor = gateSensor, connectSensor = connectSensor)
             showSensor -> sensorScreen { showSensor = false }
             else -> {
                 TodayScreen(startRun = onStartRun, openSensor = { showSensor = true })
