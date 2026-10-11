@@ -42,6 +42,20 @@ abstract class HeartRateSensorContract {
         suspend fun bluetoothOff()
         /** The radio is back: `Connecting`. */
         suspend fun bluetoothOn()
+
+        companion object {
+            /**
+             * A driver for an implementation whose test sets each state directly (the scripted fake, the replay
+             * timeline): every step is the state(s) it stands for, through [set]. Only a real link (Gatt) needs its own steps.
+             */
+            fun fromSetter(sensor: HeartRateSensor, set: suspend (SensorState) -> Unit): Driver = object : Driver {
+                override val sensor = sensor
+                override suspend fun drop() { set(SensorState.Disconnected(DisconnectReason.Lost)); set(SensorState.Connecting) }
+                override suspend fun relink() = set(SensorState.Connected(battery = null))
+                override suspend fun bluetoothOff() = set(SensorState.BluetoothOff)
+                override suspend fun bluetoothOn() = set(SensorState.Connecting)
+            }
+        }
     }
 
     /** A sensor already `Connected`, on `virtualWallClock(start)` of this test. */

@@ -1,6 +1,5 @@
 package com.jakubfronczyk.northform.engine.sensor
 
-import com.jakubfronczyk.northform.core.DisconnectReason
 import com.jakubfronczyk.northform.core.SensorState
 import com.jakubfronczyk.northform.testing.HeartRateSensorContract
 import com.jakubfronczyk.northform.testing.ScriptedHeartRateSensor
@@ -18,12 +17,6 @@ class ScriptedHeartRateSensorContractTest : HeartRateSensorContract() {
     override fun TestScope.connected(): Driver {
         val clock = virtualWallClock(start)
         val fake = ScriptedHeartRateSensor(SensorState.Connected(battery = 80), clock.now(), clock::now)
-        return object : Driver {
-            override val sensor = fake
-            override suspend fun drop() { fake.set(SensorState.Disconnected(DisconnectReason.Lost)); fake.set(SensorState.Connecting) }
-            override suspend fun relink() = fake.set(SensorState.Connected(battery = 80))
-            override suspend fun bluetoothOff() = fake.set(SensorState.BluetoothOff)
-            override suspend fun bluetoothOn() = fake.set(SensorState.Connecting)
-        }
+        return Driver.fromSetter(fake) { fake.set(it) }
     }
 }

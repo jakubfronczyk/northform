@@ -28,14 +28,7 @@ class ReplaySensorContractTest : HeartRateSensorContract() {
     override fun TestScope.connected(): Driver {
         val clock = virtualWallClock(start)
         val timeline = ReplayTimeline(ReplayScript(ReplayMeta(RecordingType.Run, start, 187, 60, Sex.Male), emptyList()), clock)
-        suspend fun line(state: SensorState) = timeline.emit(ReplayInput.Sensor(state, clock.now()))
-        return object : Driver {
-            override val sensor = ReplaySensor(timeline)
-            override suspend fun drop() { line(SensorState.Disconnected(DisconnectReason.Lost)); line(SensorState.Connecting) }
-            override suspend fun relink() = line(SensorState.Connected(battery = null))
-            override suspend fun bluetoothOff() = line(SensorState.BluetoothOff)
-            override suspend fun bluetoothOn() = line(SensorState.Connecting)
-        }
+        return Driver.fromSetter(ReplaySensor(timeline)) { timeline.emit(ReplayInput.Sensor(it, clock.now())) }
     }
 
     /** D100 on the replay sensor: a fixture line repeating the current state (later) is no change, as on Gatt and the fake. */

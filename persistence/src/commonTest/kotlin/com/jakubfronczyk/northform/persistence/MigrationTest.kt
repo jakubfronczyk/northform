@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.persistence
 
+import app.cash.sqldelight.db.SqlDriver
 import com.jakubfronczyk.northform.core.EventKind
 import com.jakubfronczyk.northform.core.EventSource
 import com.jakubfronczyk.northform.core.HrSample
@@ -32,12 +33,28 @@ class MigrationTest {
     private val t0 = Instant.parse("2026-10-10T06:00:00Z")
     private val id = RecordingId("v1-rec")
 
+    /**
+     * A database built at the pinned [from] version, filled by [seed] the way that version wrote it (raw SQL), migrated
+     * to the current schema; [check] reads it through today's store. The driver is closed afterwards.
+     */
+    private suspend fun migrated(from: PinnedSchema, seed: SqlDriver.() -> Unit, check: suspend (SqlRecordingStore) -> Unit) {
+        val driver = inMemoryDriver(schema = from)
+        try {
+            driver.seed()
+            NorthformDb.Schema.migrate(driver, oldVersion = from.version, newVersion = NorthformDb.Schema.version)
+            check(SqlRecordingStore(driver, io = EmptyCoroutineContext))
+        } finally {
+            driver.close()
+        }
+    }
+
+    private val hr = listOf(HrSample(t0 + 1.seconds, 120), HrSample(t0 + 2.seconds, 121))
+    private val fixes = listOf(LocationFix(t0 + 1.seconds, 52.2297, 21.0122, 4.5, altitude = 101.25, stationary = false))
+
     @Test
     fun a_v1_database_migrates_to_the_current_schema_and_keeps_its_rows() = runTest {
-        val driver = inMemoryDriver(schema = SchemaV1)
-        try {
-            val hr = listOf(HrSample(t0 + 1.seconds, 120), HrSample(t0 + 2.seconds, 121))
-            val fixes = listOf(LocationFix(t0 + 1.seconds, 52.2297, 21.0122, 4.5, altitude = 101.25, stationary = false))
+        migrated(SchemaV1, seed = {
+            val driver = this
             driver.execute(null, "INSERT INTO recording(id, user_id, type, state, start_utc, tz_offset_s) VALUES ('v1-rec', 1, 'run', 'active', ${t0.toNanos()}, 7200)", 0)
             driver.execute(null, "UPDATE recording SET last_persisted_at = ${(t0 + 2.seconds).toNanos()} WHERE id = 'v1-rec'", 0)
             driver.execute(null, "INSERT INTO event(recording_id, seq, t, kind, source, split_index) VALUES ('v1-rec', 0, ${(t0 + 1.seconds).toNanos()}, 'split', 'auto', 1)", 0)
@@ -48,10 +65,7 @@ class MigrationTest {
                 bindBytes(0, StreamCodec.encodeGps(fixes, fixes.first().t))
             }
             driver.execute(null, "INSERT INTO metric VALUES ('v1-rec', 'distance', 1, 1234.5, 0, 'm', 70.0, 180.0, 190, 60, '0.5,0.6,0.7,0.8,0.9')", 0)
-
-            NorthformDb.Schema.migrate(driver, oldVersion = SchemaV1.version, newVersion = NorthformDb.Schema.version)
-
-            val store = SqlRecordingStore(driver, io = EmptyCoroutineContext)
+        }) { store ->
             val data = assertNotNull(store.load(id), "the v1 recording is still there after the migration")
             assertEquals(Recording(id = id, type = RecordingType.Run, state = RecordingState.Active, startUtc = t0, tzOffset = 7200), data.recording)
             assertEquals(hr, data.hr)
@@ -70,23 +84,17 @@ class MigrationTest {
             assertFailsWith<RecordingStoreError.NotFound> { store.saveReliability(RecordingId("nobody"), record) }
             store.delete(id)
             assertNull(store.reliability(id), "delete takes the log with the recording")
-        } finally {
-            driver.close()
         }
     }
 
     @Test
     fun a_v2_database_migrates_to_v3_and_its_stale_reliability_rows_are_recomputed_not_misread() = runTest {
         // v2 -> v3 (2.sqm, D31): the reliability cache gains `bluetooth_off`; a v2 row counted Bluetooth-off as a drop.
-        val driver = inMemoryDriver(schema = SchemaV2)
-        try {
-            driver.execute(null, "INSERT INTO recording(id, user_id, type, state, start_utc, tz_offset_s) VALUES ('v1-rec', 1, 'run', 'saved', ${t0.toNanos()}, 0)", 0)
-            driver.execute(null, "INSERT INTO event(recording_id, seq, t, kind, source, split_index) VALUES ('v1-rec', 0, ${(t0 + 1.seconds).toNanos()}, 'bluetoothOff', 'auto', NULL)", 0)
-            driver.execute(null, "INSERT INTO reliability VALUES ('v1-rec', 1, 1, 0, '', 0, 0, 0)", 0)
-
-            NorthformDb.Schema.migrate(driver, oldVersion = SchemaV2.version, newVersion = NorthformDb.Schema.version)
-
-            val store = SqlRecordingStore(driver, io = EmptyCoroutineContext)
+        migrated(SchemaV2, seed = {
+            execute(null, "INSERT INTO recording(id, user_id, type, state, start_utc, tz_offset_s) VALUES ('v1-rec', 1, 'run', 'saved', ${t0.toNanos()}, 0)", 0)
+            execute(null, "INSERT INTO event(recording_id, seq, t, kind, source, split_index) VALUES ('v1-rec', 0, ${(t0 + 1.seconds).toNanos()}, 'bluetoothOff', 'auto', NULL)", 0)
+            execute(null, "INSERT INTO reliability VALUES ('v1-rec', 1, 1, 0, '', 0, 0, 0)", 0)
+        }) { store ->
             assertNull(store.reliability(id), "the v2 row (a drop that was Bluetooth-off) is gone: recompute from the events")
             val data = assertNotNull(store.load(id))
             assertEquals(listOf(RecordingEvent(t0 + 1.seconds, EventKind.BluetoothOff, EventSource.Auto)), data.events)
@@ -94,8 +102,6 @@ class MigrationTest {
             assertEquals(ReliabilityRecord.none.copy(bluetoothOff = 1), record)
             store.saveReliability(id, record)
             assertEquals(record, store.reliability(id))
-        } finally {
-            driver.close()
         }
     }
 }

@@ -1,21 +1,9 @@
 package com.jakubfronczyk.northform.persistence
 
-import app.cash.sqldelight.db.AfterVersion
-import app.cash.sqldelight.db.QueryResult
-import app.cash.sqldelight.db.SqlDriver
-import app.cash.sqldelight.db.SqlSchema
-
-/**
- * Schema v1 as it shipped, pinned (persistence/03). `Recording.sq` moves on with every `.sqm`; this
- * copy does not, so a test can build the database a phone has today and migrate it forward on both
- * platforms. The JVM test checks it against the committed snapshot `databases/1.db` column for column,
- * so the two cannot drift apart unnoticed. Idiom: an `object` implementing the generated schema's
- * interface, `SqlSchema<QueryResult.Value<Unit>>` — the same type the drivers take.
- */
-object SchemaV1 : SqlSchema<QueryResult.Value<Unit>> {
-    override val version: Long get() = 1
-
-    val tables: List<String> = listOf(
+/** Schema v1 as it shipped, pinned ([PinnedSchema]); checked against `databases/1.db`. */
+object SchemaV1 : PinnedSchema(
+    version = 1,
+    tables = listOf(
         """
         CREATE TABLE recording (
             id TEXT NOT NULL PRIMARY KEY,
@@ -70,13 +58,5 @@ object SchemaV1 : SqlSchema<QueryResult.Value<Unit>> {
             PRIMARY KEY (recording_id, metric_id)
         )
         """,
-    ).map { it.trimIndent() }
-
-    override fun create(driver: SqlDriver): QueryResult.Value<Unit> {
-        tables.forEach { driver.execute(null, it, 0) }
-        return QueryResult.Unit
-    }
-
-    override fun migrate(driver: SqlDriver, oldVersion: Long, newVersion: Long, vararg callbacks: AfterVersion): QueryResult.Value<Unit> =
-        error("SchemaV1 is a starting point; migrate with NorthformDb.Schema")
-}
+    ).map { it.trimIndent() },
+)

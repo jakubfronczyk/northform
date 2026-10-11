@@ -3,6 +3,9 @@
 -- and `ReliabilityRecord.version` was bumped with the rule, so every v2 row would be read as stale anyway: the
 -- table is recreated empty rather than altered (no DEFAULT to carry into the fresh `.sq`); the next read
 -- recomputes from the events. Must end at exactly what `Reliability.sq` creates fresh. Never edit once shipped.
+-- `ReliabilityRecord.version` is the real invalidation (a row of another version is recomputed, not read); the
+-- DROP is only safe because `reliability` is a cache: it holds nothing the events cannot rebuild. A table holding
+-- primary data must be ALTERed or copied, never dropped.
 DROP TABLE reliability;
 CREATE TABLE reliability (
     recording_id TEXT NOT NULL PRIMARY KEY,
