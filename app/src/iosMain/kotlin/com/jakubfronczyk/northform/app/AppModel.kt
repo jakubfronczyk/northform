@@ -1,7 +1,11 @@
 package com.jakubfronczyk.northform.app
 
+import com.jakubfronczyk.northform.core.EventKind
+import com.jakubfronczyk.northform.core.EventSource
+import com.jakubfronczyk.northform.core.RecordingEvent
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingState
+import com.jakubfronczyk.northform.core.ports.FlushBatch
 import com.jakubfronczyk.northform.engine.run.CrashChoice
 import com.jakubfronczyk.northform.engine.run.CrashPrompt
 import kotlinx.coroutines.CoroutineScope
@@ -99,13 +103,26 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     }
 
     /**
-     * Save: the recording ends where the store last heard from it and goes to `computing`, where a normally closed run sits
-     * too (`closeRun`); engine/04's summary path picks it up from there. Each attempt re-reads the stored state and does only
-     * the steps left, so a retry after a half-done Save (stopped, not yet computing) never repeats `stop`.
+     * Save: the recording ends where the store last heard from it (D30: never at reopen) and goes to `computing`, where a
+     * normally closed run sits too (`closeRun`); engine/04's summary path picks it up from there. Each attempt re-reads the
+     * stored data and does only the steps left, so a retry after a half-done Save never repeats a step.
+     *
+     * D32: while still `active`, the crash is marked first (`CrashRecovered`, Auto, at the answer, as Continue marks it),
+     * flushed with the heartbeat it already has so "saved until" does not move. A mark later than that heartbeat can only
+     * be this Save's own (a resumed run's mark is followed by its first flush's later heartbeat), so a retry skips it.
      */
     private suspend fun save(run: UnfinishedRun) {
-        val stored = storedState(run) ?: return // gone: nothing left to save
-        if (stored == RecordingState.Active) deps.store.stop(run.id, run.facts.savedUntil)
+        val data = deps.store.load(run.id) ?: return // gone: nothing left to save
+        val stored = data.recording.state
+        if (stored == RecordingState.Active) {
+            val heartbeat = data.lastPersistedAt ?: data.recording.startUtc
+            val marked = data.events.any { it.kind == EventKind.CrashRecovered && it.t > heartbeat }
+            if (!marked) {
+                val mark = RecordingEvent(deps.wallClock.now(), EventKind.CrashRecovered, EventSource.Auto)
+                deps.store.flush(FlushBatch(run.id, events = listOf(mark), persistedAt = heartbeat))
+            }
+            deps.store.stop(run.id, run.facts.savedUntil)
+        }
         if (stored == RecordingState.Active || stored == RecordingState.Stopping) deps.store.beginComputing(run.id)
     }
 

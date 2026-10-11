@@ -1,9 +1,11 @@
 package com.jakubfronczyk.northform.app
 
 import com.jakubfronczyk.northform.core.EventKind
+import com.jakubfronczyk.northform.core.EventSource
 import com.jakubfronczyk.northform.core.HrSample
 import com.jakubfronczyk.northform.core.LocationFix
 import com.jakubfronczyk.northform.core.Recording
+import com.jakubfronczyk.northform.core.RecordingEvent
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RecordingType
@@ -168,6 +170,9 @@ class CrashResumeAppTest {
             assertEquals(EventKind.Stop, saved.events.last().kind)
             assertEquals(30, saved.hr.size)
             assertNull(model.activeRun.value, "Save opens no run")
+            // D32: the crash leaves a mark on a saved run too, and the heartbeat ("saved until") does not move.
+            assertEquals(listOf(RecordingEvent(t0 + 3.hours, EventKind.CrashRecovered, EventSource.Auto)), saved.events.filter { it.kind == EventKind.CrashRecovered })
+            assertEquals(t0 + 30.seconds, saved.lastPersistedAt)
         } finally {
             driver.close()
         }
@@ -269,6 +274,39 @@ class CrashResumeAppTest {
             assertNull(model.unfinished.value, "the retry succeeds: no second stop")
             val saved = assertNotNull(real.load(seeded))
             assertEquals(RecordingState.Computing, saved.recording.state)
+            assertEquals(t0 + 30.seconds, saved.recording.endUtc)
+        } finally {
+            driver.close()
+        }
+    }
+
+    /** The real store, except `stop` fails the first time: a Save that wrote its crash mark and got no further. */
+    private fun failingStopOnce(real: RecordingStore) = object : RecordingStore by real {
+        var failOnce = true
+        override suspend fun stop(id: RecordingId, endUtc: Instant) {
+            if (failOnce) { failOnce = false; error("disk full") }
+            real.stop(id, endUtc)
+        }
+    }
+
+    @Test
+    fun a_save_retried_after_the_crash_mark_was_written_does_not_write_it_twice() = runTest {
+        val driver = inMemoryDriver("crash-resume-save-retry-mark")
+        try {
+            val real = SqlRecordingStore(driver, io = EmptyCoroutineContext)
+            seed(real)
+            val model = AppModel(replayDeps(straightRun(), failingStopOnce(real), clockStart = t0 + 1.hours), backgroundScope)
+            model.checkUnfinished(); runCurrent()
+            model.resolveUnfinished(CrashChoice.Save); runCurrent()
+            assertNotNull(model.unfinished.value, "the first Save failed at stop: the prompt stays")
+            assertEquals(RecordingState.Active, assertNotNull(real.load(seeded)).recording.state)
+
+            advanceTimeBy(1.minutes)
+            model.resolveUnfinished(CrashChoice.Save); runCurrent()
+            assertNull(model.unfinished.value)
+            val saved = assertNotNull(real.load(seeded))
+            assertEquals(RecordingState.Computing, saved.recording.state)
+            assertEquals(1, saved.events.count { it.kind == EventKind.CrashRecovered }, "${saved.events}")
             assertEquals(t0 + 30.seconds, saved.recording.endUtc)
         } finally {
             driver.close()
