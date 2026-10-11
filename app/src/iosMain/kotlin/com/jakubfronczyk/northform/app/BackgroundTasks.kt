@@ -1,7 +1,11 @@
 package com.jakubfronczyk.northform.app
 
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import platform.UIKit.UIApplication
 import platform.UIKit.UIBackgroundTaskInvalid
 
@@ -27,21 +31,45 @@ interface BackgroundTasks {
 }
 
 /**
- * Runs [block] inside one background task: begun first, ended exactly once afterwards, and when iOS
- * expires the task first, [block] is cancelled and the task ended all the same. Structured: the
- * expiration handler only cancels the child; `finally` is the one place `end` is called.
+ * A background task already begun: ended exactly once, by whichever comes first — [run]'s work finishing,
+ * or iOS expiring the task. Apple requires `endBackgroundTask` *inside* the expiration handler (the process
+ * may be suspended the moment the handler returns), so expiry ends the task right there, on the handler's
+ * thread, and only then cancels the work; the normal path's end is a no-op after that. The one atomic flag
+ * is what makes the two ends race-free across the main thread and the work's dispatcher.
  */
-suspend fun BackgroundTasks.bracket(name: String, block: suspend () -> Unit) {
-    coroutineScope {
-        val work = launch { block() }
-        val task = begin(name) { work.cancel() }
+@OptIn(ExperimentalAtomicApi::class)
+class HeldTask internal constructor(private val tasks: BackgroundTasks, name: String) {
+    private val ended = AtomicBoolean(false)
+    private val expired = AtomicBoolean(false)
+    private val work = AtomicReference<Job?>(null)
+    // begin() runs on the caller's thread before this object is shared; iOS calls the handler later, on the main thread.
+    private val task: Long = tasks.begin(name) {
+        expired.store(true)
+        end()
+        work.load()?.cancel()
+    }
+
+    private fun end() { if (ended.compareAndSet(false, true)) tasks.end(task) }
+
+    /** Runs [block] inside this task, then ends it (unless expiry already did). Cancelled when iOS expires the task. */
+    suspend fun run(block: suspend () -> Unit) {
         try {
-            work.join()
+            coroutineScope {
+                val job = launch { block() }
+                work.store(job)
+                if (expired.load()) job.cancel() // expired before the work existed
+            }
         } finally {
-            end(task)
+            end()
         }
     }
 }
+
+/** Begins a task now, synchronously — before the caller suspends or hops threads, so iOS knows at once. */
+fun BackgroundTasks.hold(name: String): HeldTask = HeldTask(this, name)
+
+/** [hold] then [HeldTask.run]: for a caller with no reason to begin earlier than the work. */
+suspend fun BackgroundTasks.bracket(name: String, block: suspend () -> Unit) = hold(name).run(block)
 
 /** The real one. Apple documents both calls as safe from any thread. */
 class UiBackgroundTasks(private val log: (String) -> Unit = {}) : BackgroundTasks {

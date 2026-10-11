@@ -91,11 +91,30 @@ class BackgroundFlushTest {
         runCurrent()
         assertEquals(listOf("begin ${ActiveRun.FLUSH_TASK}"), tasks.events)
 
-        assertNotNull(tasks.expire).invoke(); runCurrent() // iOS: time is up
-        assertEquals(listOf("begin ${ActiveRun.FLUSH_TASK}", "end 7"), tasks.events, "ended on expiry")
+        assertNotNull(tasks.expire).invoke() // iOS: time is up
+        assertEquals(listOf("begin ${ActiveRun.FLUSH_TASK}", "end 7"), tasks.events, "ended inside the expiration handler, before it returns (Apple's rule)")
+        runCurrent()
+        assertEquals(listOf("begin ${ActiveRun.FLUSH_TASK}", "end 7"), tasks.events, "the cancelled work ends nothing twice")
         store.release(); advanceTimeBy(10.seconds); runCurrent() // the store comes back later: the run keeps writing, no second end
         assertEquals(listOf("begin ${ActiveRun.FLUSH_TASK}", "end 7"), tasks.events)
         assertNotNull(store.inner.records.load(run.id)).lastPersistedAt
+    }
+
+    @Test
+    fun going_to_the_background_begins_the_task_before_any_work_is_scheduled() = runTest {
+        val tasks = FakeTasks()
+        val store = GatedStore()
+        val model = AppModel(deps(store, tasks), backgroundScope)
+        model.startRun(); runCurrent()
+        val run = assertNotNull(model.activeRun.value)
+        run.session.tap(UserAction.Start)
+        advanceTimeBy(6.seconds); runCurrent()
+        store.close()
+
+        model.appWentToBackground() // the main-thread observer: no runCurrent, nothing launched has run yet
+        assertEquals(listOf("begin ${ActiveRun.FLUSH_TASK}"), tasks.events, "begun synchronously, in the observer")
+        store.release(); runCurrent()
+        assertEquals(listOf("begin ${ActiveRun.FLUSH_TASK}", "end 7"), tasks.events)
     }
 
     @Test

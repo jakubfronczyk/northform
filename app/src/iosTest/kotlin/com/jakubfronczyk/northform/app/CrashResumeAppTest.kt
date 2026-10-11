@@ -211,6 +211,77 @@ class CrashResumeAppTest {
         }
     }
 
+    /** The real store, except `beginComputing` fails the first time: a Save that gets halfway (stopped, not computing). */
+    private fun failingBeginComputingOnce(real: RecordingStore) = object : RecordingStore by real {
+        var failOnce = true
+        override suspend fun beginComputing(id: RecordingId) {
+            if (failOnce) { failOnce = false; error("disk full") }
+            real.beginComputing(id)
+        }
+    }
+
+    @Test
+    fun a_save_retried_after_a_half_done_save_only_does_the_step_left() = runTest {
+        val driver = inMemoryDriver("crash-resume-save-retry")
+        try {
+            val real = SqlRecordingStore(driver, io = EmptyCoroutineContext)
+            seed(real)
+            val model = AppModel(replayDeps(straightRun(), failingBeginComputingOnce(real)), backgroundScope)
+            model.checkUnfinished(); runCurrent()
+            model.resolveUnfinished(CrashChoice.Save); runCurrent()
+            assertNotNull(model.unfinished.value, "the first Save failed: the prompt stays")
+            assertEquals(RecordingState.Stopping, assertNotNull(real.load(seeded)).recording.state, "halfway: stopped, not computing")
+
+            model.resolveUnfinished(CrashChoice.Save); runCurrent()
+            assertNull(model.unfinished.value, "the retry succeeds: no second stop")
+            val saved = assertNotNull(real.load(seeded))
+            assertEquals(RecordingState.Computing, saved.recording.state)
+            assertEquals(t0 + 30.seconds, saved.recording.endUtc)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun continue_on_a_recording_the_store_no_longer_holds_as_active_saves_it_instead() = runTest {
+        val driver = inMemoryDriver("crash-resume-continue-stopped")
+        try {
+            val real = SqlRecordingStore(driver, io = EmptyCoroutineContext)
+            seed(real)
+            val model = AppModel(replayDeps(straightRun(), failingBeginComputingOnce(real)), backgroundScope)
+            model.checkUnfinished(); runCurrent()
+            model.resolveUnfinished(CrashChoice.Save); runCurrent() // halfway: the prompt still says Active (read at boot)
+            assertEquals(RecordingState.Active, assertNotNull(model.unfinished.value).facts.state)
+
+            model.resolveUnfinished(CrashChoice.Continue); runCurrent()
+            assertNull(model.activeRun.value, "a stopped recording is never resumed")
+            assertNull(model.unfinished.value)
+            assertEquals(RecordingState.Computing, assertNotNull(real.load(seeded)).recording.state, "routed to Save")
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun start_run_does_nothing_while_the_crash_prompt_is_up() = runTest {
+        val driver = inMemoryDriver("crash-resume-start-blocked")
+        try {
+            val store = SqlRecordingStore(driver, io = EmptyCoroutineContext)
+            seed(store)
+            val model = AppModel(replayDeps(straightRun(), store), backgroundScope)
+            model.checkUnfinished(); runCurrent()
+            assertNotNull(model.unfinished.value)
+
+            model.startRun(); runCurrent()
+            assertNull(model.activeRun.value, "the prompt owns the screen: answer it first")
+            model.resolveUnfinished(CrashChoice.Delete); runCurrent()
+            model.startRun(); runCurrent()
+            assertNotNull(model.activeRun.value, "answered: Start works again")
+        } finally {
+            driver.close()
+        }
+    }
+
     @Test
     fun a_clean_database_shows_no_prompt() = runTest {
         val driver = inMemoryDriver("crash-resume-clean")

@@ -42,10 +42,15 @@ class ActiveRun private constructor(
      * `backgrounded` waits for the store to answer the batch — or until iOS expires the task. When
      * there is nothing to save (before start, after the run's last write) that is no time at all.
      */
-    suspend fun backgrounded(at: Instant) {
-        tap?.write()
-        tasks.bracket(FLUSH_TASK) { session.backgrounded(at) }
+    suspend fun backgrounded(at: Instant, held: HeldTask = holdFlushTask()) {
+        held.run {
+            tap?.write()
+            session.backgrounded(at)
+        }
     }
+
+    /** Begins the flush's background task now, on the caller's thread (the `DidEnterBackground` observer), before any work. */
+    fun holdFlushTask(): HeldTask = tasks.hold(FLUSH_TASK)
 
     /**
      * `AppModel.swift:127` — the run screen closed. The session decides what that means (D116): before

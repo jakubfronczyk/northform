@@ -2,6 +2,7 @@ package com.jakubfronczyk.northform.ui.crash
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,7 +48,11 @@ fun CrashPromptScreen(facts: CrashFacts, onChoice: (CrashChoice) -> Unit) {
     val prompt = remember(facts) { CrashPrompt.of(facts) }
     val now = facts.savedUntil + facts.interruptedFor
     val minutesAgo = facts.interruptedFor.inWholeMinutes
-    Box(Modifier.fillMaxSize().background(Scrim)) {
+    // The scrim takes every touch: Today's buttons under it stay out of reach until the prompt is answered.
+    // A background alone has no pointer node, so hit-testing would fall through to the screen below. A no-op,
+    // no-indication clickable is a hit target that yields to the sheet's own buttons (they consume the down first);
+    // a pointerInput that consumed everything would instead cancel those buttons' taps in the Final pass.
+    Box(Modifier.fillMaxSize().background(Scrim).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}) {
         Column(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .background(Theme.card, RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))

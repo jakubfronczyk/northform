@@ -7,7 +7,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 /**
  * The composition root's view of runs (`App/Sources/AppModel.swift`): which run the screens show, and the
@@ -15,6 +18,7 @@ import kotlinx.coroutines.launch
  * (D112). Everything a run *does* lives in [ActiveRun]; this class only wires and holds. Pure Kotlin over
  * the ports: the same class drives a replay run in the simulator, a live run on the phone, and the tests.
  */
+@OptIn(ExperimentalAtomicApi::class)
 class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     private val _activeRun = MutableStateFlow<ActiveRun?>(null)
     /** What the screens show: the run flow while non-null, Today otherwise. */
@@ -24,20 +28,30 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     /** A recording a crash left behind (R28): the prompt is up while non-null, until the user chooses. */
     val unfinished: StateFlow<UnfinishedRun?> = _unfinished.asStateFlow()
 
+    // Thread safety: the public calls come from the main thread, the launched work runs on the scope's dispatcher
+    // (Dispatchers.Default in the app). Both pieces of state are therefore lock-free and non-suspending — an atomic
+    // flag and an immutable map swapped by CAS (`update {}`) — rather than a Mutex: `appWentToBackground` must stay
+    // synchronous (it begins iOS background tasks before returning), so it cannot suspend on a lock.
+
     /** A run is being opened (permission prompts): Start does nothing until it is (`:27`). */
-    private var opening = false
-    /** Runs whose screen closed after start: kept until their last write is done (D112). */
-    private val finishing = HashMap<RecordingId, ActiveRun>()
+    private val opening = AtomicBoolean(false)
+    /** Runs whose screen closed after start: kept until their last write is done (D112). Immutable snapshots, swapped atomically. */
+    private val finishing = MutableStateFlow<Map<RecordingId, ActiveRun>>(emptyMap())
 
-    /** `AppModel.swift:49` — one run at a time. */
-    fun startRun() = openRun { ActiveRun.open(deps, scope) }
+    /** `AppModel.swift:49` — one run at a time; never while the R28 prompt is waiting for its answer (it owns the screen). */
+    fun startRun() {
+        if (_unfinished.value != null) return
+        openRun { ActiveRun.open(deps, scope) }
+    }
 
-    /** The one guard for both ways a run opens: `opening` is set before the launch, so a second tap is caught (`AppModel.swift:50-53`). */
-    private fun openRun(open: suspend () -> ActiveRun) {
-        if (_activeRun.value != null || opening) return
-        opening = true
+    /**
+     * The one guard for both ways a run opens: `opening` is claimed (compare-and-set) before the launch, so a second tap
+     * is caught (`AppModel.swift:50-53`). [open] may decline with `null`.
+     */
+    private fun openRun(open: suspend () -> ActiveRun?) {
+        if (_activeRun.value != null || !opening.compareAndSet(false, true)) return
         scope.launch {
-            try { _activeRun.value = open() } finally { opening = false }
+            try { open()?.let { _activeRun.value = it } } finally { opening.store(false) }
         }
     }
 
@@ -58,18 +72,37 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
         val run = _unfinished.value ?: return
         val id = run.id.value.take(8)
         when (choice) {
+            // Continue only resumes a recording the store still holds as `active`: one already stopped (a crash after
+            // the stop, or a Save that got halfway) has nothing to resume, so the answer is saved instead.
             CrashChoice.Continue -> openRun {
+                val stored = runCatching { storedState(run) }.getOrElse { deps.log("run $id crash: continue failed: $it"); return@openRun null }
+                if (stored != RecordingState.Active) {
+                    deps.log("run $id crash: continue refused (stored $stored), saving")
+                    runCatching { save(run) }
+                        .onSuccess { _unfinished.value = null; deps.log("run $id crash: saved → computing") }
+                        .onFailure { deps.log("run $id crash: save failed: $it") }
+                    return@openRun null
+                }
                 ActiveRun.resume(deps, scope, run).also { _unfinished.value = null; deps.log("run $id crash: continued") }
             }
-            // Save: the recording ends where the store last heard from it and goes to `computing`, where a normally closed
-            // run sits too (`closeRun`); engine/04's summary path picks it up from there.
-            CrashChoice.Save -> settleUnfinished(id, "saved → computing", "save") {
-                if (run.facts.state == RecordingState.Active) deps.store.stop(run.id, run.facts.savedUntil)
-                if (run.facts.state != RecordingState.Computing) deps.store.beginComputing(run.id)
-            }
+            CrashChoice.Save -> settleUnfinished(id, "saved → computing", "save") { save(run) }
             CrashChoice.Delete -> settleUnfinished(id, "deleted", "delete") { deps.store.delete(run.id) }
         }
     }
+
+    /**
+     * Save: the recording ends where the store last heard from it and goes to `computing`, where a normally closed run sits
+     * too (`closeRun`); engine/04's summary path picks it up from there. Each attempt re-reads the stored state and does only
+     * the steps left, so a retry after a half-done Save (stopped, not yet computing) never repeats `stop`.
+     */
+    private suspend fun save(run: UnfinishedRun) {
+        val stored = storedState(run) ?: return // gone: nothing left to save
+        if (stored == RecordingState.Active) deps.store.stop(run.id, run.facts.savedUntil)
+        if (stored == RecordingState.Active || stored == RecordingState.Stopping) deps.store.beginComputing(run.id)
+    }
+
+    /** The recording's state as the store holds it now — not as it was at boot. */
+    private suspend fun storedState(run: UnfinishedRun): RecordingState? = deps.store.load(run.id)?.recording?.state
 
     /** Save/Delete: the store call, then the prompt goes away and it is logged — or it stays up and the failure is logged. */
     private fun settleUnfinished(id: String, done: String, verb: String, call: suspend () -> Unit) {
@@ -80,10 +113,17 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
         }
     }
 
-    /** `AppModel.swift:106` — every run that is still writing saves what it has (D94). */
+    /**
+     * `AppModel.swift:106` — every run that is still writing saves what it has (D94). Called on the main thread from the
+     * `DidEnterBackground` observer: each run's background task is begun here, before returning, so iOS holds the
+     * process before any of the flush (or the tap's write) is even scheduled.
+     */
     fun appWentToBackground() {
         val at = deps.wallClock.now()
-        for (run in listOfNotNull(_activeRun.value) + finishing.values) scope.launch { run.backgrounded(at) }
+        for (run in listOfNotNull(_activeRun.value) + finishing.value.values) {
+            val held = run.holdFlushTask()
+            scope.launch { run.backgrounded(at, held) }
+        }
     }
 
     /** `AppModel.swift:127` — hides the run screen at once; the run itself ends on its own terms (D116). */
@@ -91,10 +131,10 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
         val run = _activeRun.value ?: return
         _activeRun.value = null
         deps.clearAlerts()
-        finishing[run.id] = run
+        finishing.update { it + (run.id to run) }
         scope.launch {
             deps.log("run ${run.id.value.take(8)} closed: ${run.close()}")
-            finishing.remove(run.id)
+            finishing.update { it - run.id }
             deps.log("session stop")
         }
     }
