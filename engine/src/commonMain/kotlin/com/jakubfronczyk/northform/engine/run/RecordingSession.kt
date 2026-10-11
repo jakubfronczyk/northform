@@ -32,7 +32,8 @@ import kotlin.time.Instant
  * The Swift `actor` becomes a **single-owner mailbox** (D5): every producer — the HR flow, the
  * location flow, sensor states, the 1 Hz tick, taps, `backgrounded`, and the writer's own
  * `Persisted`/`PersistFailed` — sends into ONE unbounded `Channel`; one coroutine receives, reduces
- * and routes the effects. The writer reporting back is just another send, so there is no
+ * and routes the effects. Because that coroutine also sees the writer's answers, it is the one that
+ * knows when the batch a `backgrounded` asked for is durable (persistence/02). The writer reporting back is just another send, so there is no
  * reentrancy and nothing to lock (the reason D5 rejected a `Mutex`). `end()` is a mail too, so the
  * answer is decided in the same coroutine that runs the countdown tick and cannot race it (D116).
  *
@@ -62,6 +63,8 @@ class RecordingSession(
     private sealed interface Mail {
         data class Input(val input: RunInput) : Mail
         data class End(val reply: CompletableDeferred<EndResult>) : Mail
+        /** [RunInput.Backgrounded], plus a reply completed once the store answered the batch it asked for. */
+        data class Backgrounded(val at: Instant, val answered: CompletableDeferred<Unit>) : Mail
     }
 
     private val inbox = Channel<Mail>(Channel.UNLIMITED)
@@ -71,9 +74,13 @@ class RecordingSession(
     private val _routes = MutableStateFlow(Route())
     /** `run()` is single-shot (D112): the first caller takes this and never gives it back. */
     private val runOnce = Mutex()
+    /** Written only by the writer, which hears every store outcome first-hand (persistence/02). */
     private val _notSaving = MutableStateFlow(false)
-    /** The one store-effect interpreter (also what the test harness runs); a failed create/stop/computing cannot be retried by seq, so it only marks the run "not saving" (Swift logged it). */
-    private val storeEffects = StoreEffectInterpreter(store, config.recordingId, onFailure = { _, _ -> _notSaving.value = true })
+    /**
+     * The one store-effect interpreter (also what the test harness runs). A failed create/stop/computing
+     * cannot be retried by seq; it is rethrown so the writer marks the run "not saving" (Swift logged it).
+     */
+    private val storeEffects = StoreEffectInterpreter(store, config.recordingId, onFailure = { _, e -> throw e })
 
     /** Every change of what the run screen shows (`RecordingSession.swift:67`). */
     override val snapshots: StateFlow<RunSnapshot> = _snapshots.asStateFlow()
@@ -90,8 +97,16 @@ class RecordingSession(
     /** A tap, with the time the user made it: stamped by the caller, not on arrival (D91, D100). */
     override suspend fun send(action: UserAction, at: Instant) = receive(RunInput.User(action, at))
 
-    /** The app went to the background at `t` (`RecordingSession.swift:111`). */
-    override suspend fun backgrounded(at: Instant) = receive(RunInput.Backgrounded(at))
+    /**
+     * The app went to the background at `at` (`RecordingSession.swift:111`). Returns once the store
+     * answered the batch this asked for — confirmed or failed — or at once when nothing needs saving
+     * (before start, after a discard, after `run()` returned). Never outlives `run()`.
+     */
+    override suspend fun backgrounded(at: Instant) {
+        val answered = CompletableDeferred<Unit>()
+        if (inbox.trySend(Mail.Backgrounded(at, answered)).isClosed) return
+        answered.await()
+    }
 
     /**
      * `RecordingSession.swift:96` — the run screen closed. Decided inside the mailbox, so it can't
@@ -139,6 +154,30 @@ class RecordingSession(
 
     private suspend fun mailbox() {
         var state = initial
+        /** `backgrounded` callers, each with the seq of the flush that carries its batch. */
+        val waiting = ArrayList<Pair<Int, CompletableDeferred<Unit>>>()
+
+        /** Reduces one input and routes its effects; false when it was dropped after a discard (`:144`). */
+        suspend fun step(input: RunInput): Boolean {
+            if (ended.value == EndResult.Discarded) return false
+            inputObserver?.invoke(input)
+            val (next, effects) = RunReducer.reduce(state, input)
+            state = next
+            for (effect in effects) when (effect) {
+                is RunEffect.Store -> writes.send(effect)
+                is RunEffect.PlayAlert -> alertQueue.send(effect.alert)
+                is RunEffect.Route -> _routes.value = _routes.value + effect.point
+            }
+            _snapshots.value = state.snapshot
+            val answeredSeq = when (input) {
+                is RunInput.Persisted -> input.seq
+                is RunInput.PersistFailed -> input.seq
+                else -> null
+            }
+            if (answeredSeq != null) waiting.removeAll { (seq, answered) -> (seq <= answeredSeq).also { if (it) answered.complete(Unit) } }
+            return true
+        }
+
         try {
             for (mail in inbox) {
                 when (mail) {
@@ -149,33 +188,34 @@ class RecordingSession(
                         }
                         mail.reply.complete(result)
                     }
-                    is Mail.Input -> {
-                        if (ended.value == EndResult.Discarded) continue // nothing may be recorded after a discard (`:144`)
-                        when (mail.input) { // the writer's answers are the store's health (persistence/02)
-                            is RunInput.Persisted -> _notSaving.value = false
-                            is RunInput.PersistFailed -> _notSaving.value = true
-                            else -> Unit
+                    is Mail.Input -> step(mail.input)
+                    is Mail.Backgrounded -> {
+                        val buffer = state.buffer
+                        // The batch is the persist this input issued, or — with one in flight — the next seq,
+                        // which the reducer issues once that one is answered. Neither: nothing to save.
+                        val seq = when {
+                            !step(RunInput.Backgrounded(mail.at)) -> null
+                            state.buffer.nextSeq != buffer.nextSeq -> state.buffer.nextSeq - 1
+                            state.buffer.inFlight != null -> state.buffer.nextSeq
+                            else -> null
                         }
-                        inputObserver?.invoke(mail.input)
-                        val (next, effects) = RunReducer.reduce(state, mail.input)
-                        state = next
-                        for (effect in effects) when (effect) {
-                            is RunEffect.Store -> writes.send(effect)
-                            is RunEffect.PlayAlert -> alertQueue.send(effect.alert)
-                            is RunEffect.Route -> _routes.value = _routes.value + effect.point
-                        }
-                        _snapshots.value = state.snapshot
+                        if (seq == null) mail.answered.complete(Unit) else waiting += seq to mail.answered
                     }
                 }
             }
         } finally {
             // The mailbox is gone with `run()`: seal the answer from the final state, then later taps are
-            // dropped and later `end()`s read the seal (one coroutine decides, even in hindsight).
+            // dropped and later `end()`s read the seal (one coroutine decides, even in hindsight). Nothing
+            // will be answered any more, so no `backgrounded` waits on it.
             if (ended.value == null) ended.value = decide(state.progress.phase)
             inbox.close()
+            waiting.forEach { (_, answered) -> answered.complete(Unit) }
             while (true) {
-                val late = inbox.tryReceive().getOrNull() ?: break
-                if (late is Mail.End) late.reply.complete(ended.value!!)
+                when (val late = inbox.tryReceive().getOrNull() ?: break) {
+                    is Mail.End -> late.reply.complete(ended.value!!)
+                    is Mail.Backgrounded -> late.answered.complete(Unit)
+                    is Mail.Input -> Unit
+                }
             }
         }
     }
@@ -192,8 +232,23 @@ class RecordingSession(
             if (!currentCoroutineContext().isActive) return
             // "On cancel the writer finishes the effect it is on and returns" (D112): the store call
             // itself is not interruptible; the check above is where cancellation takes effect.
-            // The writer reporting back (`Persisted`/`PersistFailed`) is just another mail (D5).
-            withContext(NonCancellable) { storeEffects.perform(effect)?.let(::receive) }
+            // The writer reporting back (`Persisted`/`PersistFailed`) is just another mail (D5). It is
+            // also the one place the store's health is written: a flush answers it, a thrown
+            // create/stop/computing marks it failed, and nothing else clears it (persistence/02).
+            withContext(NonCancellable) {
+                val outcome = runCatching { storeEffects.perform(effect) }
+                _notSaving.value = outcome.fold(
+                    onSuccess = { answer ->
+                        when (answer) {
+                            is RunInput.Persisted -> false
+                            is RunInput.PersistFailed -> true
+                            else -> _notSaving.value
+                        }
+                    },
+                    onFailure = { true },
+                )
+                outcome.getOrNull()?.let(::receive)
+            }
             if (effect == RunEffect.BeginComputing) return // the last store effect: the run is over (`:277`)
         }
     }

@@ -33,7 +33,11 @@ interface RunSessionHandle {
     suspend fun send(action: UserAction, at: Instant)
     /** The run screen closed; the session decides what that means (D116). Idempotent. */
     suspend fun end(): EndResult
-    /** The app went to the background at `at`: save what is buffered now (D94). */
+    /**
+     * The app went to the background at `at`: save what is buffered now (D94). Returns once the store
+     * answered that batch (confirmed or failed), or at once when there is nothing to save; never hangs
+     * past the session's end. Callers hold an iOS background task across it (persistence/02).
+     */
     suspend fun backgrounded(at: Instant)
     /**
      * True while the last store write failed — the first row, a flush, the stop or the computing step

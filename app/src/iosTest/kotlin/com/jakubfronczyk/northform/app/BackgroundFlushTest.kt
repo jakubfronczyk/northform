@@ -101,10 +101,26 @@ class BackgroundFlushTest {
     @Test
     fun before_start_nothing_is_held() = runTest {
         val tasks = FakeTasks()
-        val run = ActiveRun.open(deps(InMemoryRecordingStore(), tasks), backgroundScope)
+        val store = GatedStore().apply { close() } // a held flush would stay held: none must be asked for
+        val run = ActiveRun.open(deps(store, tasks), backgroundScope)
         runCurrent()
         backgroundScope.launch { run.backgrounded(run.session.wallClock.now()) }
         runCurrent()
-        assertEquals(emptyList(), tasks.events, "no row exists at the gate: nothing to confirm")
+        assertEquals(listOf("begin ${ActiveRun.FLUSH_TASK}", "end 7"), tasks.events, "no row exists at the gate: nothing to confirm, ended at once")
+    }
+
+    @Test
+    fun a_failed_flush_lets_the_task_go() = runTest {
+        val tasks = FakeTasks()
+        val store = GatedStore()
+        val run = activeRun(store, tasks)
+        store.close()
+        backgroundScope.launch { run.backgrounded(run.session.wallClock.now()) }
+        runCurrent()
+        assertEquals(listOf("begin ${ActiveRun.FLUSH_TASK}"), tasks.events)
+
+        store.gate.completeExceptionally(IllegalStateException("disk full")); runCurrent()
+        assertEquals(listOf("begin ${ActiveRun.FLUSH_TASK}", "end 7"), tasks.events, "answered, if not confirmed: the screen says not saving")
+        assertEquals(true, run.session.notSaving.value)
     }
 }
