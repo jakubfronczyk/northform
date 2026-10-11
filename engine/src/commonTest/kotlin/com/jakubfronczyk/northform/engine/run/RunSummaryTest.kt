@@ -1,10 +1,16 @@
 package com.jakubfronczyk.northform.engine.run
 
+import com.jakubfronczyk.northform.core.EventKind
+import com.jakubfronczyk.northform.core.EventSource
 import com.jakubfronczyk.northform.core.HrSample
+import com.jakubfronczyk.northform.core.Recording
+import com.jakubfronczyk.northform.core.RecordingEvent
+import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RunTag
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.metrics.RecordingMetrics
+import com.jakubfronczyk.northform.core.ports.RecordingData
 import com.jakubfronczyk.northform.engine.store.InMemoryRecordingStore
 import com.jakubfronczyk.northform.testing.RunHarness
 import com.jakubfronczyk.northform.testing.activeRun
@@ -18,6 +24,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 /** engine/04: the summary built from the stored recording once the run is in `computing`. */
@@ -122,5 +129,61 @@ class RunSummaryTest {
         runSynchronously { store.delete(data.recording.id) }
         assertNull(store.records.load(data.recording.id))
         assertEquals(emptyList(), store.records.metrics(data.recording.id))
+    }
+
+    // ── The crash gap (R28 Continue): total time runs through it, average pace must not ──────────
+
+    /**
+     * Runs 0–60 s at 3 m/s with HR, the app dies after its 60 s flush, the user reopens at 360 s and taps
+     * Continue (`resumed` writes HrLost 65, GpsLost 70 and CrashRecovered 360), runs 361–420 s and stops at 420.
+     */
+    private fun crashed(pauseAt: Int? = null, crashRecoveredAt: Int = 360, extra: List<RecordingEvent> = emptyList()): RecordingData {
+        val start = at(0)
+        val seconds = (1..60) + (361..420)
+        val events = buildList {
+            pauseAt?.let { add(RecordingEvent(at(it), EventKind.Pause, EventSource.Manual)) }
+            add(RecordingEvent(at(65), EventKind.HrLost, EventSource.Auto))
+            add(RecordingEvent(at(70), EventKind.GpsLost, EventSource.Auto))
+            add(RecordingEvent(at(crashRecoveredAt), EventKind.CrashRecovered, EventSource.Auto))
+            add(RecordingEvent(at(361), EventKind.HrBack, EventSource.Auto))
+            add(RecordingEvent(at(361), EventKind.GpsBack, EventSource.Auto))
+            pauseAt?.let { add(RecordingEvent(at(365), EventKind.Resume, EventSource.Manual)) }
+            add(RecordingEvent(at(420), EventKind.Stop, EventSource.Manual))
+            addAll(extra)
+        }.sortedBy { it.t }
+        return RecordingData(
+            recording = Recording(RunHarness.config.recordingId, type = RecordingType.Run, state = RecordingState.Computing, startUtc = start, tzOffset = 0, endUtc = at(420)),
+            hr = seconds.map { HrSample(at(it), 150) },
+            fixes = listOf(fix(0, north = 0.0)) + seconds.mapIndexed { i, s -> fix(s, north = 3.0 * (i + 1)) },
+            events = events,
+            lastPersistedAt = at(425),
+        )
+    }
+
+    @Test
+    fun average_pace_leaves_out_the_crash_gap_that_total_time_keeps() {
+        val summary = RunSummary.compute(crashed(), profile)
+        assertEquals(420.seconds, summary.totalTime, "total time runs through the gap (Continue)")
+        assertEquals(300.seconds, summary.crashGap, "from the last data before the crash (60 s) to the reopen (360 s)")
+        assertEquals(120.seconds, summary.movingTime)
+        assertTrue(summary.distance > 300, "${summary.distance} m")
+        assertEquals(120.0 / summary.distance * 1000, assertNotNull(summary.avgPace), 1e-9)
+    }
+
+    @Test
+    fun a_crash_while_paused_is_not_subtracted_twice() {
+        // Paused at 50 s, the app died paused, the runner resumed at 365 s: the gap (60 → 360 s) is pause already.
+        val summary = RunSummary.compute(crashed(pauseAt = 50), profile)
+        assertEquals(315.seconds, summary.pausedTime)
+        assertEquals(Duration.ZERO, summary.crashGap)
+        assertEquals(105.seconds, summary.movingTime)
+    }
+
+    @Test
+    fun a_crash_recorded_at_or_after_the_stop_takes_nothing_from_the_run() {
+        // D32: Save after a crash writes CrashRecovered too; the run ends at its last heartbeat (D30), before it.
+        val summary = RunSummary.compute(crashed(crashRecoveredAt = 500), profile)
+        assertEquals(Duration.ZERO, summary.crashGap)
+        assertEquals(summary.activeTime, summary.movingTime)
     }
 }
