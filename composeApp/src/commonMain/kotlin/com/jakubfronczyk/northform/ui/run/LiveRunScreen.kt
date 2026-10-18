@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -205,7 +206,9 @@ private fun ZoneBar(lit: Int?) {
 @Composable
 private fun SmallRow(model: LiveRunModel) {
     val valueColor = if (model.valuesDimmed) Theme.dim else Theme.text
-    Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+    // IntrinsicSize.Min: the rules' fillMaxHeight means "as tall as the tallest cell", not "as tall as the screen" — measured
+    // before the weighted map box, an unbounded row would take the whole height and squeeze the map to nothing (seen on the 16e).
+    Row(Modifier.fillMaxWidth().padding(top = 4.dp).height(IntrinsicSize.Min)) {
         ValueCell(model.split, Modifier.weight(1f), labelText = "Split", unit = "/km", color = if (model.paceDimmed) Theme.dim else Theme.text, maxLines = 1)
         SmallCellAfterRule("Avg HR", model.hrAvg, valueColor)
         SmallCellAfterRule("Max HR", model.hrMax, valueColor)
