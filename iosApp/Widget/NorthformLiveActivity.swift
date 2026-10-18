@@ -92,8 +92,8 @@ private struct LockScreenCard: View {
                 HStack(alignment: .firstTextBaseline, spacing: 18) {
                     Metric(value: Format.pace(state.paceSecPerKm), unit: "/km", size: 28, dim: state.gpsLost || state.paceSecPerKm == nil)
                     Metric(value: Format.km(state.distanceM), unit: "km", size: 28, dim: state.gpsLost)
-                    Spacer()
-                    ZoneBar(zone: state.zoneNumber, height: 18).frame(width: 118)
+                    Spacer(minLength: 6)
+                    ZoneBar(zone: state.zoneNumber, height: 18).frame(maxWidth: 110)
                 }
             }
             .padding(.leading, 19)
@@ -150,8 +150,9 @@ private struct Metric: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 3) {
-            Text(value).font(Fonts.number(size)).foregroundStyle(dim ? Palette.text2 : Palette.text)
-            Text(unit).font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.text2)
+            // fixedSize: a number is never truncated to "0.…"; the zone bar yields width instead.
+            Text(value).font(Fonts.number(size)).foregroundStyle(dim ? Palette.text2 : Palette.text).lineLimit(1).fixedSize()
+            Text(unit).font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.text2).fixedSize()
         }
     }
 }
@@ -215,6 +216,6 @@ private enum Fonts {
 
 private enum Format {
     static func km(_ m: Double) -> String { String(format: "%.2f", m / 1000) }
-    static func pace(_ secPerKm: Int?) -> String { secPerKm.map { String(format: "%d:%02d", $0 / 60, $0 % 60) } ?? "—:——" }
+    static func pace(_ secPerKm: Int?) -> String { secPerKm.map { String(format: "%d:%02d", $0 / 60, $0 % 60) } ?? "–:––" } // en dashes: an em dash is a bar in the heavy face
     static func hms(_ s: Int) -> String { s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s % 3600 / 60, s % 60) : String(format: "%d:%02d", s / 60, s % 60) }
 }
