@@ -1,6 +1,7 @@
 package com.jakubfronczyk.northform.adapters.liveactivity
 
 import com.jakubfronczyk.northform.engine.run.LiveActivityContent
+import com.jakubfronczyk.northform.engine.run.LiveActivityEvent
 
 /**
  * The Live Activity crossing (D11): a hand-written callback, not a Flow. Kotlin `Flow` exports to
@@ -31,8 +32,12 @@ object LiveActivityBridge {
         return Cancellable { if (this.listener === listener) this.listener = null }
     }
 
-    // Called by the Kotlin session (Phase 1 lane G). Spike step 9 drives these from a timer in NorthformApp.
-    fun start(content: LiveActivityContent) = listener?.onStart(content)
-    fun update(content: LiveActivityContent) = listener?.onUpdate(content)
-    fun end(content: LiveActivityContent) = listener?.onEnd(content)
+    /** The run's feed (`ActiveRun`, through `AppDeps.liveActivity`) hands each `LiveActivityFeed` event here. */
+    fun publish(event: LiveActivityEvent) {
+        when (event) {
+            is LiveActivityEvent.Start -> listener?.onStart(event.content)
+            is LiveActivityEvent.Update -> listener?.onUpdate(event.content)
+            is LiveActivityEvent.End -> listener?.onEnd(event.content)
+        }
+    }
 }

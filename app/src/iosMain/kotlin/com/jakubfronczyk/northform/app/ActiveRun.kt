@@ -3,6 +3,7 @@ package com.jakubfronczyk.northform.app
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.engine.run.EndResult
+import com.jakubfronczyk.northform.engine.run.LiveActivityFeed
 import com.jakubfronczyk.northform.engine.run.RecordingSession
 import com.jakubfronczyk.northform.engine.run.RunConfig
 import com.jakubfronczyk.northform.engine.run.RunInput
@@ -93,9 +94,16 @@ class ActiveRun private constructor(
             deps.log("session start ${config.type.wire}" + if (initial.progress.startedAt != null) " (resumed, R28)" else "")
             val runJob = scope.launch { session.run() }
             val logJob = scope.launch { logProgress(config.recordingId, session, deps.log) }
+            // D11: the lock screen follows the same snapshots as the run screen, at the feed's cadence.
+            val feed = LiveActivityFeed()
+            val liveActivityJob = scope.launch {
+                session.snapshots.collect { s -> feed.on(s, deps.wallClock.now())?.let(deps.liveActivity) }
+            }
             inputs.onRunning() // after `run()` is queued: the session subscribes before anything is emitted
             return ActiveRun(config.recordingId, session, runJob, tap, deps.backgroundTasks) {
                 logJob.cancel()
+                liveActivityJob.cancel()
+                feed.close()?.let(deps.liveActivity) // a run closed mid-way (D116) must not leave the lock screen counting
                 inputs.release()
             }
         }

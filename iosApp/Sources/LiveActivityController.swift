@@ -11,18 +11,34 @@ final class LiveActivityController: NSObject, LiveActivityListener {
 
     func attach() {
         cancellable = LiveActivityBridge.shared.observe(listener: self)
+        endOrphans()
+    }
+
+    /// A run that died with the process (crash, system kill) leaves its activity on the lock screen, frozen. Only this
+    /// process can end it, so every launch sweeps what the previous one left. Kotlin decides nothing here: there is no
+    /// run yet to decide with (D9: nothing resumes on its own).
+    private func endOrphans() {
+        let orphans = Activity<NorthformAttributes>.activities
+        guard !orphans.isEmpty else { return }
+        Task {
+            for orphan in orphans {
+                nonisolated(unsafe) let orphan = orphan
+                await orphan.end(nil, dismissalPolicy: .immediate)
+            }
+        }
     }
 
     func onStart(content: LiveActivityContent) {
         // Must be requested from the foreground (Apple) — Kotlin only calls onStart when a run starts from the screen.
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        if activity != nil { onEnd(content: content) } // one lock screen: a new run replaces a leftover
         do {
             activity = try Activity.request(
                 attributes: NorthformAttributes(),
                 content: .init(state: Self.state(content), staleDate: nil)
             )
         } catch {
-            // TODO(spike): read this in Console.app during step 9; on a free team a provisioning refusal shows up here (Q5)
+            // Read in Console.app (subsystem com.jakubfronczyk.northform); on a free team a provisioning refusal shows up here (Q5)
             print("northform/liveactivity request failed: \(error)")
         }
     }

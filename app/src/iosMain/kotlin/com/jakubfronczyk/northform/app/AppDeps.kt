@@ -7,6 +7,7 @@ import com.jakubfronczyk.northform.core.ports.HeartRateSensor
 import com.jakubfronczyk.northform.core.ports.LocationProvider
 import com.jakubfronczyk.northform.core.ports.RecordingStore
 import com.jakubfronczyk.northform.core.ports.WallClock
+import com.jakubfronczyk.northform.engine.run.LiveActivityEvent
 import com.jakubfronczyk.northform.replay.RecordingTap
 import com.jakubfronczyk.northform.replay.ReplayLocation
 import com.jakubfronczyk.northform.replay.ReplayMeta
@@ -95,6 +96,8 @@ class AppDeps(
     val log: (String) -> Unit = {},
     /** Holds the process alive for the background flush (persistence/02): `UIApplication` on the phone, none in tests. */
     val backgroundTasks: BackgroundTasks = BackgroundTasks.None,
+    /** The lock screen (D11): `LiveActivityBridge::publish` on the phone, a recorder in tests, nothing in the simulator. */
+    val liveActivity: (LiveActivityEvent) -> Unit = {},
     val profile: Profile = sampleProfile,
     val newRecordingId: () -> String = { NSUUID().UUIDString },
     val tzOffset: () -> Int = { NSTimeZone.localTimeZone.secondsFromGMT.toInt() },

@@ -7,6 +7,7 @@ import androidx.compose.ui.window.ComposeUIViewController
 import com.jakubfronczyk.northform.adapters.alerts.NotificationAlertPlayer
 import com.jakubfronczyk.northform.adapters.ble.CoreBluetoothCentral
 import com.jakubfronczyk.northform.adapters.clock.IosWallClock
+import com.jakubfronczyk.northform.adapters.liveactivity.LiveActivityBridge
 import com.jakubfronczyk.northform.adapters.location.KeepAlive
 import com.jakubfronczyk.northform.adapters.location.LiveLocation
 import com.jakubfronczyk.northform.adapters.location.LocationAuthorization
@@ -117,6 +118,7 @@ object NorthformApp {
             makeTap = { meta, name -> if (Platform.isDebugBinary) RecordingTap(meta) { Documents.write(Documents.recordingPath(name), it) } else null },
             log = DeviceLog::runTrace,
             backgroundTasks = UiBackgroundTasks(DeviceLog.app::notice),
+            liveActivity = LiveActivityBridge::publish, // D11: phone and simulator alike (the simulator renders Live Activities too)
         )
         model = AppModel(deps, scope)
         model.checkUnfinished() // 4  store.unfinished()? → remembered for the R28 prompt; nothing resumes on its own (D9)

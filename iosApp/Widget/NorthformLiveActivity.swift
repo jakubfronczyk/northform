@@ -2,7 +2,7 @@ import ActivityKit
 import SwiftUI
 import WidgetKit
 
-/// Render only (D11, R30: total time, distance, split pace, HR; no buttons). The clock is
+/// Render only (D11, R30: total time, distance, the shown current pace (D38), HR; no buttons). The clock is
 /// `Text(timerInterval:)` so the lock screen ticks without updates from the app.
 @main
 struct NorthformWidgetBundle: WidgetBundle {
