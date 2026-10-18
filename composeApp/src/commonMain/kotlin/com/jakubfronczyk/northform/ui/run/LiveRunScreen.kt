@@ -85,9 +85,9 @@ fun LiveRunScreen(
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().weight(1f)) {
             map(route)
-            Row(Modifier.fillMaxWidth().padding(16.dp).padding(top = 48.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Chip("Run", Theme.accent)
-                Chip(if (model.gpsLost) "GPS lost" else "GPS", if (model.gpsLost) Theme.warn else Theme.ok)
+            // D41: the map carries no status while all is well; a chip appears only when GPS is lost (HR loss lives in its cell).
+            if (model.gpsLost) {
+                Box(Modifier.fillMaxWidth().padding(16.dp).padding(top = 48.dp), contentAlignment = Alignment.TopEnd) { Chip("GPS lost", Theme.warn) }
             }
             RecenterButton(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 22.dp + 16.dp))
         }
@@ -229,9 +229,7 @@ private fun RowScope.SmallCellAfterRule(label: String, value: String, color: Col
 private fun RunningControls(holding: Boolean, onHolding: (Boolean) -> Unit, send: (UserAction) -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            RoundControl(border = Theme.ring, onClick = { send(UserAction.Pause) }) {
-                Text("❚❚", style = Type.number22, color = Theme.text)
-            }
+            RoundControl(border = Theme.ring, onClick = { send(UserAction.Pause) }) { PauseBars() }
             HoldButton(holding, onHolding, modifier = Modifier.weight(1f))
         }
         Text(
@@ -281,6 +279,14 @@ private fun RoundControl(border: Color, modifier: Modifier = Modifier, onClick: 
         modifier.size(68.dp).border(1.5.dp, border, CircleShape).let { if (onClick != null) it.clip(CircleShape).clickable(onClick = onClick) else it },
         contentAlignment = Alignment.Center,
     ) { content() }
+}
+
+/** Two drawn bars: the font's `❚❚` glyphs sit so close they read as one block on the phone. */
+@Composable
+private fun PauseBars() {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        repeat(2) { Box(Modifier.size(width = 6.dp, height = 22.dp).background(Theme.text, RoundedCornerShape(2.dp))) }
+    }
 }
 
 /** The stop bar: primary while idle; while held, a dark track with an accent fill growing over the hold time. */

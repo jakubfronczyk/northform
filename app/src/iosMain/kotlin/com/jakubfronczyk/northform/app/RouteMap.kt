@@ -9,6 +9,8 @@ import androidx.compose.ui.viewinterop.UIKitView
 import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.RoutePoint
 import com.jakubfronczyk.northform.ui.Theme
+import com.jakubfronczyk.northform.ui.run.LocalMapCamera
+import com.jakubfronczyk.northform.ui.run.Pan
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.allocArray
 import kotlinx.cinterop.get
@@ -26,6 +28,10 @@ import platform.MapKit.MKUserTrackingModeFollow
 import platform.MapKit.addOverlay
 import platform.MapKit.removeOverlay
 import platform.UIKit.UIColor
+import platform.UIKit.UIGestureRecognizer
+import platform.UIKit.UIGestureRecognizerStateBegan
+import platform.UIKit.UIGestureRecognizerStateChanged
+import platform.UIKit.UIView
 import platform.darwin.NSObject
 
 /**
@@ -37,7 +43,12 @@ import platform.darwin.NSObject
 @OptIn(ExperimentalForeignApi::class)
 @Composable
 fun RouteMap(route: Route, showsUserLocation: Boolean) {
-    val drawn = remember { DrawnRoute() }
+    // run-flow-ui/06: the one camera the run flow shares. A finger on the map flips `following` off (the re-center
+    // button appears); `recenter()` flips it back and the map follows again. MapKit keeps the panned position itself,
+    // so the camera's `pan` offset stays zero here — it only matters to the Compose canvas.
+    val camera = LocalMapCamera.current
+    val following = camera.following
+    val drawn = remember { DrawnRoute(onUserDrag = { if (camera.following) camera.dragBy(Pan()) }) }
     UIKitView(
         factory = {
             MKMapView().apply {
@@ -47,18 +58,24 @@ fun RouteMap(route: Route, showsUserLocation: Boolean) {
             }
         },
         modifier = Modifier.fillMaxSize(),
-        update = { map -> drawn.sync(map, route, followEnd = !showsUserLocation) },
+        update = { map -> drawn.sync(map, route, follow = following, followUser = showsUserLocation) },
     )
 }
 
 /** What the map currently shows, one polyline per route segment, so an update redraws only the segment that grew. */
 @OptIn(ExperimentalForeignApi::class)
-private class DrawnRoute {
-    val renderer = RouteRenderer()
+private class DrawnRoute(onUserDrag: () -> Unit) {
+    val renderer = RouteRenderer(onUserDrag)
     private var route: Route? = null
+    private var following = true
     private val lines = ArrayList<MKPolyline?>()
 
-    fun sync(map: MKMapView, next: Route, followEnd: Boolean) {
+    fun sync(map: MKMapView, next: Route, follow: Boolean, followUser: Boolean) {
+        if (follow && !following) { // "Re-center" tapped: back onto the dot (live) or the route's end (replay)
+            if (followUser) map.setUserTrackingMode(MKUserTrackingModeFollow, animated = true)
+            else route?.let { center(map, it, animated = true) }
+        }
+        following = follow
         if (next === route) return
         val segments = next.segments
         while (lines.size > segments.size) lines.removeLast()?.let { map.removeOverlay(it) }
@@ -69,10 +86,13 @@ private class DrawnRoute {
             lines += line
         }
         val last = segments.lastOrNull()?.lastOrNull()
-        if (followEnd && last != null && last != route?.segments?.lastOrNull()?.lastOrNull()) {
-            map.setRegion(MKCoordinateRegionMakeWithDistance(CLLocationCoordinate2DMake(last.latitude, last.longitude), 900.0, 900.0), animated = true)
-        }
+        if (follow && !followUser && last != null && last != route?.segments?.lastOrNull()?.lastOrNull()) center(map, next, animated = true)
         route = next
+    }
+
+    private fun center(map: MKMapView, route: Route, animated: Boolean) {
+        val last = route.segments.lastOrNull()?.lastOrNull() ?: return
+        map.setRegion(MKCoordinateRegionMakeWithDistance(CLLocationCoordinate2DMake(last.latitude, last.longitude), 900.0, 900.0), animated = animated)
     }
 
     private fun polyline(segment: List<RoutePoint>): MKPolyline? {
@@ -88,8 +108,12 @@ private class DrawnRoute {
     }
 }
 
-/** `rendererFor:` — the one delegate method: the accent-coloured 5 pt line. */
-private class RouteRenderer : NSObject(), MKMapViewDelegateProtocol {
+/**
+ * The delegate: `rendererFor:` draws the accent-coloured 5 pt line; `regionWillChangeAnimated:` tells a user drag from a
+ * programmatic move by whether one of the map's own gesture recognisers is live (the UIKit idiom; MapKit has no "user
+ * panned" callback). A live gesture also drops MapKit's own tracking mode, which is why the camera must learn of it.
+ */
+private class RouteRenderer(private val onUserDrag: () -> Unit) : NSObject(), MKMapViewDelegateProtocol {
     private val accent = Theme.accent.toArgb().let { argb ->
         UIColor(red = ((argb shr 16) and 0xFF) / 255.0, green = ((argb shr 8) and 0xFF) / 255.0, blue = (argb and 0xFF) / 255.0, alpha = 1.0)
     }
@@ -99,4 +123,10 @@ private class RouteRenderer : NSObject(), MKMapViewDelegateProtocol {
             strokeColor = accent
             lineWidth = 5.0
         }
+
+    override fun mapView(mapView: MKMapView, regionWillChangeAnimated: Boolean) {
+        val gestures = (mapView.subviews.firstOrNull() as? UIView)?.gestureRecognizers.orEmpty()
+        val userMoving = gestures.any { (it as UIGestureRecognizer).state.let { s -> s == UIGestureRecognizerStateBegan || s == UIGestureRecognizerStateChanged } }
+        if (userMoving) onUserDrag()
+    }
 }
