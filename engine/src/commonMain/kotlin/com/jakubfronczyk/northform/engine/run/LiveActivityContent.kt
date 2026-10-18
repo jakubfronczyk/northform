@@ -22,6 +22,11 @@ data class LiveActivityContent(
     val hrBpm: Int?,
     val hrLost: Boolean,
     val gpsLost: Boolean,
+    /** `RunSnapshot.zone` (D23) flattened to primitives: 0–5 and its D29 name; null with `hrBpm`. The colour is the renderer's. */
+    val zoneNumber: Int? = null,
+    val zoneName: String? = null,
+    /** "Run" / "Walk" (D35): the card's title noun. */
+    val typeName: String = "Run",
 ) {
     companion object {
         /**
@@ -46,6 +51,9 @@ data class LiveActivityContent(
                 hrBpm = snapshot.hrNow,
                 hrLost = snapshot.hrLost,
                 gpsLost = snapshot.gpsLost,
+                zoneNumber = snapshot.zone?.number,
+                zoneName = snapshot.zone?.name,
+                typeName = snapshot.type.wire.replaceFirstChar { it.uppercase() },
             )
         }
     }

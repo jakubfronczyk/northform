@@ -12,6 +12,12 @@ struct NorthformAttributes: ActivityAttributes {
         var hrBpm: Int?
         var hrLost: Bool
         var gpsLost: Bool
+        /// Zone 0–5 and its name (D23, D29); nil with `hrBpm`.
+        var zoneNumber: Int?
+        var zoneName: String?
+        /// "Run" / "Walk" (D35).
+        var typeName: String
+        var paused: Bool
         var done: Bool
     }
 }

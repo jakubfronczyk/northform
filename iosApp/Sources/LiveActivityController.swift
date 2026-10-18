@@ -74,6 +74,10 @@ final class LiveActivityController: NSObject, LiveActivityListener {
             hrBpm: c.hrBpm.map { Int(truncating: $0) },
             hrLost: c.hrLost,
             gpsLost: c.gpsLost,
+            zoneNumber: c.zoneNumber.map { Int(truncating: $0) },
+            zoneName: c.zoneName,
+            typeName: c.typeName,
+            paused: c.phase == .paused,
             done: c.phase == .done
         )
     }

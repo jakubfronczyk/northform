@@ -1,5 +1,8 @@
 package com.jakubfronczyk.northform.engine.run
 
+import com.jakubfronczyk.northform.core.RecordingType
+import com.jakubfronczyk.northform.core.metrics.Zone
+
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -29,10 +32,13 @@ class LiveActivityContentTest {
     fun every_field_comes_from_the_snapshot() {
         val snapshot = RunSnapshot(
             RunPhase.Paused(since = startedAt + 60.seconds), startedAt = startedAt, totalTime = 90.5.seconds, distance = 250.0,
-            currentPace = null, hrNow = 141, hrLost = false, gpsLost = true,
+            currentPace = null, hrNow = 141, hrLost = false, gpsLost = true, zone = Zone(3, 0.6, 0.7), type = RecordingType.Walk,
         )
         assertEquals(
-            LiveActivityContent(LiveActivityPhase.Paused, startedAt.toEpochMilliseconds(), 90, 250.0, null, 141, hrLost = false, gpsLost = true),
+            LiveActivityContent(
+                LiveActivityPhase.Paused, startedAt.toEpochMilliseconds(), 90, 250.0, null, 141, hrLost = false, gpsLost = true,
+                zoneNumber = 3, zoneName = "Moderate", typeName = "Walk",
+            ),
             LiveActivityContent.of(snapshot),
         )
     }
