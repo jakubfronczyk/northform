@@ -58,7 +58,9 @@ final class LiveActivityController: NSObject, LiveActivityListener {
         guard let current = activity else { return }
         nonisolated(unsafe) let activity = current
         let state = Self.state(content)
-        Task { await activity.end(.init(state: state, staleDate: nil), dismissalPolicy: .default) }
+        // `.immediate`, not `.default`: the default keeps a finished card on the lock screen for up to 4 h; the summary
+        // lives in the app, the lock screen shows only a run that is live (Jakub, first device test 2026-10-18).
+        Task { await activity.end(.init(state: state, staleDate: nil), dismissalPolicy: .immediate) }
         self.activity = nil
     }
 
