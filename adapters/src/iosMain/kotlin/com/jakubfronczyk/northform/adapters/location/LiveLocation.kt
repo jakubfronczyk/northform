@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.adapters.location
 
+import kotlin.math.roundToInt
 import com.jakubfronczyk.northform.core.LocationFix
 import com.jakubfronczyk.northform.core.ports.LocationProvider
 import com.jakubfronczyk.northform.core.ports.WallClock
@@ -49,10 +50,19 @@ class LiveLocation(
         var restart: Job? = null
         lateinit var sink: LocationSink
         sink = object : LocationSink {
+            // DEBUG (device/01 walk, 2026-10-18): the first fix, every 10th, and every stationary flip, so the log shows the
+            // GPS stream's shape without a line per second. Remove with the other debug lines after the device session.
+            var fixes = 0
+            var wasStationary: Boolean? = null
             override fun onUpdate(location: CLLocation, stationary: Boolean) {
-                val fix = location.toFix(stationary) ?: return
-                if (fix.t < streamStart) return // cached fix from before this stream began (D92 rule)
+                val fix = location.toFix(stationary) ?: run { log("fix dropped: invalid accuracy/coordinate"); return }
+                if (fix.t < streamStart) { log("fix dropped: cached from before the stream (D92)"); return }
                 attempt = 0 // a fix proves the stream is healthy again
+                fixes += 1
+                if (fixes == 1 || fixes % 10 == 0 || wasStationary != stationary) {
+                    log("fix #$fixes acc ${fix.horizontalAccuracy.toInt()} m speed ${fix.speed?.let { (it * 10).roundToInt() / 10.0 } ?: "-"} m/s stationary $stationary alt ${fix.altitude?.toInt() ?: "-"}")
+                }
+                wasStationary = stationary
                 trySend(fix)
             }
 

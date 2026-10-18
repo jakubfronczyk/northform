@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.app
 
+import kotlin.math.roundToInt
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.engine.run.EndResult
@@ -88,7 +89,9 @@ class ActiveRun private constructor(
         /** Opens the source, starts the session from [initial] and the trace, then lets the source go (`onRunning`). */
         private suspend fun start(deps: AppDeps, scope: CoroutineScope, initial: RunState, tap: RecordingTap?): ActiveRun {
             val config = initial.config
-            val observer: ((RunInput) -> Unit)? = tap?.let { it::observe } // bound reference: the tap owns the RunInput → fixture mapping (replay/01)
+            // DEBUG (device/01 walk, 2026-10-18): every input the reducer sees, sampled, next to the tap's recording.
+            val debug = DebugInputLog(deps.log)
+            val observer: ((RunInput) -> Unit) = { input -> debug.observe(input); tap?.observe(input) } // the tap owns the RunInput → fixture mapping (replay/01)
             val inputs = deps.source.open(deps.wallClock, scope)
             val session = RecordingSession(config, inputs.sensor, inputs.location, deps.store, deps.alerts, deps.wallClock, observer, initial = initial)
             deps.log("session start ${config.type.wire}" + if (initial.progress.startedAt != null) " (resumed, R28)" else "")
@@ -97,13 +100,18 @@ class ActiveRun private constructor(
             // D11: the lock screen follows the same snapshots as the run screen, at the feed's cadence.
             val feed = LiveActivityFeed()
             val liveActivityJob = scope.launch {
-                session.snapshots.collect { s -> feed.on(s, deps.wallClock.now())?.let(deps.liveActivity) }
+                session.snapshots.collect { s ->
+                    feed.on(s, deps.wallClock.now())?.let { event ->
+                        deps.log("live activity ${event::class.simpleName?.lowercase()}: ${event.content.phase} total ${event.content.totalTimeSec} s dist ${event.content.distanceM.toInt()} m pace ${event.content.paceSecPerKm ?: "-"} hr ${event.content.hrBpm ?: "-"} zone ${event.content.zoneNumber ?: "-"} hrLost ${event.content.hrLost} gpsLost ${event.content.gpsLost}") // DEBUG
+                        deps.liveActivity(event)
+                    }
+                }
             }
             inputs.onRunning() // after `run()` is queued: the session subscribes before anything is emitted
             return ActiveRun(config.recordingId, session, runJob, tap, deps.backgroundTasks) {
                 logJob.cancel()
                 liveActivityJob.cancel()
-                feed.close()?.let(deps.liveActivity) // a run closed mid-way (D116) must not leave the lock screen counting
+                feed.close()?.let { deps.log("live activity end (close)"); deps.liveActivity(it) } // a run closed mid-way (D116) must not leave the lock screen counting
                 inputs.release()
             }
         }
@@ -120,11 +128,16 @@ class ActiveRun private constructor(
         private suspend fun logProgress(id: RecordingId, session: RunSessionHandle, log: (String) -> Unit) {
             var phase: RunPhase? = null
             var lastSummary: Instant? = null
+            var hrLost = false
+            var gpsLost = false
             session.snapshots.collect { s ->
                 if (s.phase != phase) {
                     log("run ${id.value.take(8)} phase ${phase?.name() ?: "-"} → ${s.phase.name()}")
                     phase = s.phase
                 }
+                // DEBUG: every loss flip the moment the screen shows it (the minute line alone hides short drops)
+                if (s.hrLost != hrLost) { hrLost = s.hrLost; log("hrLost → $hrLost${s.hrLostSince?.let { " since $it" } ?: ""}") }
+                if (s.gpsLost != gpsLost) { gpsLost = s.gpsLost; log("gpsLost → $gpsLost") }
                 val now = s.startedAt?.plus(s.totalTime) ?: return@collect
                 if (lastSummary?.let { now - it < 60.seconds } == true) return@collect
                 lastSummary = now
@@ -139,6 +152,25 @@ class ActiveRun private constructor(
             is RunPhase.Paused -> "paused"
             is RunPhase.Cooldown -> "cooldown"
             RunPhase.Done -> "done"
+        }
+    }
+}
+
+/**
+ * DEBUG (device/01 walk, 2026-10-18): what reaches the reducer, sampled — the first HR sample and fix, then every 10th,
+ * every sensor-state input and every user action — so the log tells a Bluetooth gap from a reducer gap. Delete after
+ * the device session together with the other debug lines (D38: `DeviceTestLog` folds into `os_log` then).
+ */
+private class DebugInputLog(private val log: (String) -> Unit) {
+    private var hr = 0
+    private var fixes = 0
+    fun observe(input: RunInput) {
+        when (input) {
+            is RunInput.Hr -> { hr += 1; if (hr == 1 || hr % 10 == 0) log("hr #$hr ${input.sample.bpm} bpm at ${input.sample.t}") }
+            is RunInput.Fix -> { fixes += 1; if (fixes == 1 || fixes % 10 == 0) log("fix #$fixes acc ${input.fix.horizontalAccuracy.toInt()} m speed ${input.fix.speed?.let { (it * 10).roundToInt() / 10.0 } ?: "-"} at ${input.fix.t}") }
+            is RunInput.Sensor -> log("sensor ${input.state} at ${input.at}")
+            is RunInput.Tick -> Unit
+            else -> log("input ${input::class.simpleName}")
         }
     }
 }
