@@ -50,10 +50,16 @@ _Avoid_: finish, end button
 The 60 s of heart rate kept after hold-to-stop to measure HR recovery. The user may skip it.
 
 **Computing**:
-The state after the cool-down while the recording's metrics are worked out, before it is saved.
+A finished recording whose summary the user has not confirmed yet. Found at launch, it reopens the
+summary, never the crash prompt.
+_Avoid_: unsaved, draft
+
+**Summary**:
+The screen after a recording that shows its numbers, where the user saves or deletes it.
+_Avoid_: results, recap
 
 **Saved**:
-A finished recording with its metrics, shown in History.
+A recording the user confirmed on its summary, with its metrics, shown in History.
 
 ### Signals and loss
 
@@ -73,11 +79,17 @@ Pace of the kilometre in progress.
 Active time divided by distance for the whole recording, pauses left out.
 
 **HR lost**:
-No heart-rate sample for 5 s, whatever the cause. What the runner sees.
+No heart-rate sample for 5 s, whatever the cause. What the runner sees. It ends with the first
+sample that would have prevented it; a late sample taken earlier than that is kept but does not end it.
 _Avoid_: sensor lost
 
 **GPS lost**:
-No location fix for 10 s, or a fix less accurate than 50 m.
+No location fix for 10 s, or a fix less accurate than 50 m. Silence after a fix that iOS marked
+stationary is not GPS lost. It ends like HR lost: only with a fix that would have prevented it.
+
+**Late sample**:
+A heart-rate sample or fix delivered after its own timestamp, for example one iOS held while the phone
+was locked. It is judged by the time it was taken, never by when it arrived.
 
 **Drop**:
 The Bluetooth link to the sensor lost without the user asking. Counted in the reliability log.
@@ -143,6 +155,11 @@ Heart rate at hold-to-stop minus heart rate 60 s later. Absent if the cool-down 
 The only Swift in the app: a fixed, small set of files that call into Kotlin and contain no
 decisions.
 _Avoid_: native layer, bridge
+
+**Live Activity**:
+The lock-screen card that follows a recording while it runs: time, distance, pace, HR and zone. It is
+removed the moment the recording ends.
+_Avoid_: widget, notification
 
 **Fixture**:
 A recording captured from a real run or walk, kept as a file, with the totals it must produce.
