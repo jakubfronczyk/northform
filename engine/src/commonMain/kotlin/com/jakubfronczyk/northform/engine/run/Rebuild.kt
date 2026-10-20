@@ -58,12 +58,16 @@ fun RunReducer.rebuild(config: RunConfig, data: RecordingData): RunState {
     ).sortedBy { it.t }
     // D35: rebuild's ticks need not land where the live ones did, so the loss starts where the live run said it
     // did — the stored `HrLost` still open — else at the one rebuild derived (and keeps unstored, above).
-    val hrLostSince = if (!progress.hrLost) null else {
-        val open = lastStored(Signal.Hr, data.events)?.takeIf { it.kind == Signal.Hr.lost }
-        (open ?: derived[Signal.Hr])?.t ?: progress.hrLostSince
+    // D42: the GPS loss start is restored the same way, so a late fix after resume is judged against it.
+    fun lostSince(signal: Signal, lost: Boolean, rebuilt: Instant?): Instant? = if (!lost) null else {
+        val open = lastStored(signal, data.events)?.takeIf { it.kind == signal.lost }
+        (open ?: derived[signal])?.t ?: rebuilt
     }
     return state.copy(
-        progress = progress.copy(hrLostSince = hrLostSince),
+        progress = progress.copy(
+            hrLostSince = lostSince(Signal.Hr, progress.hrLost, progress.hrLostSince),
+            gpsLostSince = lostSince(Signal.Gps, progress.gpsLost, progress.gpsLostSince),
+        ),
         buffer = PersistBuffer(events = notStored, lastPersistAt = data.lastPersistedAt ?: start),
     )
 }

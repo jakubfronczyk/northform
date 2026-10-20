@@ -91,6 +91,13 @@ class CrashResumeTest {
         assertEquals(listOf(EventKind.Pause, EventKind.GpsLost, EventKind.Resume, EventKind.CrashRecovered), resumed.buffer.events.map { it.kind })
     }
 
+    /** D42: the GPS loss starts where the live run's stored `GpsLost` says, not where rebuild's ticks land. */
+    @Test
+    fun gps_lost_since_after_a_rebuild_is_the_stored_loss() {
+        val withLoss = stored(events = listOf(RecordingEvent(at(70.4), EventKind.GpsLost, EventSource.Auto))).copy(lastPersistedAt = at(75))
+        assertEquals(at(70.4), RunReducer.rebuild(config, withLoss).progress.gpsLostSince)
+    }
+
     @Test
     fun a_run_paused_at_the_crash_stays_paused_and_its_active_time_does_not_grow() {
         val paused = stored(events = listOf(RecordingEvent(at(50), EventKind.Pause, EventSource.Manual)))

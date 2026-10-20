@@ -57,6 +57,8 @@ data class RunProgress(
     /** Latest fix of any accuracy: for GPS-lost timing and out-of-order checks. */
     val lastFix: LocationFix? = null,
     val gpsLost: Boolean = false,
+    /** D42: the moment [gpsLost] turned true (its `GpsLost` event's time); null while it is false. */
+    val gpsLostSince: Instant? = null,
     /** GPS distance: smoothing, moving gate, bridging, route breaks (D107, D111). */
     val tracker: DistanceTracker = DistanceTracker(),
     val distance: Double = 0.0,

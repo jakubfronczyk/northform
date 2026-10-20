@@ -271,6 +271,50 @@ class RunReducerTest {
         assertEquals(run.recordedEvents.filter { it.kind == EventKind.HrLost }.map { it.t }, listOf(at(11), at(27)), "the same moments as the events")
     }
 
+    /**
+     * D42, the 2026-10-18 walk at 15:46: iOS held a fix while the phone was locked and handed it over after the
+     * tick had called GPS lost. A fix that old would not have prevented the loss, so it must not end it.
+     */
+    @Test
+    fun a_fix_delivered_after_the_loss_but_too_old_to_prevent_it_does_not_end_it() {
+        val run = activeRun()
+        run.send(RunInput.Fix(fix(6.0, north = 0.0)))
+        run.send(tick(16.013)) // 10.013 s without a fix: lost
+        run.send(RunInput.Fix(fix(6.0, north = 0.5))) // as old as the last fix: equal times are not dropped as late
+        assertTrue(run.state.snapshot.gpsLost, "a fix from before lostAt − 10 s is not news")
+        run.send(RunInput.Fix(fix(16.5, north = 1.0)))
+        assertFalse(run.state.snapshot.gpsLost)
+        val gps = run.recordedEvents.filter { it.kind == EventKind.GpsLost || it.kind == EventKind.GpsBack }
+        assertEquals(listOf(EventKind.GpsLost to at(16.013), EventKind.GpsBack to at(16.5)), gps.map { it.kind to it.t })
+    }
+
+    /** D42, the walk at 14:47: the fix that ends a loss was taken 28 ms before the tick saw it; Back is never before Lost. */
+    @Test
+    fun a_fix_taken_just_before_the_loss_ends_it_at_the_loss_not_before() {
+        val run = activeRun()
+        run.send(RunInput.Fix(fix(6.0, north = 0.0)))
+        run.send(tick(16.5)) // lost
+        run.send(RunInput.Fix(fix(16.472, north = 1.0))) // taken before the tick, arrives after it
+        assertFalse(run.state.snapshot.gpsLost)
+        val gps = run.recordedEvents.filter { it.kind == EventKind.GpsLost || it.kind == EventKind.GpsBack }
+        assertEquals(listOf(EventKind.GpsLost to at(16.5), EventKind.GpsBack to at(16.5)), gps.map { it.kind to it.t })
+    }
+
+    /** D42 for heart rate: the same two rules as GPS. */
+    @Test
+    fun a_late_heart_rate_sample_ends_a_loss_only_if_it_would_have_prevented_it() {
+        val run = activeRun() // started at 5 s
+        run.send(hr(6.0, 140))
+        run.send(tick(11.0)) // 5 s without a sample: lost since 11
+        run.send(hr(6.0, 141)) // the same moment again: too old to end it
+        assertTrue(run.state.snapshot.hrLost)
+        assertEquals(at(11), run.state.snapshot.hrLostSince)
+        run.send(hr(10.9, 142)) // taken before the tick, arrives after it
+        assertFalse(run.state.snapshot.hrLost)
+        val hr = run.recordedEvents.filter { it.kind == EventKind.HrLost || it.kind == EventKind.HrBack }
+        assertEquals(listOf(EventKind.HrLost to at(11), EventKind.HrBack to at(11)), hr.map { it.kind to it.t })
+    }
+
     @Test
     fun snapshot_carries_the_run_type_and_no_loss_start_at_the_gate() {
         val walk = RunHarness(RunHarness.config.copy(type = RecordingType.Walk))

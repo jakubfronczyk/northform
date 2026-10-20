@@ -121,7 +121,7 @@ object RunReducer {
                 // Silence after a stationary fix is not GPS loss: iOS pauses updates while still (D102).
                 val stillAtLastFix = p.lastFix?.stationary == true
                 if (!p.gpsLost && !stillAtLastFix && t - lastFixTime >= gpsLostAfter) {
-                    p = p.copy(gpsLost = true) // the screen's GPS lost; distance judges gaps itself (D113)
+                    p = p.copy(gpsLost = true, gpsLostSince = t) // the screen's GPS lost; distance judges gaps itself (D113)
                     record(EventKind.GpsLost, t)
                 }
             }
@@ -147,8 +147,10 @@ object RunReducer {
             )
             b = b.copy(hr = b.hr + sample)
             if (p.hrLost) {
+                val since = p.hrLostSince
+                if (since != null && !endsLoss(sample.t, since, hrLostAfter)) return
                 p = p.copy(hrLost = false, hrLostSince = null, hrLostAlerted = false)
-                record(EventKind.HrBack, sample.t)
+                record(EventKind.HrBack, backAt(sample.t, since))
             }
         }
 
@@ -162,15 +164,27 @@ object RunReducer {
 
             if (fix.horizontalAccuracy > gpsLostAccuracy) {
                 if (!p.gpsLost) {
-                    p = p.copy(gpsLost = true)
+                    p = p.copy(gpsLost = true, gpsLostSince = fix.t)
                     record(EventKind.GpsLost, fix.t)
                 }
             } else if (p.gpsLost) {
-                p = p.copy(gpsLost = false)
-                record(EventKind.GpsBack, fix.t)
+                val since = p.gpsLostSince
+                if (since == null || endsLoss(fix.t, since, gpsLostAfter)) {
+                    p = p.copy(gpsLost = false, gpsLostSince = null)
+                    record(EventKind.GpsBack, backAt(fix.t, since))
+                }
             }
             count(trackDistance(fix, counting = p.phase == RunPhase.Active))
         }
+
+        /**
+         * D42: iOS can hand over a sample after the tick has called its signal lost (a fix held while the
+         * phone is locked). It ends the loss only if, delivered on time, it would have prevented it.
+         */
+        fun endsLoss(sampleAt: Instant, lostSince: Instant, lostAfter: Duration) = sampleAt > lostSince - lostAfter
+
+        /** D42: a Back is never stamped before its Lost, so the event log stays in time order. */
+        fun backAt(sampleAt: Instant, lostSince: Instant?) = if (lostSince != null && lostSince > sampleAt) lostSince else sampleAt
 
         /**
          * R24 before the run starts: GPS ✓ after [gateFixes] consecutive fixes within [gateFixAccuracy]; a
