@@ -48,7 +48,7 @@ fun RouteMap(route: Route, showsUserLocation: Boolean) {
     // so the camera's `pan` offset stays zero here — it only matters to the Compose canvas.
     val camera = LocalMapCamera.current
     val following = camera.following
-    val drawn = remember { DrawnRoute(onUserDrag = { if (camera.following) { DeviceLog.app.notice("map: user drag → following off"); camera.dragBy(Pan()) } }) } // DEBUG line
+    val drawn = remember { DrawnRoute(onUserDrag = { if (camera.following) camera.dragBy(Pan()) }) }
     UIKitView(
         factory = {
             MKMapView().apply {
@@ -72,7 +72,6 @@ private class DrawnRoute(onUserDrag: () -> Unit) {
 
     fun sync(map: MKMapView, next: Route, follow: Boolean, followUser: Boolean) {
         if (follow && !following) { // "Re-center" tapped: back onto the dot (live) or the route's end (replay)
-            DeviceLog.app.notice("map: re-center → following ${if (followUser) "user" else "route end"}") // DEBUG
             if (followUser) map.setUserTrackingMode(MKUserTrackingModeFollow, animated = true)
             else route?.let { center(map, it, animated = true) }
         }
