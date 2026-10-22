@@ -21,8 +21,11 @@ data class Pan(val eastMetres: Double = 0.0, val northMetres: Double = 0.0) {
  * drags, then held where they left it until "Re-center". Compose `mutableStateOf` so the screen
  * recomposes the re-center button and the canvas on each change; the rule itself is plain Kotlin.
  */
-class MapCamera {
-    var following by mutableStateOf(true)
+class MapCamera(
+    /** The Summary's camera (summary-screen/04): the whole route in view once, then free pan/zoom; never follows, no re-center. */
+    val fitted: Boolean = false,
+) {
+    var following by mutableStateOf(!fitted)
         private set
     var pan by mutableStateOf(Pan())
         private set
@@ -34,6 +37,7 @@ class MapCamera {
     }
 
     fun recenter() {
+        if (fitted) return
         following = true
         pan = Pan()
     }
@@ -62,6 +66,21 @@ object RouteProjection {
 
     /** Metres per pixel at this view size. */
     fun metresPerPixel(widthPx: Float, heightPx: Float): Double = SPAN_METRES / min(widthPx, heightPx).coerceAtLeast(1f)
+
+    /**
+     * A fitted camera's window (summary-screen/04): the route's extent plus a margin on each side, never under
+     * [SPAN_METRES] / 3 so a short run is not a dot. The centre is the extent's middle, as a [Pan] from the route end.
+     */
+    data class Fit(val spanMetres: Double, val centre: Pan)
+
+    fun fit(metres: List<List<Pan>>, margin: Double = 1.3): Fit {
+        val all = metres.flatten()
+        if (all.isEmpty()) return Fit(SPAN_METRES, Pan())
+        val east = all.minOf { it.eastMetres }..all.maxOf { it.eastMetres }
+        val north = all.minOf { it.northMetres }..all.maxOf { it.northMetres }
+        val extent = maxOf(east.endInclusive - east.start, north.endInclusive - north.start)
+        return Fit((extent * margin).coerceAtLeast(SPAN_METRES / 3), Pan((east.start + east.endInclusive) / 2, (north.start + north.endInclusive) / 2))
+    }
 
     /** The route's last point, or null for a route with nothing drawn yet. */
     fun end(route: Route): RoutePoint? = route.segments.lastOrNull()?.lastOrNull()

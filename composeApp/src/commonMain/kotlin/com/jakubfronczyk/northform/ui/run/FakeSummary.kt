@@ -67,6 +67,12 @@ object FakeSummary {
         RunSummary.compute(d.copy(events = d.events.map { e -> if (e.kind == EventKind.CooldownEnd) e.copy(t = e.t - 58.seconds) else e }), profile)
     }
 
+    /** The run with 30 s at 191 bpm near the end: the "New max heart rate: 191" card (SU6). */
+    val newHrMax: RunSummary = RunSummary.compute(
+        data(RecordingType.Run, 52 * 60 + 40, metresPerSecond = 3.23) { s -> if (s in 3000..3030) 191 else if (s <= 3160) 128 + (s * 43 / 3160) else 171 - ((s - 3160) * 31 / 60) },
+        profile,
+    )
+
     /** 40:00, 3.8 km, no sensor paired. */
     val walk: RunSummary = RunSummary.compute(data(RecordingType.Walk, 40.minutes.inWholeSeconds.toInt(), metresPerSecond = 1.6, hr = null), profile)
 }

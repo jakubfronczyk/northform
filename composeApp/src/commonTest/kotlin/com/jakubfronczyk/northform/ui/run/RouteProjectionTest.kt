@@ -75,3 +75,19 @@ class RouteProjectionTest {
         assertTrue(camera.pan.isZero)
     }
 }
+
+/** summary-screen/04: the fitted camera's window around the whole route. */
+class RouteFitTest {
+    @Test
+    fun the_fit_spans_the_route_with_a_margin_and_centres_on_its_middle() {
+        val metres = listOf(listOf(Pan(-100.0, 0.0), Pan(300.0, 200.0)))
+        val fit = RouteProjection.fit(metres)
+        assertEquals(400.0 * 1.3, fit.spanMetres, 1e-9, "the wider extent (east, 400 m) with the margin")
+        assertEquals(Pan(100.0, 100.0), fit.centre)
+    }
+
+    @Test
+    fun a_short_route_is_not_a_dot() {
+        assertEquals(RouteProjection.SPAN_METRES / 3, RouteProjection.fit(listOf(listOf(Pan(0.0, 0.0), Pan(5.0, 5.0)))).spanMetres, 1e-9)
+    }
+}

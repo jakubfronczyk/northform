@@ -147,3 +147,20 @@ class FakeSummarySkippedTest {
         assertEquals("skipped", m.recoveryDetail)
     }
 }
+
+/** summary-screen/04: the HRmax card and the map's route. */
+class SummaryHrMaxModelTest {
+    @Test
+    fun a_higher_hrmax_held_long_enough_offers_the_card() {
+        val m = SummaryModel.from(FakeSummary.newHrMax)
+        assertEquals("191", m.hrMaxSuggestion)
+        assertEquals("187", m.hrMaxCurrent)
+    }
+
+    @Test
+    fun no_suggestion_hides_the_card_and_the_route_has_a_break_at_the_pause() {
+        val m = SummaryModel.from(FakeSummary.run)
+        assertEquals(null, m.hrMaxSuggestion)
+        assertEquals(2, m.route.segments.size)
+    }
+}

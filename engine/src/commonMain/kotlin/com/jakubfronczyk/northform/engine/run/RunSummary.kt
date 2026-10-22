@@ -49,6 +49,8 @@ data class RunSummary(
     val activeTime: Duration,
     /** Metres counted (D111). */
     val distance: Double,
+    /** The line the run screen drew, replayed from the stored fixes (the Summary's map). */
+    val route: Route,
     /**
      * Seconds per km over [activeTime]; null under `Splits.paceMinDistance`. A continued crash is a stored
      * pause (D40, `RunReducer.resumed`), so its gap is out of active time and out of distance alike.
@@ -115,8 +117,8 @@ data class RunSummary(
             val totalTime = stoppedAt - startedAt
             val pausedTime = Pauses.pausedWithin(pauses, startedAt, stoppedAt)
             val activeTime = totalTime - pausedTime
-            // D111: the same tracker the live run counted with, replayed over the stored fixes.
-            val distance = RunReducer.distance(data)
+            // D111: the same tracker the live run counted with, replayed over the stored fixes; the route comes with it.
+            val (distance, route) = RunReducer.replayed(data)
             val effort = data.hr.filter { it.t <= stoppedAt && HeartRate.isValid(it.bpm) }
             val cooldownEndedAt = data.events.firstOrNull { it.kind == EventKind.CooldownEnd }?.t
             // One altitude pass for the run and its rows: steps depend only on earlier fixes, so the
@@ -128,7 +130,7 @@ data class RunSummary(
             return RunSummary(
                 recording = recording, profile = profile, stoppedAt = stoppedAt,
                 totalTime = totalTime, pausedTime = pausedTime, activeTime = activeTime,
-                distance = distance,
+                distance = distance, route = route,
                 avgPace = Splits.pace(activeTime, distance),
                 hrAvg = HeartRate.mean(effort),
                 hrMax = effort.maxOfOrNull { it.bpm },

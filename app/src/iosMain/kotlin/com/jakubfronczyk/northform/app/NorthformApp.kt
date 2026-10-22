@@ -191,7 +191,7 @@ object NorthformApp {
             gateSensor = gateSensor,
             connectSensor = ::connectPairedSensor,
             crashPrompt = unfinished?.let { run -> { CrashPromptScreen(run.facts, now = IosWallClock::now, onChoice = model::resolveUnfinished) } },
-            summary = summary?.let { session -> { SummaryScreen(session.state.collectAsState().value, onSave = model::saveSummary, onDelete = model::deleteSummary) } },
+            summary = summary?.let { session -> { SummaryScreen(session.state.collectAsState().value, onSave = model::saveSummary, onDelete = model::deleteSummary, onAcceptHrMax = model::acceptHrMax, map = { route -> RouteMap(route, showsUserLocation = false) }) } },
         )
     }
 }

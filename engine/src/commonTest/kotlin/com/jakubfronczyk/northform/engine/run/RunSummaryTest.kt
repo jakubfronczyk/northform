@@ -72,6 +72,15 @@ class RunSummaryTest {
         assertEquals(HrRecovery.Readings(atStop = 150, later = 180), summary.hrRecoveryReadings)
     }
 
+    /** summary-screen/04: the map's line is the counted route, broken at the pause (D40: a pause is a route break). */
+    @Test
+    fun the_route_is_replayed_from_the_fixes_with_a_break_at_the_pause() {
+        val summary = RunSummary.compute(played().stored, profile)
+        assertEquals(2, summary.route.segments.size, "before the pause, after the resume")
+        assertTrue(summary.route.segments.all { it.size >= 2 }, "each segment is a drawable line")
+        assertTrue(summary.route.segments.first().first().startsSegment)
+    }
+
     /** summary-screen/03: the chart's series stops at the stop, like the averages. */
     @Test
     fun the_heart_rate_series_covers_the_effort_only() {

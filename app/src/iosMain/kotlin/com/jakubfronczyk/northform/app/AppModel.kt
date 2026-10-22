@@ -204,6 +204,9 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     /** Save on the Summary: the session writes; the screen closes when it reports Saved, stays with the error otherwise. */
     fun saveSummary(edits: SummaryEdits) = settleSummary("saved") { save(edits) }
 
+    /** SU6: Update on the HRmax card; this Summary only (the profile store is the Settings feature's). */
+    fun acceptHrMax() { _summary.value?.acceptHrMax() }
+
     /** Delete on the Summary, after the screen's confirm sheet (R27). */
     fun deleteSummary() = settleSummary("deleted") { delete() }
 

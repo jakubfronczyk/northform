@@ -14,12 +14,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jakubfronczyk.northform.core.RunTag
+import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.SummaryEdits
 import com.jakubfronczyk.northform.engine.run.SummarySession
 import com.jakubfronczyk.northform.ui.BigButton
@@ -45,29 +48,43 @@ import com.jakubfronczyk.northform.ui.ValueCell
  * [SummarySession.State] and decides nothing (previews pass a state built on [FakeSummary]). Computing
  * shows a title only; Ready shows the top block ([SummaryModel]), the "Your run" edits and Save, with the
  * bin that opens the confirm sheet (`DeleteConfirm.dc.html`); the heart-rate and splits cards are
- * [SummaryCards.kt]. The map comes with summary-screen/04.
+ * [SummaryCards.kt]; the route map sits on top (summary-screen/04).
  */
 @Composable
-fun SummaryScreen(state: SummarySession.State, onSave: (SummaryEdits) -> Unit, onDelete: () -> Unit) {
+fun SummaryScreen(
+    state: SummarySession.State,
+    onSave: (SummaryEdits) -> Unit,
+    onDelete: () -> Unit,
+    /** SU6: the HRmax card's Update. */
+    onAcceptHrMax: () -> Unit = {},
+    /** The platform map (D13), as the run flow injects it; it reads [LocalMapCamera], provided here fitted to the route. */
+    map: @Composable (route: Route) -> Unit = { route -> RouteCanvas(route) },
+) {
     when (val s = state) {
         SummarySession.State.Computing -> Box(Modifier.fillMaxSize().background(Theme.bg), contentAlignment = Alignment.Center) {
             Text("Computing…", style = Type.secondaryText, color = Theme.text2)
         }
-        is SummarySession.State.Ready -> SummaryContent(SummaryModel.from(s.summary), error = s.error, busy = s.busy, onSave = onSave, onDelete = onDelete)
+        is SummarySession.State.Ready -> SummaryContent(SummaryModel.from(s.summary), error = s.error, busy = s.busy, onSave = onSave, onDelete = onDelete, onAcceptHrMax = onAcceptHrMax, map = map)
         SummarySession.State.Saved, SummarySession.State.Deleted -> Unit // the root removes the screen
     }
 }
 
 @Composable
-private fun SummaryContent(m: SummaryModel, error: String?, busy: Boolean, onSave: (SummaryEdits) -> Unit, onDelete: () -> Unit) {
+private fun SummaryContent(m: SummaryModel, error: String?, busy: Boolean, onSave: (SummaryEdits) -> Unit, onDelete: () -> Unit, onAcceptHrMax: () -> Unit, map: @Composable (route: Route) -> Unit) {
     // The edits live here, with the screen (R27): they go to the store only on Save.
     var tag by remember(m.suggestedTag) { mutableStateOf(m.suggestedTag) }
     var rpe by remember { mutableStateOf<Int?>(null) }
     var notes by remember { mutableStateOf("") }
     var confirmDelete by remember { mutableStateOf(false) }
 
+    // One fitted camera for this Summary: the whole route once, then the user's pans and zooms (summary-screen/04).
+    val camera = remember { MapCamera(fitted = true) }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 64.dp, bottom = 50.dp)) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 50.dp)) {
+            Box(Modifier.fillMaxWidth().height(340.dp)) {
+                CompositionLocalProvider(LocalMapCamera provides camera) { map(m.route) }
+            }
+            Column(Modifier.padding(horizontal = 16.dp).padding(top = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(m.typeLabel, style = Type.pillLabel, color = Theme.text, modifier = Modifier.background(Theme.card, RoundedCornerShape(999.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
                 Text(m.dateLine, style = Type.secondaryText, color = Theme.text2)
@@ -88,6 +105,10 @@ private fun SummaryContent(m: SummaryModel, error: String?, busy: Boolean, onSav
             Text(m.dataQuality, style = Type.tertiaryText, color = Theme.text3)
             Spacer(Modifier.height(24.dp))
 
+            if (m.hrMaxSuggestion != null) {
+                HrMaxCard(m.hrMaxSuggestion, m.hrMaxCurrent, enabled = !busy, onAccept = onAcceptHrMax)
+                Spacer(Modifier.height(16.dp))
+            }
             HeartRateCard(m)
             Spacer(Modifier.height(16.dp))
             SplitsCard(m)
@@ -100,8 +121,25 @@ private fun SummaryContent(m: SummaryModel, error: String?, busy: Boolean, onSav
                 Spacer(Modifier.height(12.dp))
             }
             BigButton("Save ${m.typeLabel.lowercase()}", enabled = !busy, onClick = { onSave(SummaryEdits(tag = tag, rpe = rpe, notes = notes.trim().ifEmpty { null })) })
+            }
         }
         if (confirmDelete) DeleteConfirmSheet(m, onKeep = { confirmDelete = false }, onDelete = { confirmDelete = false; onDelete() })
+    }
+}
+
+/** SU6: "New max heart rate: 191 — Higher than your 187. Update zones?" with Update; recomputes this Summary only. */
+@Composable
+private fun HrMaxCard(suggested: String, current: String, enabled: Boolean, onAccept: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().background(Theme.card, RoundedCornerShape(18.dp)).border(1.dp, Theme.accent.copy(alpha = 0.5f), RoundedCornerShape(18.dp)).padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("New max heart rate: $suggested", style = Type.sheetTitle, color = Theme.text)
+            Text("Higher than your $current. Update zones?", style = Type.secondaryText, color = Theme.text2)
+        }
+        Spacer(Modifier.width(12.dp))
+        BigButton("Update", onAccept, modifier = Modifier.width(96.dp), enabled = enabled, textStyle = Type.statusLabel)
     }
 }
 

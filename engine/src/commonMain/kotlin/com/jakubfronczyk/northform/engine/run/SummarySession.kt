@@ -4,6 +4,7 @@ import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.RunTag
+import com.jakubfronczyk.northform.core.ports.RecordingData
 import com.jakubfronczyk.northform.core.ports.RecordingStore
 import com.jakubfronczyk.northform.core.ports.ReliabilityStore
 import com.jakubfronczyk.northform.core.reliability.ReliabilityRecord
@@ -43,11 +44,28 @@ class SummarySession(
     private val _state = MutableStateFlow<State>(State.Computing)
     val state: StateFlow<State> = _state.asStateFlow()
 
+    /** The recording as loaded, kept for [acceptHrMax]'s recompute. */
+    private var data: RecordingData? = null
+
     /** Computing → Ready. The reliability row is written before the screen shows, so a later Delete still keeps the drops counted. */
     suspend fun load() {
-        val data = store.load(recordingId) ?: error("recording ${recordingId.value} not found")
-        reliability.saveReliability(recordingId, ReliabilityRecord.of(data))
-        _state.value = State.Ready(RunSummary.compute(data, profile))
+        val loaded = store.load(recordingId) ?: error("recording ${recordingId.value} not found")
+        reliability.saveReliability(recordingId, ReliabilityRecord.of(loaded))
+        data = loaded
+        _state.value = State.Ready(RunSummary.compute(loaded, profile))
+    }
+
+    /**
+     * SU6: the "New max heart rate: 191 — Update zones?" card's Update. This Summary is recomputed with the higher
+     * HRmax, so Save stores metrics carrying it (D24). The app's profile is not changed here: persisting it is the
+     * Settings feature's. Nothing happens without a suggestion or while busy.
+     */
+    fun acceptHrMax() {
+        val ready = _state.value as? State.Ready ?: return
+        if (ready.busy) return
+        val suggested = ready.summary.hrMaxSuggestion ?: return
+        val loaded = data ?: return
+        _state.value = State.Ready(RunSummary.compute(loaded, ready.summary.profile.copy(hrMax = suggested)))
     }
 
     /**

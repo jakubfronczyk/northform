@@ -8,6 +8,7 @@ import com.jakubfronczyk.northform.core.metrics.Zone
 import com.jakubfronczyk.northform.core.metrics.all
 import com.jakubfronczyk.northform.core.inSecondsDouble
 import com.jakubfronczyk.northform.core.roundedHalfAwayFromZero
+import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.RunSummary
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -39,6 +40,11 @@ data class SummaryModel(
     val showsTags: Boolean,
     /** Preselected chip (D76); null for a walk or when nothing fits. */
     val suggestedTag: RunTag?,
+    /** SU6: "New max heart rate: 191" / "Higher than your 187. Update zones?"; null hides the card. */
+    val hrMaxSuggestion: String?,
+    val hrMaxCurrent: String,
+    /** The map's line (the platform map slot draws it). */
+    val route: Route,
     // ── The "Heart rate" card (H1, H3, H4, H7) ──
     val hrAverage: String,
     val hrMax: String,
@@ -84,6 +90,9 @@ data class SummaryModel(
                 yourLabel = "Your ${noun(recording.type)}",
                 showsTags = recording.type == RecordingType.Run,
                 suggestedTag = summary.suggestedTag,
+                hrMaxSuggestion = summary.hrMaxSuggestion?.toString(),
+                hrMaxCurrent = profile.hrMax.toString(),
+                route = summary.route,
                 hrAverage = summary.hrAvg?.toString() ?: NO_VALUE,
                 hrMax = summary.hrMax?.toString() ?: NO_VALUE,
                 recovery = summary.hrRecovery?.let { signed(-it) } ?: NO_VALUE,

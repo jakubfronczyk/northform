@@ -182,3 +182,50 @@ class SummarySessionEditsTest {
         assertEquals("first", assertNotNull(store.load(config.recordingId)).recording.notes)
     }
 }
+
+/** summary-screen/04: accepting a higher HRmax recomputes this Summary; Save stores metrics carrying it; the app profile is untouched. */
+class SummarySessionHrMaxTest {
+    private val config = RunHarness.config
+
+    /** HR 150, then 30 s at 195 (above the profile's 187) before the stop. */
+    private fun stored() = RecordingData(
+        recording = Recording(id = config.recordingId, type = config.type, state = RecordingState.Computing, startUtc = at(5), tzOffset = config.tzOffset, endUtc = at(60)),
+        hr = (6..60).map { HrSample(at(it), if (it >= 30) 195 else 150) },
+        fixes = (6..60).map { fix(it, north = (it - 5) * 3.0) },
+        events = listOf(RecordingEvent(at(60), EventKind.Stop, EventSource.Manual), RecordingEvent(at(120), EventKind.CooldownEnd, EventSource.Auto)),
+        lastPersistedAt = at(120),
+    )
+
+    @Test
+    fun accepting_the_suggestion_recomputes_with_the_new_hrmax_and_save_stores_it_with_the_metrics() = runTest {
+        val store = InMemoryRecordingStore()
+        store.seedComputing(stored())
+        val session = SummarySession(config.recordingId, store, store, config.profile)
+        session.load()
+        val before = assertIs<SummarySession.State.Ready>(session.state.value).summary
+        assertEquals(195, before.hrMaxSuggestion)
+        assertEquals(187, before.profile.hrMax)
+
+        session.acceptHrMax()
+
+        val after = assertIs<SummarySession.State.Ready>(session.state.value).summary
+        assertEquals(195, after.profile.hrMax)
+        assertNull(after.hrMaxSuggestion, "the card goes away once accepted")
+        assertTrue(after.timeInZone != before.timeInZone, "the zones moved with the new reserve")
+
+        session.save(SummaryEdits(tag = null, rpe = null, notes = null))
+        assertTrue(store.records.metrics(config.recordingId).all { it.profile.hrMax == 195 }, "D24: the metrics carry the profile they were computed with")
+        assertEquals(187, config.profile.hrMax, "the app's profile is not touched (Settings owns that)")
+    }
+
+    @Test
+    fun accept_without_a_suggestion_changes_nothing() = runTest {
+        val store = InMemoryRecordingStore()
+        store.seedComputing(stored().let { d -> d.copy(hr = d.hr.map { it.copy(bpm = 150) }) })
+        val session = SummarySession(config.recordingId, store, store, config.profile)
+        session.load()
+        val before = session.state.value
+        session.acceptHrMax()
+        assertEquals(before, session.state.value)
+    }
+}

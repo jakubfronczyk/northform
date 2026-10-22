@@ -18,7 +18,9 @@ import kotlinx.cinterop.memScoped
 import platform.CoreLocation.CLLocationCoordinate2D
 import platform.CoreLocation.CLLocationCoordinate2DMake
 import platform.MapKit.MKCoordinateRegionMakeWithDistance
+import platform.MapKit.MKMapRectUnion
 import platform.MapKit.MKMapView
+import platform.UIKit.UIEdgeInsetsMake
 import platform.MapKit.MKMapViewDelegateProtocol
 import platform.MapKit.MKOverlayProtocol
 import platform.MapKit.MKOverlayRenderer
@@ -58,7 +60,7 @@ fun RouteMap(route: Route, showsUserLocation: Boolean) {
             }
         },
         modifier = Modifier.fillMaxSize(),
-        update = { map -> drawn.sync(map, route, follow = following, followUser = showsUserLocation) },
+        update = { map -> drawn.sync(map, route, follow = following, followUser = showsUserLocation, fit = camera.fitted) },
     )
 }
 
@@ -70,8 +72,10 @@ private class DrawnRoute(onUserDrag: () -> Unit) {
     private var following = true
     private val lines = ArrayList<MKPolyline?>()
 
-    fun sync(map: MKMapView, next: Route, follow: Boolean, followUser: Boolean) {
-        if (follow && !following) { // "Re-center" tapped: back onto the dot (live) or the route's end (replay)
+    private var fitted = false
+
+    fun sync(map: MKMapView, next: Route, follow: Boolean, followUser: Boolean, fit: Boolean = false) {
+        if (follow && !following && !fit) { // "Re-center" tapped: back onto the dot (live) or the route's end (replay)
             if (followUser) map.setUserTrackingMode(MKUserTrackingModeFollow, animated = true)
             else route?.let { center(map, it, animated = true) }
         }
@@ -86,8 +90,19 @@ private class DrawnRoute(onUserDrag: () -> Unit) {
             lines += line
         }
         val last = segments.lastOrNull()?.lastOrNull()
-        if (follow && !followUser && last != null && last != route?.segments?.lastOrNull()?.lastOrNull()) center(map, next, animated = true)
+        if (fit) {
+            // summary-screen/04: the whole route in view once; after that the user pans and zooms freely.
+            if (!fitted) { fitAll(map); fitted = true }
+        } else if (follow && !followUser && last != null && last != route?.segments?.lastOrNull()?.lastOrNull()) center(map, next, animated = true)
         route = next
+    }
+
+    private fun fitAll(map: MKMapView) {
+        val drawnLines = lines.filterNotNull()
+        if (drawnLines.isEmpty()) return
+        var rect = drawnLines.first().boundingMapRect
+        for (line in drawnLines.drop(1)) rect = MKMapRectUnion(rect, line.boundingMapRect)
+        map.setVisibleMapRect(rect, edgePadding = UIEdgeInsetsMake(32.0, 32.0, 32.0, 32.0), animated = false)
     }
 
     private fun center(map: MKMapView, route: Route, animated: Boolean) {

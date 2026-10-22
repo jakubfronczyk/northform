@@ -44,4 +44,5 @@ private fun previewGate(snapshot: RunSnapshot, sensor: GateSensor? = null) {
 @Preview @Composable fun SummaryWalkPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.walk), onSave = {}, onDelete = {})
 @Preview @Composable fun SummarySaveFailedPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.run, error = "disk full"), onSave = {}, onDelete = {})
 @Preview @Composable fun SummarySkippedCooldownPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.skippedCooldown), onSave = {}, onDelete = {})
+@Preview @Composable fun SummaryNewHrMaxPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.newHrMax), onSave = {}, onDelete = {})
 @Preview @Composable fun SummarySavingPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.run, busy = true), onSave = {}, onDelete = {})
