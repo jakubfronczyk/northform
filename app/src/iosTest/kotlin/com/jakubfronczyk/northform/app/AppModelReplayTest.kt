@@ -6,6 +6,10 @@ import com.jakubfronczyk.northform.core.ports.Alert
 import com.jakubfronczyk.northform.core.ports.AlertPlayer
 import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.core.ports.RecordingStore
+import com.jakubfronczyk.northform.core.ports.ReliabilityStore
+import com.jakubfronczyk.northform.core.RunTag
+import com.jakubfronczyk.northform.engine.run.SummaryEdits
+import com.jakubfronczyk.northform.engine.run.SummarySession
 import com.jakubfronczyk.northform.engine.store.InMemoryRecordingStore
 import com.jakubfronczyk.northform.persistence.SqlRecordingStore
 import com.jakubfronczyk.northform.persistence.nativeDriver
@@ -22,6 +26,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -40,9 +45,10 @@ class AppModelReplayTest {
     private fun straightRun(): ReplayScript = Fixture.parse(BundledFixtureText.STRAIGHT_RUN_3MIN)
 
     /** The simulator wiring: a replay source on the test's virtual clock, an in-memory store. */
-    private fun TestScope.replayDeps(script: ReplayScript, store: RecordingStore, alerts: AlertPlayer, log: (String) -> Unit = {}) = AppDeps(
+    private fun TestScope.replayDeps(script: ReplayScript, store: RecordingStore, alerts: AlertPlayer, reliability: ReliabilityStore = store as ReliabilityStore, log: (String) -> Unit = {}) = AppDeps(
         source = RunSource.Replay { script },
         store = store,
+        reliability = reliability,
         wallClock = virtualWallClock(script.meta.start),
         alerts = alerts,
         log = log,
@@ -77,11 +83,21 @@ class AppModelReplayTest {
         advanceTimeBy(61.seconds); runCurrent()
         assertEquals(RunPhase.Done, run.session.snapshots.value.phase, "the Summary screen")
 
-        model.closeRun() // Done tapped
+        model.closeRun() // the flow closes itself at Done
         advanceTimeBy(1.seconds); runCurrent()
         assertNull(model.activeRun.value)
-        val stored = assertNotNull(store.records.load(run.id))
-        assertEquals(RecordingState.Computing, stored.recording.state)
+        assertEquals(RecordingState.Computing, assertNotNull(store.records.load(run.id)).recording.state)
+        val summary = assertNotNull(model.summary.value, "the Summary opens for the finished run")
+        val ready = assertIs<SummarySession.State.Ready>(summary.state.value)
+        assertTrue(ready.summary.distance > 200, "the same run the screen showed")
+        assertNotNull(store.records.reliability(run.id), "the reliability row is written before the Summary shows")
+
+        model.saveSummary(SummaryEdits(tag = RunTag.Easy, rpe = 4, notes = null)) // Save tapped
+        runCurrent()
+        assertNull(model.summary.value, "back to Today")
+        val saved = assertNotNull(store.records.load(run.id)).recording
+        assertEquals(RecordingState.Saved, saved.state)
+        assertEquals(RunTag.Easy, saved.tag)
         assertEquals(5, alerts.played.count { it == Alert.CountdownTick })
         assertTrue(phases.any { "→ gate" in it } && phases.any { "→ active" in it } && phases.any { "→ done" in it }, "lifecycle log: $phases")
     }

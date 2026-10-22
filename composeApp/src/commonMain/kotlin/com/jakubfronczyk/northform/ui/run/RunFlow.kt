@@ -74,7 +74,8 @@ fun RunFlow(
                 is RunPhase.Countdown -> CountdownScreen(phase.endsAt, session.wallClock)
                 RunPhase.Active, is RunPhase.Paused -> LiveRunScreen(snapshot, route, session.wallClock, send, map)
                 is RunPhase.Cooldown -> StoppedScreen(snapshot, skip = { send(UserAction.SkipCooldown) })
-                RunPhase.Done -> DoneScreen(snapshot, close = onClose)
+                // The run is in `computing`: the flow closes itself and the root opens the Summary (summary-screen/01).
+                RunPhase.Done -> LaunchedEffect(Unit) { onClose() }
             }
         }
     }
@@ -115,14 +116,4 @@ fun StoppedScreen(snapshot: RunSnapshot, skip: () -> Unit) = BareScreen {
     Text("Cool-down: measuring heart-rate recovery", style = Type.secondaryText, color = Theme.text3)
     Spacer(Modifier.weight(1f))
     BigButton("Skip", skip)
-}
-
-/** `RunView.swift:89`. */
-@Composable
-fun DoneScreen(snapshot: RunSnapshot, close: () -> Unit) = BareScreen {
-    Spacer(Modifier.weight(1f))
-    Text("Saved", style = Type.screenTitle, color = Theme.text)
-    Text("${RunFormat.distance(snapshot.distance)} km · ${RunFormat.time(snapshot.totalTime)}", style = Type.number22, color = Theme.text2)
-    Spacer(Modifier.weight(1f))
-    BigButton("Done", close)
 }

@@ -50,7 +50,7 @@ class BackgroundFlushTest {
     }
 
     private fun TestScope.deps(store: RecordingStore, tasks: BackgroundTasks) = AppDeps(
-        source = RunSource.Replay { script }, store = store, wallClock = virtualWallClock(script.meta.start), alerts = RecordedAlerts(),
+        source = RunSource.Replay { script }, store = store, reliability = InMemoryRecordingStore() /* never reached: these runs stop before the Summary */, wallClock = virtualWallClock(script.meta.start), alerts = RecordedAlerts(),
         backgroundTasks = tasks, newRecordingId = { "00000000-0000-0000-0000-00000000000d" },
     )
 

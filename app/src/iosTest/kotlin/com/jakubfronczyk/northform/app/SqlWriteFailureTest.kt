@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.app
 
+import com.jakubfronczyk.northform.core.ports.ReliabilityStore
 import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.db.SqlPreparedStatement
@@ -50,7 +51,7 @@ class SqlWriteFailureTest {
         try {
             val store = SqlRecordingStore(driver, io = EmptyCoroutineContext)
             val deps = AppDeps(
-                source = RunSource.Replay { script }, store = store, wallClock = virtualWallClock(script.meta.start), alerts = RecordedAlerts(),
+                source = RunSource.Replay { script }, store = store, reliability = store, wallClock = virtualWallClock(script.meta.start), alerts = RecordedAlerts(),
                 newRecordingId = { "00000000-0000-0000-0000-00000000000e" },
             )
             val run = ActiveRun.open(deps, backgroundScope)

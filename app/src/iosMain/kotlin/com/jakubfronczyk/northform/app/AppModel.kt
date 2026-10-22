@@ -5,6 +5,9 @@ import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.ports.FlushBatch
 import com.jakubfronczyk.northform.engine.run.CrashChoice
+import com.jakubfronczyk.northform.engine.run.EndResult
+import com.jakubfronczyk.northform.engine.run.SummaryEdits
+import com.jakubfronczyk.northform.engine.run.SummarySession
 import com.jakubfronczyk.northform.engine.run.CrashPrompt
 import com.jakubfronczyk.northform.engine.run.crashMark
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +30,10 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     private val _activeRun = MutableStateFlow<ActiveRun?>(null)
     /** What the screens show: the run flow while non-null, Today otherwise. */
     val activeRun: StateFlow<ActiveRun?> = _activeRun.asStateFlow()
+
+    private val _summary = MutableStateFlow<SummarySession?>(null)
+    /** The Summary of the run that just finished (R27): on screen while non-null, until Save or Delete. */
+    val summary: StateFlow<SummarySession?> = _summary.asStateFlow()
 
     private val _unfinished = MutableStateFlow<UnfinishedRun?>(null)
     /** A recording a crash left behind (R28): the prompt is up while non-null, until the user chooses. */
@@ -178,9 +185,31 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
         deps.clearAlerts()
         finishing.update { it + (run.id to run) }
         scope.launch {
-            deps.log("run ${run.id.value.take(8)} closed: ${run.close()}")
+            val result = run.close()
+            deps.log("run ${run.id.value.take(8)} closed: $result")
             finishing.update { it - run.id }
             deps.log("session stop")
+            if (result == EndResult.Finishing) openSummary(run.id)
+        }
+    }
+
+    /** The run is in `computing`: load it, write its reliability row, compute, and put the Summary on screen. */
+    private suspend fun openSummary(id: RecordingId) {
+        val session = SummarySession(id, deps.store, deps.reliability, deps.profile)
+        _summary.value = session
+        session.load()
+        deps.log("run ${id.value.take(8)} summary: ${session.state.value::class.simpleName}")
+    }
+
+    /** Save on the Summary: the session writes; the screen closes when it reports Saved, stays with the error otherwise. */
+    fun saveSummary(edits: SummaryEdits) {
+        val session = _summary.value ?: return
+        scope.launch {
+            session.save(edits)
+            if (session.state.value is SummarySession.State.Saved) {
+                _summary.value = null
+                deps.log("run ${session.recordingId.value.take(8)} saved")
+            }
         }
     }
 }

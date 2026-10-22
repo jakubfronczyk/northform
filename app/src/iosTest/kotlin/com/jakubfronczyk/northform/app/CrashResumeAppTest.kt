@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.app
 
+import com.jakubfronczyk.northform.engine.store.InMemoryRecordingStore
 import com.jakubfronczyk.northform.core.EventKind
 import com.jakubfronczyk.northform.core.EventSource
 import com.jakubfronczyk.northform.core.HrSample
@@ -55,6 +56,7 @@ class CrashResumeAppTest {
     private fun TestScope.replayDeps(script: ReplayScript, store: RecordingStore, clockStart: Instant = script.meta.start, log: (String) -> Unit = {}) = AppDeps(
         source = RunSource.Replay { script },
         store = store,
+        reliability = InMemoryRecordingStore(), // never reached: the Summary is not under test here
         wallClock = virtualWallClock(clockStart),
         alerts = RecordedAlerts(),
         log = log,

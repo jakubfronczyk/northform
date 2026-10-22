@@ -40,6 +40,8 @@ fun AppRoot(
     connectSensor: () -> Unit,
     /** The R28 crash prompt while a recording waits for the user's choice: a sheet over Today that cannot be dismissed (Swift D77 restated). */
     crashPrompt: (@Composable () -> Unit)? = null,
+    /** R27: the Summary of the run that just finished; shown over Today while non-null. */
+    summary: (@Composable () -> Unit)? = null,
 ) {
     var showSensor by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
@@ -50,6 +52,7 @@ fun AppRoot(
                 activeRun, onClose = onCloseRun, map = map, gateSensor = gateSensor, connectSensor = connectSensor,
                 pairSensor = { showSensor = true },
             )
+            summary != null -> summary()
             else -> {
                 TodayScreen(startRun = onStartRun, openSensor = { showSensor = true })
                 crashPrompt?.invoke()
