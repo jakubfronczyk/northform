@@ -131,6 +131,13 @@ class AppModelReplayTest {
             assertEquals(RecordingState.Computing, stored.recording.state)
             assertTrue(stored.hr.size > 100 && stored.fixes.size > 100, "${stored.hr.size} hr, ${stored.fixes.size} fixes")
             assertEquals(stored.recording, store.unfinished(), "a crash here would find it (R28)")
+            assertNotNull(store.reliability(run.id), "the reliability row is in SQLite too")
+
+            assertNotNull(model.summary.value, "the Summary is up")
+            model.deleteSummary() // bin, then the sheet's red button
+            runCurrent()
+            assertNull(model.summary.value, "back to Today")
+            assertNull(store.load(run.id), "gone from SQLite")
         } finally {
             driver.close()
             DatabaseFileContext.deleteDatabase(name)

@@ -202,13 +202,19 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     }
 
     /** Save on the Summary: the session writes; the screen closes when it reports Saved, stays with the error otherwise. */
-    fun saveSummary(edits: SummaryEdits) {
+    fun saveSummary(edits: SummaryEdits) = settleSummary("saved") { save(edits) }
+
+    /** Delete on the Summary, after the screen's confirm sheet (R27). */
+    fun deleteSummary() = settleSummary("deleted") { delete() }
+
+    private fun settleSummary(done: String, call: suspend SummarySession.() -> Unit) {
         val session = _summary.value ?: return
         scope.launch {
-            session.save(edits)
-            if (session.state.value is SummarySession.State.Saved) {
+            session.call()
+            val state = session.state.value
+            if (state is SummarySession.State.Saved || state is SummarySession.State.Deleted) {
                 _summary.value = null
-                deps.log("run ${session.recordingId.value.take(8)} saved")
+                deps.log("run ${session.recordingId.value.take(8)} $done")
             }
         }
     }

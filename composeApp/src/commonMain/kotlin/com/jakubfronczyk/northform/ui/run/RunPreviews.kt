@@ -39,7 +39,8 @@ private fun previewGate(snapshot: RunSnapshot, sensor: GateSensor? = null) {
 @Preview @Composable fun GpsLostPreview() = previewRun(FakeRunSession.running.copy(gpsLost = true))
 @Preview @Composable fun CooldownPreview() = previewRun(FakeRunSession.running.copy(phase = RunPhase.Cooldown(Clock.System.now() + 45.seconds)))
 // Summary (R27): one preview per artboard state, from the FakeSummary fixture (summary-screen/01).
-@Preview @Composable fun SummaryComputingPreview() = SummaryScreen(SummarySession.State.Computing, onSave = {})
-@Preview @Composable fun SummaryRunPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.run), onSave = {})
-@Preview @Composable fun SummaryWalkPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.walk), onSave = {})
-@Preview @Composable fun SummarySaveFailedPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.run, error = "disk full"), onSave = {})
+@Preview @Composable fun SummaryComputingPreview() = SummaryScreen(SummarySession.State.Computing, onSave = {}, onDelete = {})
+@Preview @Composable fun SummaryRunPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.run), onSave = {}, onDelete = {})
+@Preview @Composable fun SummaryWalkPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.walk), onSave = {}, onDelete = {})
+@Preview @Composable fun SummarySaveFailedPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.run, error = "disk full"), onSave = {}, onDelete = {})
+@Preview @Composable fun SummarySavingPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.run, busy = true), onSave = {}, onDelete = {})

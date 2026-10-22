@@ -2,6 +2,7 @@ package com.jakubfronczyk.northform.engine.run
 
 import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.RecordingId
+import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.RunTag
 import com.jakubfronczyk.northform.core.ports.RecordingStore
 import com.jakubfronczyk.northform.core.ports.ReliabilityStore
@@ -28,10 +29,15 @@ class SummarySession(
     sealed interface State {
         /** Loading and computing; what the screen shows first. */
         data object Computing : State
-        /** On screen. [error] is the last Save's failure, shown inline; Save stays possible. */
-        data class Ready(val summary: RunSummary, val error: String? = null) : State
+        /**
+         * On screen. [busy] while a Save or Delete is at the store: both buttons are disabled and a second tap does
+         * nothing. [error] is the last Save's failure, shown inline; Save stays possible.
+         */
+        data class Ready(val summary: RunSummary, val error: String? = null, val busy: Boolean = false) : State
         /** Save done: the screen closes. */
         data object Saved : State
+        /** Delete done: the screen closes. */
+        data object Deleted : State
     }
 
     private val _state = MutableStateFlow<State>(State.Computing)
@@ -44,11 +50,32 @@ class SummarySession(
         _state.value = State.Ready(RunSummary.compute(data, profile))
     }
 
-    /** Ready → Saved: `computing` → `saved` with the edits and the metric rows. A store failure stays Ready with the error. */
+    /**
+     * Ready → Saved: `computing` → `saved` with the edits and the metric rows. A walk stores no tag (the chips are not
+     * shown for one). A store failure stays Ready with the error; a tap while busy does nothing.
+     */
     suspend fun save(edits: SummaryEdits) {
-        val ready = _state.value as? State.Ready ?: return
-        runCatching { store.saveRunSummary(ready.summary, edits.tag, edits.rpe, edits.notes) }
+        val ready = claim() ?: return
+        val tag = if (ready.summary.recording.type == RecordingType.Walk) null else edits.tag
+        runCatching { store.saveRunSummary(ready.summary, tag, edits.rpe, edits.notes) }
             .onSuccess { _state.value = State.Saved }
-            .onFailure { e -> _state.update { State.Ready(ready.summary, error = e.message ?: e.toString()) } }
+            .onFailure { e -> _state.value = State.Ready(ready.summary, error = e.message ?: e.toString()) }
+    }
+
+    /** Ready → Deleted (R27: after the screen's confirm sheet): the recording is removed. A store failure stays Ready with the error. */
+    suspend fun delete() {
+        val ready = claim() ?: return
+        runCatching { store.delete(recordingId) }
+            .onSuccess { _state.value = State.Deleted }
+            .onFailure { e -> _state.value = State.Ready(ready.summary, error = e.message ?: e.toString()) }
+    }
+
+    /** Takes the Ready state for one store call: null when not Ready or already busy (the double tap). */
+    private fun claim(): State.Ready? {
+        var claimed: State.Ready? = null
+        _state.update { s ->
+            if (s is State.Ready && !s.busy) s.copy(busy = true, error = null).also { claimed = s } else s
+        }
+        return claimed
     }
 }

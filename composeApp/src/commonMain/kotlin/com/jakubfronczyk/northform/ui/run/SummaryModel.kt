@@ -1,6 +1,7 @@
 package com.jakubfronczyk.northform.ui.run
 
 import com.jakubfronczyk.northform.core.RecordingType
+import com.jakubfronczyk.northform.core.RunTag
 import com.jakubfronczyk.northform.engine.run.RunSummary
 import com.jakubfronczyk.northform.ui.RunFormat
 
@@ -24,13 +25,19 @@ data class SummaryModel(
     val avgHr: String,
     /** "Data · 1 sensor drop · 12 s gap · 0 crashes". */
     val dataQuality: String,
+    /** "Your run" / "Your walk": the edits block's title. */
+    val yourLabel: String,
+    /** The tag chips: a run only (R0); a walk stores no tag. */
+    val showsTags: Boolean,
+    /** Preselected chip (D76); null for a walk or when nothing fits. */
+    val suggestedTag: RunTag?,
 ) {
     companion object {
         fun from(summary: RunSummary): SummaryModel {
             val recording = summary.recording
             val q = summary.quality
             return SummaryModel(
-                typeLabel = when (recording.type) { RecordingType.Run -> "Run"; RecordingType.Walk -> "Walk" },
+                typeLabel = noun(recording.type).replaceFirstChar { it.uppercase() },
                 dateLine = "${RunFormat.date(recording.startUtc, recording.tzOffset)} · ${RunFormat.localTime(recording.startUtc, recording.tzOffset)}",
                 distance = RunFormat.distance(summary.distance),
                 totalTime = RunFormat.time(summary.totalTime),
@@ -38,8 +45,13 @@ data class SummaryModel(
                 avgPace = if (summary.avgPace == null) NO_VALUE else RunFormat.pace(summary.avgPace),
                 avgHr = summary.hrAvg?.toString() ?: NO_VALUE,
                 dataQuality = "Data · ${plural(q.sensorDrops, "sensor drop")} · ${q.hrGap.inWholeSeconds} s gap · ${plural(q.crashes, "crash", "crashes")}",
+                yourLabel = "Your ${noun(recording.type)}",
+                showsTags = recording.type == RecordingType.Run,
+                suggestedTag = summary.suggestedTag,
             )
         }
+
+        fun noun(type: RecordingType) = when (type) { RecordingType.Run -> "run"; RecordingType.Walk -> "walk" }
 
         private fun plural(n: Int, one: String, many: String = "${one}s") = "$n ${if (n == 1) one else many}"
     }

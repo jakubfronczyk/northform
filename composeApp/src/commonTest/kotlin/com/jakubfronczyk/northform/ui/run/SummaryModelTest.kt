@@ -81,3 +81,21 @@ class FakeSummaryTest {
         assertEquals(NO_VALUE, m.avgHr)
     }
 }
+
+/** summary-screen/02: the "Your run" block. */
+class SummaryEditsModelTest {
+    @Test
+    fun a_run_offers_the_tag_chips_with_the_suggestion_preselected() {
+        val m = SummaryModel.from(FakeSummary.run)
+        assertEquals("Your run", m.yourLabel)
+        assertEquals(true, m.showsTags)
+        assertEquals(FakeSummary.run.suggestedTag, m.suggestedTag)
+    }
+
+    @Test
+    fun a_walk_has_no_tag_chips() {
+        val m = SummaryModel.from(FakeSummary.walk)
+        assertEquals("Your walk", m.yourLabel)
+        assertEquals(false, m.showsTags)
+    }
+}
