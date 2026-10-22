@@ -29,7 +29,7 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * The simulator proof for walking-skeleton step 7: the composition root drives a REPLAY run through the
+ * The simulator proof of the end-to-end flow: the composition root drives a REPLAY run through the
  * whole flow, Gate → Countdown → Active → Cool-down → Done, on a virtual clock, with the phase log the
  * app writes. Same `AppModel` the phone uses; only the ports differ (replay here, live there).
  */

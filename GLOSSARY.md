@@ -42,6 +42,10 @@ The 5 s between pressing Start and the recording beginning.
 A stretch of a recording that does not count toward active time, pace or splits. Manual when the user
 pauses; automatic for a crash gap.
 
+**Moving time**:
+The recording's active time (total minus pauses) as the summary shows it.
+_Avoid_: elapsed, running time
+
 **Hold-to-stop**:
 The press-and-hold that ends a recording. Its moment is the recording's end time.
 _Avoid_: finish, end button
@@ -83,6 +87,9 @@ No heart-rate sample for 5 s, whatever the cause. What the runner sees. It ends 
 sample that would have prevented it; a late sample taken earlier than that is kept but does not end it.
 _Avoid_: sensor lost
 
+**Sensor gap**:
+A stretch of HR lost long enough to break the summary's heart-rate line, labelled with its length.
+
 **GPS lost**:
 No location fix for 10 s, or a fix less accurate than 50 m. Silence after a fix that iOS marked
 stationary is not GPS lost. It ends like HR lost: only with a fix that would have prevented it.
@@ -113,6 +120,9 @@ _Avoid_: heartbeat
 
 **Crash gap**:
 The time between the last save and the user choosing Continue. Stored as a pause.
+
+**Data quality**:
+The summary's one-line account of a recording's drops, HR-lost time, GPS losses and crashes.
 
 **Reliability log**:
 Per recording: drops, reconnects and how long they took, HR-lost and GPS-lost time, Bluetooth-off
