@@ -29,11 +29,23 @@ object HrRecovery {
         cooldownEndedAt: Instant?,
         cooldown: Duration = HrRecovery.cooldown,
         tolerance: Duration = HrStream.gap,
-    ): Int? {
+    ): Int? = readings(samples, stoppedAt, cooldownEndedAt, cooldown, tolerance)?.let { it.atStop - it.later }
+
+    /** The two readings behind [compute] (the Summary shows "172 → 141" beside the difference). */
+    data class Readings(val atStop: Int, val later: Int)
+
+    /** Same arguments and rules as [compute]; null under the same conditions. */
+    fun readings(
+        samples: List<HrSample>,
+        stoppedAt: Instant,
+        cooldownEndedAt: Instant?,
+        cooldown: Duration = HrRecovery.cooldown,
+        tolerance: Duration = HrStream.gap,
+    ): Readings? {
         if (cooldownEndedAt == null || cooldownEndedAt - stoppedAt < cooldown) return null
         val atStop = reading(samples, stoppedAt, tolerance) ?: return null
         val later = reading(samples, stoppedAt + cooldown, tolerance) ?: return null
-        return atStop - later
+        return Readings(atStop, later)
     }
 
     /** The last valid sample in `(mark − tolerance, mark]`: the heart rate known at `mark`. */

@@ -30,15 +30,15 @@ object FakeSummary {
 
     private fun data(type: RecordingType, seconds: Int, metresPerSecond: Double, hr: ((Int) -> Int)?): RecordingData {
         val stop = start + seconds.seconds
-        val drop = 1200..1212
+        val drop = 1201..1211 // no samples: the line's gap runs 1200 → 1212, "sensor gap 12 s"
         val events = buildList {
             add(RecordingEvent(start + 1500.seconds, EventKind.Pause, EventSource.Manual))
             add(RecordingEvent(start + 1510.seconds, EventKind.Resume, EventSource.Manual))
             if (hr != null) {
                 add(RecordingEvent(start + drop.first.seconds, EventKind.SensorLost, EventSource.Auto))
                 add(RecordingEvent(start + (drop.first + 5).seconds, EventKind.HrLost, EventSource.Auto))
-                add(RecordingEvent(start + drop.last.seconds, EventKind.SensorReconnected, EventSource.Auto))
-                add(RecordingEvent(start + drop.last.seconds, EventKind.HrBack, EventSource.Auto))
+                add(RecordingEvent(start + (drop.last + 1).seconds, EventKind.SensorReconnected, EventSource.Auto))
+                add(RecordingEvent(start + (drop.last + 1).seconds, EventKind.HrBack, EventSource.Auto))
             }
             for (km in 1..(seconds * metresPerSecond / 1000).toInt()) add(RecordingEvent(start + (km * 1000 / metresPerSecond).seconds, EventKind.Split(km), EventSource.Auto))
             add(RecordingEvent(stop, EventKind.Stop, EventSource.Manual))
@@ -60,6 +60,12 @@ object FakeSummary {
         data(RecordingType.Run, 52 * 60 + 40, metresPerSecond = 3.23) { s -> if (s <= 3160) 128 + (s * 43 / 3160) else 171 - ((s - 3160) * 31 / 60) },
         profile,
     )
+
+    /** The run with the cool-down skipped at once: "1 min after stop — skipped". */
+    val skippedCooldown: RunSummary = run.let {
+        val d = data(RecordingType.Run, 52 * 60 + 40, metresPerSecond = 3.23) { s -> if (s <= 3160) 128 + (s * 43 / 3160) else 171 }
+        RunSummary.compute(d.copy(events = d.events.map { e -> if (e.kind == EventKind.CooldownEnd) e.copy(t = e.t - 58.seconds) else e }), profile)
+    }
 
     /** 40:00, 3.8 km, no sensor paired. */
     val walk: RunSummary = RunSummary.compute(data(RecordingType.Walk, 40.minutes.inWholeSeconds.toInt(), metresPerSecond = 1.6, hr = null), profile)

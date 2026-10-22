@@ -71,7 +71,7 @@ class FakeSummaryTest {
         assertEquals("52:40", m.totalTime)
         assertEquals("moving 52:30", m.movingLine)
         assertEquals("10.19", m.distance)
-        assertEquals("Data · 1 sensor drop · 7 s gap · 0 crashes", m.dataQuality)
+        assertEquals("Data · 1 sensor drop · 6 s gap · 0 crashes", m.dataQuality)
     }
 
     @Test
@@ -97,5 +97,53 @@ class SummaryEditsModelTest {
         val m = SummaryModel.from(FakeSummary.walk)
         assertEquals("Your walk", m.yourLabel)
         assertEquals(false, m.showsTags)
+    }
+}
+
+/** summary-screen/03: the "Heart rate" card and the splits table over the preview fixture. */
+class SummaryHeartRateModelTest {
+    @Test
+    fun the_heart_rate_card_shows_average_max_and_the_recovery_with_its_readings() {
+        val m = SummaryModel.from(FakeSummary.run)
+        assertEquals("149", m.hrAverage)
+        assertEquals("171", m.hrMax)
+        assertEquals("−31", m.recovery)
+        assertEquals("171 → 140", m.recoveryDetail)
+    }
+
+    @Test
+    fun the_line_breaks_at_the_sensor_gap_and_labels_it_from_ten_seconds() {
+        val m = SummaryModel.from(FakeSummary.run)
+        assertEquals(listOf("sensor gap 12 s"), m.gapLabels.map { it.text })
+        assertEquals(6, m.bands.size, "one band per zone, Z0 to Z5")
+        assertEquals(true, m.linePoints.isNotEmpty())
+    }
+
+    @Test
+    fun zone_rows_add_up_to_the_effort_and_splits_list_every_km_with_the_partial_last_one() {
+        val m = SummaryModel.from(FakeSummary.run)
+        assertEquals(listOf("Z0", "Z1", "Z2", "Z3", "Z4", "Z5"), m.zones.map { it.label })
+        assertEquals(11, m.splits.size, "10 full km and the partial 11th")
+        assertEquals("1", m.splits.first().km)
+        assertEquals(true, m.splits.last().partial)
+        assertEquals("5:10", m.splits.first().pace)
+    }
+
+    @Test
+    fun a_walk_without_a_sensor_shows_dashes_and_no_line() {
+        val m = SummaryModel.from(FakeSummary.walk)
+        assertEquals(NO_VALUE, m.hrAverage)
+        assertEquals(NO_VALUE, m.recovery)
+        assertEquals("skipped", m.recoveryDetail)
+        assertEquals(emptyList(), m.linePoints)
+    }
+}
+
+class FakeSummarySkippedTest {
+    @Test
+    fun the_skipped_cool_down_fixture_has_no_recovery() {
+        val m = SummaryModel.from(FakeSummary.skippedCooldown)
+        assertEquals(NO_VALUE, m.recovery)
+        assertEquals("skipped", m.recoveryDetail)
     }
 }

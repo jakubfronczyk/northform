@@ -11,6 +11,7 @@ import com.jakubfronczyk.northform.core.metrics.Elevation
 import com.jakubfronczyk.northform.core.metrics.HeartRate
 import com.jakubfronczyk.northform.core.metrics.HrMaxSuggestion
 import com.jakubfronczyk.northform.core.metrics.HrRecovery
+import com.jakubfronczyk.northform.core.metrics.HrSeries
 import com.jakubfronczyk.northform.core.metrics.Pause
 import com.jakubfronczyk.northform.core.metrics.Pauses
 import com.jakubfronczyk.northform.core.metrics.RecordingMetrics
@@ -62,6 +63,10 @@ data class RunSummary(
     val trimp: Double,
     /** H7: bpm at stop − bpm 60 s later; null when skipped or not measured. */
     val hrRecovery: Int?,
+    /** The two readings behind [hrRecovery] ("172 → 141"); null exactly when it is. */
+    val hrRecoveryReadings: HrRecovery.Readings?,
+    /** H4: the line the Summary draws, 5 s buckets over the effort with its sensor gaps (summary-screen/03). */
+    val hrSeries: HrSeries,
     /** R6. */
     val splits: List<Splits.Row>,
     /** R7 (D25). */
@@ -119,6 +124,7 @@ data class RunSummary(
             val steps = Elevation.steps(data.fixes, pauses)
             val climb = Elevation.totals(steps.filter { it.at <= stoppedAt })
             val timeInZone = TimeInZone.compute(effort, profile)
+            val recovery = if (recording.type == RecordingType.Run || recording.type == RecordingType.Walk) HrRecovery.readings(data.hr, stoppedAt, cooldownEndedAt) else null
             return RunSummary(
                 recording = recording, profile = profile, stoppedAt = stoppedAt,
                 totalTime = totalTime, pausedTime = pausedTime, activeTime = activeTime,
@@ -128,7 +134,9 @@ data class RunSummary(
                 hrMax = effort.maxOfOrNull { it.bpm },
                 timeInZone = timeInZone,
                 trimp = Trimp.compute(effort, profile),
-                hrRecovery = if (recording.type == RecordingType.Run || recording.type == RecordingType.Walk) HrRecovery.compute(data.hr, stoppedAt, cooldownEndedAt) else null,
+                hrRecovery = recovery?.let { it.atStop - it.later },
+                hrRecoveryReadings = recovery,
+                hrSeries = HrSeries.compute(data.hr, startedAt, stoppedAt),
                 splits = Splits.table(Splits.marks(data.events), startedAt, stoppedAt, distance, pauses, data.hr, data.fixes, steps),
                 ascent = climb.ascent, descent = climb.descent,
                 suggestedTag = RunTagSuggestion.suggest(recording.type, effort, profile, totalTime, distance, timeInZone),

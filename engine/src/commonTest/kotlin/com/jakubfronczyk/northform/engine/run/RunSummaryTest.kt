@@ -9,6 +9,7 @@ import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RunTag
 import com.jakubfronczyk.northform.core.UserAction
+import com.jakubfronczyk.northform.core.metrics.HrRecovery
 import com.jakubfronczyk.northform.core.metrics.RecordingMetrics
 import com.jakubfronczyk.northform.core.ports.RecordingData
 import com.jakubfronczyk.northform.engine.store.InMemoryRecordingStore
@@ -68,6 +69,16 @@ class RunSummaryTest {
         // 55 samples 6..60: 45 × 150 + 10 × 120 → 144.5 → 145 (half away from zero)
         assertEquals(145, summary.hrAvg)
         assertEquals(-30, summary.hrRecovery, "150 at stop, 180 a minute later")
+        assertEquals(HrRecovery.Readings(atStop = 150, later = 180), summary.hrRecoveryReadings)
+    }
+
+    /** summary-screen/03: the chart's series stops at the stop, like the averages. */
+    @Test
+    fun the_heart_rate_series_covers_the_effort_only() {
+        val summary = RunSummary.compute(played().stored, profile)
+        assertEquals(55.seconds, summary.hrSeries.points.last().at, "the sample at the stop counts: a last bucket at 55 s of a 55 s effort")
+        assertTrue(summary.hrSeries.points.none { it.bpm == 180 }, "the cool-down's 180s are not in the line")
+        assertEquals(emptyList(), summary.hrSeries.gaps)
     }
 
     @Test

@@ -44,8 +44,8 @@ import com.jakubfronczyk.northform.ui.ValueCell
  * The Summary (R27, `SummaryDark.dc.html`, `SummaryWalk` = the same board for a walk): draws one
  * [SummarySession.State] and decides nothing (previews pass a state built on [FakeSummary]). Computing
  * shows a title only; Ready shows the top block ([SummaryModel]), the "Your run" edits and Save, with the
- * bin that opens the confirm sheet (`DeleteConfirm.dc.html`). Heart rate, splits and the map come with
- * summary-screen/03–04.
+ * bin that opens the confirm sheet (`DeleteConfirm.dc.html`); the heart-rate and splits cards are
+ * [SummaryCards.kt]. The map comes with summary-screen/04.
  */
 @Composable
 fun SummaryScreen(state: SummarySession.State, onSave: (SummaryEdits) -> Unit, onDelete: () -> Unit) {
@@ -86,8 +86,12 @@ private fun SummaryContent(m: SummaryModel, error: String?, busy: Boolean, onSav
             }
             Spacer(Modifier.height(20.dp))
             Text(m.dataQuality, style = Type.tertiaryText, color = Theme.text3)
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(24.dp))
 
+            HeartRateCard(m)
+            Spacer(Modifier.height(16.dp))
+            SplitsCard(m)
+            Spacer(Modifier.height(16.dp))
             EditsCard(m, tag, { tag = it }, rpe, { rpe = it }, notes, { notes = it })
             Spacer(Modifier.height(24.dp))
 
