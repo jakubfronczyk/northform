@@ -39,6 +39,8 @@ class SummarySession(
         data object Saved : State
         /** Delete done: the screen closes. */
         data object Deleted : State
+        /** The recording could not be loaded or computed: "Couldn't compute this run", Retry and Delete (never a silent return to Today). */
+        data class Failed(val reason: String, val busy: Boolean = false) : State
     }
 
     private val _state = MutableStateFlow<State>(State.Computing)
@@ -47,12 +49,25 @@ class SummarySession(
     /** The recording as loaded, kept for [acceptHrMax]'s recompute. */
     private var data: RecordingData? = null
 
-    /** Computing → Ready. The reliability row is written before the screen shows, so a later Delete still keeps the drops counted. */
+    /**
+     * Computing → Ready, or Failed when the store has no such recording, throws, or the data cannot be computed. The
+     * reliability row is written before the screen shows, so a later Delete still keeps the drops counted.
+     */
     suspend fun load() {
-        val loaded = store.load(recordingId) ?: error("recording ${recordingId.value} not found")
-        reliability.saveReliability(recordingId, ReliabilityRecord.of(loaded))
-        data = loaded
-        _state.value = State.Ready(RunSummary.compute(loaded, profile))
+        _state.value = runCatching {
+            val loaded = store.load(recordingId) ?: error("recording ${recordingId.value} not found")
+            val summary = RunSummary.compute(loaded, profile)
+            reliability.saveReliability(recordingId, ReliabilityRecord.of(loaded))
+            data = loaded
+            State.Ready(summary)
+        }.getOrElse { e -> State.Failed(e.message ?: e.toString()) }
+    }
+
+    /** Failed → Computing → [load] again (the Retry button). */
+    suspend fun retry() {
+        if (_state.value !is State.Failed) return
+        _state.value = State.Computing
+        load()
     }
 
     /**
@@ -80,12 +95,18 @@ class SummarySession(
             .onFailure { e -> _state.value = State.Ready(ready.summary, error = e.message ?: e.toString()) }
     }
 
-    /** Ready → Deleted (R27: after the screen's confirm sheet): the recording is removed. A store failure stays Ready with the error. */
+    /**
+     * Ready or Failed → Deleted (R27: after the screen's confirm sheet): the recording is removed. A store failure
+     * stays where it was, with the error.
+     */
     suspend fun delete() {
-        val ready = claim() ?: return
+        val from = claimForDelete() ?: return
         runCatching { store.delete(recordingId) }
             .onSuccess { _state.value = State.Deleted }
-            .onFailure { e -> _state.value = State.Ready(ready.summary, error = e.message ?: e.toString()) }
+            .onFailure { e ->
+                val reason = e.message ?: e.toString()
+                _state.value = when (from) { is State.Ready -> State.Ready(from.summary, error = reason); is State.Failed -> State.Failed(reason); else -> from }
+            }
     }
 
     /** Takes the Ready state for one store call: null when not Ready or already busy (the double tap). */
@@ -93,6 +114,19 @@ class SummarySession(
         var claimed: State.Ready? = null
         _state.update { s ->
             if (s is State.Ready && !s.busy) s.copy(busy = true, error = null).also { claimed = s } else s
+        }
+        return claimed
+    }
+
+    /** Like [claim], for Delete: Failed can be deleted too (the way out of a run that will never compute). */
+    private fun claimForDelete(): State? {
+        var claimed: State? = null
+        _state.update { s ->
+            when {
+                s is State.Ready && !s.busy -> s.copy(busy = true, error = null).also { claimed = s }
+                s is State.Failed && !s.busy -> s.copy(busy = true).also { claimed = s }
+                else -> s
+            }
         }
         return claimed
     }

@@ -102,6 +102,28 @@ class AppModelReplayTest {
         assertTrue(phases.any { "→ gate" in it } && phases.any { "→ active" in it } && phases.any { "→ done" in it }, "lifecycle log: $phases")
     }
 
+    /** summary-screen/05: a recording a crash left in `computing` opens the Summary at launch, never the crash prompt. */
+    @Test
+    fun a_computing_recording_found_at_launch_opens_the_summary_not_the_crash_prompt() = runTest {
+        val script = straightRun()
+        val store = InMemoryRecordingStore()
+        val first = AppModel(replayDeps(script, store, RecordedAlerts()), backgroundScope)
+        first.startRun(); runCurrent()
+        val run = assertNotNull(first.activeRun.value)
+        run.session.tap(UserAction.Start); advanceTimeBy(126.seconds); runCurrent()
+        run.session.tap(UserAction.Stop); advanceTimeBy(61.seconds); runCurrent()
+        first.closeRun(); advanceTimeBy(1.seconds); runCurrent()
+        assertEquals(RecordingState.Computing, assertNotNull(store.records.load(run.id)).recording.state, "the 'crash' happens here, Summary never confirmed")
+
+        val second = AppModel(replayDeps(script, store, RecordedAlerts()), backgroundScope) // the app reopens
+        second.checkUnfinished(); runCurrent()
+
+        assertNull(second.unfinished.value, "no crash prompt for a computing recording")
+        val summary = assertNotNull(second.summary.value, "the Summary opens directly")
+        assertIs<SummarySession.State.Ready>(summary.state.value)
+        assertEquals(run.id, summary.recordingId)
+    }
+
     /**
      * persistence/01: the same replay run on the store the phone boots with — `SqlRecordingStore` over
      * the on-disk `nativeDriver()` (schema created on first open, synchronous=FULL), inside the

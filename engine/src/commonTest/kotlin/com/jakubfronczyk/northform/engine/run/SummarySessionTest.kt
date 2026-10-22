@@ -229,3 +229,60 @@ class SummarySessionHrMaxTest {
         assertEquals(before, session.state.value)
     }
 }
+
+/** summary-screen/05: a recording that cannot be loaded or computed shows Failed, with Retry and Delete as the way out. */
+class SummarySessionFailedTest {
+    private val config = RunHarness.config
+
+    private fun stored() = RecordingData(
+        recording = Recording(id = config.recordingId, type = config.type, state = RecordingState.Computing, startUtc = at(5), tzOffset = config.tzOffset, endUtc = at(60)),
+        hr = (6..60).map { HrSample(at(it), 150) },
+        fixes = (6..60).map { fix(it, north = (it - 5) * 3.0) },
+        events = listOf(RecordingEvent(at(60), EventKind.Stop, EventSource.Manual), RecordingEvent(at(120), EventKind.CooldownEnd, EventSource.Auto)),
+        lastPersistedAt = at(120),
+    )
+
+    @Test
+    fun a_missing_recording_is_failed_not_a_crash() = runTest {
+        val store = InMemoryRecordingStore()
+        val session = SummarySession(config.recordingId, store, store, config.profile)
+        session.load()
+        val failed = assertIs<SummarySession.State.Failed>(session.state.value)
+        assertTrue("not found" in failed.reason, failed.reason)
+    }
+
+    @Test
+    fun a_store_that_throws_on_load_is_failed_and_retry_recovers_once_it_answers() = runTest {
+        val store = InMemoryRecordingStore()
+        store.seedComputing(stored())
+        var broken = true
+        val flaky = object : RecordingStore by store {
+            override suspend fun load(id: RecordingId): RecordingData? = if (broken) throw RuntimeException("database locked") else store.load(id)
+        }
+        val session = SummarySession(config.recordingId, flaky, store, config.profile)
+        session.load()
+        assertEquals("database locked", assertIs<SummarySession.State.Failed>(session.state.value).reason)
+
+        broken = false
+        session.retry()
+
+        assertIs<SummarySession.State.Ready>(session.state.value)
+    }
+
+    @Test
+    fun corrupt_data_that_cannot_be_computed_is_failed_and_delete_still_works() = runTest {
+        val store = InMemoryRecordingStore()
+        store.seedComputing(stored())
+        val unstopped = object : RecordingStore by store {
+            override suspend fun load(id: RecordingId): RecordingData? = store.load(id)?.let { it.copy(recording = it.recording.copy(endUtc = null)) } // no stop: compute refuses
+        }
+        val session = SummarySession(config.recordingId, unstopped, store, config.profile)
+        session.load()
+        assertIs<SummarySession.State.Failed>(session.state.value)
+
+        session.delete()
+
+        assertIs<SummarySession.State.Deleted>(session.state.value)
+        assertNull(store.load(config.recordingId))
+    }
+}

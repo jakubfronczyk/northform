@@ -75,6 +75,11 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
      */
     fun checkUnfinished() {
         scope.launch {
+            // summary-screen/05 (GLOSSARY "Computing"): every write was done, so the user is owed the Summary, not the prompt.
+            val computing = runCatching { deps.store.unfinished()?.takeIf { it.state == RecordingState.Computing } }
+                .onFailure { deps.log("unfinished check failed: $it") }
+                .getOrNull()
+            if (computing != null) { openSummary(computing.id); return@launch }
             _unfinished.value = runCatching { UnfinishedRun.find(deps) }
                 .onFailure { deps.log("unfinished check failed: $it") }
                 .getOrNull()
@@ -203,6 +208,9 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
 
     /** Save on the Summary: the session writes; the screen closes when it reports Saved, stays with the error otherwise. */
     fun saveSummary(edits: SummaryEdits) = settleSummary("saved") { save(edits) }
+
+    /** Retry on a Summary that could not be computed. */
+    fun retrySummary() { val session = _summary.value ?: return; scope.launch { session.retry() } }
 
     /** SU6: Update on the HRmax card; this Summary only (the profile store is the Settings feature's). */
     fun acceptHrMax() { _summary.value?.acceptHrMax() }

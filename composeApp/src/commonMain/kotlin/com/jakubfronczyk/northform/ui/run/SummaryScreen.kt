@@ -57,6 +57,8 @@ fun SummaryScreen(
     onDelete: () -> Unit,
     /** SU6: the HRmax card's Update. */
     onAcceptHrMax: () -> Unit = {},
+    /** Failed's Retry. */
+    onRetry: () -> Unit = {},
     /** The platform map (D13), as the run flow injects it; it reads [LocalMapCamera], provided here fitted to the route. */
     map: @Composable (route: Route) -> Unit = { route -> RouteCanvas(route) },
 ) {
@@ -65,7 +67,27 @@ fun SummaryScreen(
             Text("Computing…", style = Type.secondaryText, color = Theme.text2)
         }
         is SummarySession.State.Ready -> SummaryContent(SummaryModel.from(s.summary), error = s.error, busy = s.busy, onSave = onSave, onDelete = onDelete, onAcceptHrMax = onAcceptHrMax, map = map)
+        is SummarySession.State.Failed -> FailedContent(s.reason, busy = s.busy, onRetry = onRetry, onDelete = onDelete)
         SummarySession.State.Saved, SummarySession.State.Deleted -> Unit // the root removes the screen
+    }
+}
+
+/** "Couldn't compute this run": Retry, or Delete through the same confirm sheet (summary-screen/05). Never a silent Today. */
+@Composable
+private fun FailedContent(reason: String, busy: Boolean, onRetry: () -> Unit, onDelete: () -> Unit) {
+    var confirmDelete by remember { mutableStateOf(false) }
+    Box(Modifier.fillMaxSize().background(Theme.bg)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(top = 64.dp, bottom = 50.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Spacer(Modifier.weight(1f))
+            Text("Couldn't compute this run", style = Type.screenTitle, color = Theme.text)
+            Spacer(Modifier.height(8.dp))
+            Text(reason, style = Type.secondaryText, color = Theme.text3)
+            Spacer(Modifier.weight(1f))
+            BigButton("Retry", onRetry, enabled = !busy)
+            Spacer(Modifier.height(12.dp))
+            BigButton("Delete run", { confirmDelete = true }, fill = null, enabled = !busy)
+        }
+        if (confirmDelete) DeleteConfirmSheet(what = "run", detail = "It goes for good; nothing could be computed from it.", onKeep = { confirmDelete = false }, onDelete = { confirmDelete = false; onDelete() })
     }
 }
 
@@ -123,7 +145,7 @@ private fun SummaryContent(m: SummaryModel, error: String?, busy: Boolean, onSav
             BigButton("Save ${m.typeLabel.lowercase()}", enabled = !busy, onClick = { onSave(SummaryEdits(tag = tag, rpe = rpe, notes = notes.trim().ifEmpty { null })) })
             }
         }
-        if (confirmDelete) DeleteConfirmSheet(m, onKeep = { confirmDelete = false }, onDelete = { confirmDelete = false; onDelete() })
+        if (confirmDelete) DeleteConfirmSheet(what = m.typeLabel.lowercase(), detail = "It goes for good: ${m.distance} km · ${m.totalTime} · ${m.avgHr} bpm.", onKeep = { confirmDelete = false }, onDelete = { confirmDelete = false; onDelete() })
     }
 }
 
@@ -200,7 +222,7 @@ private fun BinButton(enabled: Boolean, onClick: () -> Unit) {
 
 /** `DeleteConfirm.dc.html` (R27: the second of the two taps): a scrim and a bottom sheet with the run's headline numbers. */
 @Composable
-private fun DeleteConfirmSheet(m: SummaryModel, onKeep: () -> Unit, onDelete: () -> Unit) {
+private fun DeleteConfirmSheet(what: String, detail: String, onKeep: () -> Unit, onDelete: () -> Unit) {
     Box(Modifier.fillMaxSize().background(Color(0x99000000)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onKeep)) {
         Column(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth()
@@ -209,10 +231,10 @@ private fun DeleteConfirmSheet(m: SummaryModel, onKeep: () -> Unit, onDelete: ()
                 .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 50.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            Text("Delete this ${m.typeLabel.lowercase()}?", style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Black), color = Theme.text)
-            Text("It goes for good: ${m.distance} km · ${m.totalTime} · ${m.avgHr} bpm.", style = Type.secondaryText, color = Theme.text2)
+            Text("Delete this $what?", style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Black), color = Theme.text)
+            Text(detail, style = Type.secondaryText, color = Theme.text2)
             BigButton("Delete for good", onDelete, fill = Color(0xFFB83A2E))
-            BigButton("Keep ${m.typeLabel.lowercase()}", onKeep, fill = null)
+            BigButton("Keep $what", onKeep, fill = null)
         }
     }
 }
