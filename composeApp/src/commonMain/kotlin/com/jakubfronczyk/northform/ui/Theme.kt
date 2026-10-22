@@ -88,7 +88,7 @@ object RunFormat {
         return "${(secondsOfDay / 3600).toInt().pad2()}:${(secondsOfDay / 60 % 60).toInt().pad2()}"
     }
 
-    /** "Tue 30 Sep" in a recording's own time zone. Civil date from days since the epoch (Howard Hinnant's algorithm); no date library. */
+    /** "Tue 30 Sep" in a recording's own time zone (the Summary's date line, R27). Civil date from days since the epoch (Howard Hinnant's algorithm); no date library. */
     fun date(instant: Instant, tzOffset: Int): String {
         val days = (instant.epochSeconds + tzOffset).floorDiv(86_400L)
         val z = days + 719_468

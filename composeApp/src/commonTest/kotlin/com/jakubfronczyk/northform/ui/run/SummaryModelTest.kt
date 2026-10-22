@@ -105,7 +105,7 @@ class SummaryHeartRateModelTest {
     @Test
     fun the_heart_rate_card_shows_average_max_and_the_recovery_with_its_readings() {
         val m = SummaryModel.from(FakeSummary.run)
-        assertEquals("149", m.hrAverage)
+        assertEquals("149", m.avgHr)
         assertEquals("171", m.hrMax)
         assertEquals("−31", m.recovery)
         assertEquals("171 → 140", m.recoveryDetail)
@@ -114,7 +114,7 @@ class SummaryHeartRateModelTest {
     @Test
     fun the_line_breaks_at_the_sensor_gap_and_labels_it_from_ten_seconds() {
         val m = SummaryModel.from(FakeSummary.run)
-        assertEquals(listOf("sensor gap 12 s"), m.gapLabels.map { it.text })
+        assertEquals(listOf("sensor gap 12 s"), m.gapLabels.map { it.label })
         assertEquals(6, m.bands.size, "one band per zone, Z0 to Z5")
         assertEquals(true, m.linePoints.isNotEmpty())
     }
@@ -132,7 +132,7 @@ class SummaryHeartRateModelTest {
     @Test
     fun a_walk_without_a_sensor_shows_dashes_and_no_line() {
         val m = SummaryModel.from(FakeSummary.walk)
-        assertEquals(NO_VALUE, m.hrAverage)
+        assertEquals(NO_VALUE, m.avgHr)
         assertEquals(NO_VALUE, m.recovery)
         assertEquals("skipped", m.recoveryDetail)
         assertEquals(emptyList(), m.linePoints)

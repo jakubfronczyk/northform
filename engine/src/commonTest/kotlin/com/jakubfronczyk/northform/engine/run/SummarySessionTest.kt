@@ -13,6 +13,8 @@ import com.jakubfronczyk.northform.core.RunTag
 import com.jakubfronczyk.northform.core.metrics.RecordingMetrics
 import com.jakubfronczyk.northform.core.ports.RecordingData
 import com.jakubfronczyk.northform.core.ports.RecordingStore
+import com.jakubfronczyk.northform.core.ports.ReliabilityStore
+import com.jakubfronczyk.northform.core.reliability.ReliabilityRecord
 import com.jakubfronczyk.northform.engine.store.InMemoryRecordingStore
 import com.jakubfronczyk.northform.testing.RunHarness
 import com.jakubfronczyk.northform.testing.at
@@ -86,7 +88,7 @@ class SummarySessionSaveTest {
         val session = SummarySession(config.recordingId, store, store, config.profile)
         session.load()
 
-        session.save(SummaryEdits(tag = RunTag.Tempo, rpe = 7, notes = "windy"))
+        session.edit(SummaryEdits(tag = RunTag.Tempo, rpe = 7, notes = "windy")); session.save()
 
         assertIs<SummarySession.State.Saved>(session.state.value)
         val saved = assertNotNull(store.load(config.recordingId)).recording
@@ -108,7 +110,7 @@ class SummarySessionSaveTest {
         val session = SummarySession(config.recordingId, failing, store, config.profile)
         session.load()
 
-        session.save(SummaryEdits(tag = null, rpe = 5, notes = null))
+        session.edit(SummaryEdits(tag = null, rpe = 5, notes = null)); session.save()
 
         val ready = assertIs<SummarySession.State.Ready>(session.state.value)
         assertEquals("disk full", ready.error)
@@ -148,7 +150,7 @@ class SummarySessionEditsTest {
         val session = SummarySession(config.recordingId, store, store, config.profile)
         session.load()
 
-        session.save(SummaryEdits(tag = RunTag.Easy, rpe = 3, notes = null))
+        session.edit(SummaryEdits(tag = RunTag.Easy, rpe = 3, notes = null)); session.save()
 
         assertNull(assertNotNull(store.load(config.recordingId)).recording.tag)
     }
@@ -169,10 +171,11 @@ class SummarySessionEditsTest {
         val session = SummarySession(config.recordingId, slow, store, config.profile)
         session.load()
 
-        val first = launch { session.save(SummaryEdits(tag = null, rpe = 6, notes = "first")) }
+        session.edit(SummaryEdits(tag = null, rpe = 6, notes = "first"))
+        val first = launch { session.save() }
         runCurrent()
         assertTrue(assertIs<SummarySession.State.Ready>(session.state.value).busy, "Save and Delete are disabled while the store answers")
-        session.save(SummaryEdits(tag = null, rpe = 9, notes = "second")) // the double tap
+        session.save() // the double tap
         session.delete() // and a Delete during the write
         gate.complete(Unit)
         first.join()
@@ -213,7 +216,7 @@ class SummarySessionHrMaxTest {
         assertNull(after.hrMaxSuggestion, "the card goes away once accepted")
         assertTrue(after.timeInZone != before.timeInZone, "the zones moved with the new reserve")
 
-        session.save(SummaryEdits(tag = null, rpe = null, notes = null))
+        session.edit(SummaryEdits(tag = null, rpe = null, notes = null)); session.save()
         assertTrue(store.records.metrics(config.recordingId).all { it.profile.hrMax == 195 }, "D24: the metrics carry the profile they were computed with")
         assertEquals(187, config.profile.hrMax, "the app's profile is not touched (Settings owns that)")
     }
@@ -284,5 +287,71 @@ class SummarySessionFailedTest {
 
         assertIs<SummarySession.State.Deleted>(session.state.value)
         assertNull(store.load(config.recordingId))
+    }
+}
+
+/** code review c.1: the reliability row is written before compute, so a run that never computes still counts its drops. */
+class SummarySessionReliabilityTest {
+    private val config = RunHarness.config
+
+    private fun stored() = RecordingData(
+        recording = Recording(id = config.recordingId, type = config.type, state = RecordingState.Computing, startUtc = at(5), tzOffset = config.tzOffset, endUtc = at(60)),
+        hr = (6..60).map { HrSample(at(it), 150) },
+        fixes = (6..60).map { fix(it, north = (it - 5) * 3.0) },
+        events = listOf(RecordingEvent(at(20), EventKind.SensorLost, EventSource.Auto), RecordingEvent(at(26), EventKind.SensorReconnected, EventSource.Auto), RecordingEvent(at(60), EventKind.Stop, EventSource.Manual), RecordingEvent(at(120), EventKind.CooldownEnd, EventSource.Auto)),
+        lastPersistedAt = at(120),
+    )
+
+    @Test
+    fun a_run_that_cannot_be_computed_still_gets_its_reliability_row() = runTest {
+        val store = InMemoryRecordingStore()
+        store.seedComputing(stored())
+        val unstopped = object : RecordingStore by store {
+            override suspend fun load(id: RecordingId): RecordingData? = store.load(id)?.let { it.copy(recording = it.recording.copy(endUtc = null)) }
+        }
+        val session = SummarySession(config.recordingId, unstopped, store, config.profile)
+        session.load()
+        assertIs<SummarySession.State.Failed>(session.state.value)
+        assertEquals(1, assertNotNull(store.records.reliability(config.recordingId)).drops, "written before compute, so Delete from Failed keeps the drop counted")
+    }
+
+    @Test
+    fun a_reliability_store_that_throws_does_not_fail_a_computable_run() = runTest {
+        val store = InMemoryRecordingStore()
+        store.seedComputing(stored())
+        val broken = object : ReliabilityStore { override suspend fun saveReliability(id: RecordingId, record: ReliabilityRecord) = throw RuntimeException("disk full") }
+        val session = SummarySession(config.recordingId, store, broken, config.profile)
+        session.load()
+        assertIs<SummarySession.State.Ready>(session.state.value, "the row is a cache of the data; losing it costs a recompute, not the Summary")
+    }
+}
+
+/** code review a.1: the session owns the edits, preselecting the suggested tag, so the screen takes them as parameters. */
+class SummarySessionEditsFlowTest {
+    private val config = RunHarness.config
+
+    @Test
+    fun the_edits_start_with_the_suggested_tag_and_save_stores_what_was_edited() = runTest {
+        val store = InMemoryRecordingStore()
+        val tempo = RecordingData(
+            recording = Recording(id = config.recordingId, type = config.type, state = RecordingState.Computing, startUtc = at(0), tzOffset = config.tzOffset, endUtc = at(1500)),
+            hr = (1..1500).map { HrSample(at(it), 168) }, // 85% HRR for 25 min: a Tempo by R0
+            fixes = (1..1500).map { fix(it, north = it * 4.0) },
+            events = listOf(RecordingEvent(at(1500), EventKind.Stop, EventSource.Manual), RecordingEvent(at(1560), EventKind.CooldownEnd, EventSource.Auto)),
+            lastPersistedAt = at(1560),
+        )
+        store.seedComputing(tempo)
+        val session = SummarySession(config.recordingId, store, store, config.profile)
+        session.load()
+        val suggested = assertIs<SummarySession.State.Ready>(session.state.value).summary.suggestedTag
+        assertNotNull(suggested, "the fixture must suggest a tag")
+        assertEquals(SummaryEdits(tag = suggested, rpe = null, notes = null), session.edits.value)
+
+        session.edit(session.edits.value.copy(rpe = 8))
+        session.save()
+
+        val saved = assertNotNull(store.load(config.recordingId)).recording
+        assertEquals(suggested, saved.tag)
+        assertEquals(8, saved.rpe)
     }
 }

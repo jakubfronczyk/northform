@@ -53,7 +53,10 @@ import com.jakubfronczyk.northform.ui.ValueCell
 @Composable
 fun SummaryScreen(
     state: SummarySession.State,
-    onSave: (SummaryEdits) -> Unit,
+    /** The "Your run" card's values, owned by the session (History's Review mode passes the stored ones with no [onEdit]). */
+    edits: SummaryEdits,
+    onEdit: (SummaryEdits) -> Unit,
+    onSave: () -> Unit,
     onDelete: () -> Unit,
     /** SU6: the HRmax card's Update. */
     onAcceptHrMax: () -> Unit = {},
@@ -66,37 +69,33 @@ fun SummaryScreen(
         SummarySession.State.Computing -> Box(Modifier.fillMaxSize().background(Theme.bg), contentAlignment = Alignment.Center) {
             Text("Computing…", style = Type.secondaryText, color = Theme.text2)
         }
-        is SummarySession.State.Ready -> SummaryContent(SummaryModel.from(s.summary), error = s.error, busy = s.busy, onSave = onSave, onDelete = onDelete, onAcceptHrMax = onAcceptHrMax, map = map)
-        is SummarySession.State.Failed -> FailedContent(s.reason, busy = s.busy, onRetry = onRetry, onDelete = onDelete)
+        is SummarySession.State.Ready -> SummaryContent(SummaryModel.from(s.summary), edits, onEdit, error = s.error, busy = s.busy, onSave = onSave, onDelete = onDelete, onAcceptHrMax = onAcceptHrMax, map = map)
+        is SummarySession.State.Failed -> FailedContent(s.reason, noun = s.type?.let(SummaryModel::noun) ?: "recording", busy = s.busy, onRetry = onRetry, onDelete = onDelete)
         SummarySession.State.Saved, SummarySession.State.Deleted -> Unit // the root removes the screen
     }
 }
 
 /** "Couldn't compute this run": Retry, or Delete through the same confirm sheet (summary-screen/05). Never a silent Today. */
 @Composable
-private fun FailedContent(reason: String, busy: Boolean, onRetry: () -> Unit, onDelete: () -> Unit) {
+private fun FailedContent(reason: String, noun: String, busy: Boolean, onRetry: () -> Unit, onDelete: () -> Unit) {
     var confirmDelete by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         Column(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(top = 64.dp, bottom = 50.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.weight(1f))
-            Text("Couldn't compute this run", style = Type.screenTitle, color = Theme.text)
+            Text("Couldn't compute this $noun", style = Type.screenTitle, color = Theme.text)
             Spacer(Modifier.height(8.dp))
             Text(reason, style = Type.secondaryText, color = Theme.text3)
             Spacer(Modifier.weight(1f))
             BigButton("Retry", onRetry, enabled = !busy)
             Spacer(Modifier.height(12.dp))
-            BigButton("Delete run", { confirmDelete = true }, fill = null, enabled = !busy)
+            BigButton("Delete $noun", { confirmDelete = true }, fill = null, enabled = !busy)
         }
-        if (confirmDelete) DeleteConfirmSheet(what = "run", detail = "It goes for good; nothing could be computed from it.", onKeep = { confirmDelete = false }, onDelete = { confirmDelete = false; onDelete() })
+        if (confirmDelete) DeleteConfirmSheet(what = noun, detail = "Nothing could be computed from it. This can't be undone.", onKeep = { confirmDelete = false }, onDelete = { confirmDelete = false; onDelete() })
     }
 }
 
 @Composable
-private fun SummaryContent(m: SummaryModel, error: String?, busy: Boolean, onSave: (SummaryEdits) -> Unit, onDelete: () -> Unit, onAcceptHrMax: () -> Unit, map: @Composable (route: Route) -> Unit) {
-    // The edits live here, with the screen (R27): they go to the store only on Save.
-    var tag by remember(m.suggestedTag) { mutableStateOf(m.suggestedTag) }
-    var rpe by remember { mutableStateOf<Int?>(null) }
-    var notes by remember { mutableStateOf("") }
+private fun SummaryContent(m: SummaryModel, edits: SummaryEdits, onEdit: (SummaryEdits) -> Unit, error: String?, busy: Boolean, onSave: () -> Unit, onDelete: () -> Unit, onAcceptHrMax: () -> Unit, map: @Composable (route: Route) -> Unit) {
     var confirmDelete by remember { mutableStateOf(false) }
 
     // One fitted camera for this Summary: the whole route once, then the user's pans and zooms (summary-screen/04).
@@ -135,17 +134,18 @@ private fun SummaryContent(m: SummaryModel, error: String?, busy: Boolean, onSav
             Spacer(Modifier.height(16.dp))
             SplitsCard(m)
             Spacer(Modifier.height(16.dp))
-            EditsCard(m, tag, { tag = it }, rpe, { rpe = it }, notes, { notes = it })
+            EditsCard(m, edits, onEdit)
             Spacer(Modifier.height(24.dp))
 
             if (error != null) {
                 Text("Couldn't save: $error", style = Type.secondaryText, color = Theme.warn)
                 Spacer(Modifier.height(12.dp))
             }
-            BigButton("Save ${m.typeLabel.lowercase()}", enabled = !busy, onClick = { onSave(SummaryEdits(tag = tag, rpe = rpe, notes = notes.trim().ifEmpty { null })) })
+            BigButton("Save ${m.typeLabel.lowercase()}", enabled = !busy, onClick = onSave)
             }
         }
-        if (confirmDelete) DeleteConfirmSheet(what = m.typeLabel.lowercase(), detail = "It goes for good: ${m.distance} km · ${m.totalTime} · ${m.avgHr} bpm.", onKeep = { confirmDelete = false }, onDelete = { confirmDelete = false; onDelete() })
+        // `DeleteConfirm.dc.html`: "Tempo · 10.21 km · 30 Sep. This can't be undone."
+        if (confirmDelete) DeleteConfirmSheet(what = m.typeLabel.lowercase(), detail = "${edits.tag?.name ?: m.typeLabel} · ${m.distance} km · ${m.dateLine.substringBefore(" ·")}. This can't be undone.", onKeep = { confirmDelete = false }, onDelete = { confirmDelete = false; onDelete() })
     }
 }
 
@@ -167,7 +167,13 @@ private fun HrMaxCard(suggested: String, current: String, enabled: Boolean, onAc
 
 /** The "Your run" card: Type chips (a run only), "How hard did it feel?" 0–10 in two rows, Notes. */
 @Composable
-private fun EditsCard(m: SummaryModel, tag: RunTag?, onTag: (RunTag?) -> Unit, rpe: Int?, onRpe: (Int?) -> Unit, notes: String, onNotes: (String) -> Unit) {
+private fun EditsCard(m: SummaryModel, edits: SummaryEdits, onEdit: (SummaryEdits) -> Unit) {
+    val tag = edits.tag
+    val rpe = edits.rpe
+    val notes = edits.notes ?: ""
+    val onTag = { t: RunTag? -> onEdit(edits.copy(tag = t)) }
+    val onRpe = { n: Int? -> onEdit(edits.copy(rpe = n)) }
+    val onNotes = { text: String -> onEdit(edits.copy(notes = text.ifEmpty { null })) }
     Column(Modifier.fillMaxWidth().background(Theme.card, RoundedCornerShape(18.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(m.yourLabel, style = Type.sheetTitle, color = Theme.text)
         if (m.showsTags) {

@@ -18,8 +18,9 @@ data class SummaryEdits(val tag: RunTag?, val rpe: Int?, val notes: String?)
 
 /**
  * The Summary's lifecycle over the store (summary-screen spec): a recording in `computing` is loaded,
- * its reliability row written, its [RunSummary] computed, and the screen reads the [state]. Pure Kotlin
- * over the ports, no dispatcher of its own: the app launches its calls, tests call them directly.
+ * its reliability row written, its [RunSummary] computed, and the screen reads the [state] and the
+ * [edits]. Pure Kotlin over the ports, no dispatcher of its own: the app launches its calls, tests call
+ * them directly.
  */
 class SummarySession(
     val recordingId: RecordingId,
@@ -27,6 +28,7 @@ class SummarySession(
     private val reliability: ReliabilityStore,
     private val profile: Profile,
 ) {
+    /** Where the Summary is in its life: what the screen draws (summary-screen/01, 05). */
     sealed interface State {
         /** Loading and computing; what the screen shows first. */
         data object Computing : State
@@ -39,26 +41,36 @@ class SummarySession(
         data object Saved : State
         /** Delete done: the screen closes. */
         data object Deleted : State
-        /** The recording could not be loaded or computed: "Couldn't compute this run", Retry and Delete (never a silent return to Today). */
-        data class Failed(val reason: String, val busy: Boolean = false) : State
+        /**
+         * The recording could not be loaded or computed: "Couldn't compute this run", Retry and Delete (never a silent
+         * return to Today). [type] is known when the load worked and only the compute failed. [busy] as in [Ready].
+         */
+        data class Failed(val reason: String, val type: RecordingType? = null, val busy: Boolean = false) : State
     }
 
     private val _state = MutableStateFlow<State>(State.Computing)
     val state: StateFlow<State> = _state.asStateFlow()
+
+    private val _edits = MutableStateFlow(SummaryEdits(tag = null, rpe = null, notes = null))
+    /** The user's edits so far (R27), the suggested tag preselected (D76); the screen draws them and sends changes through [edit]. */
+    val edits: StateFlow<SummaryEdits> = _edits.asStateFlow()
 
     /** The recording as loaded, kept for [acceptHrMax]'s recompute. */
     private var data: RecordingData? = null
 
     /**
      * Computing → Ready, or Failed when the store has no such recording, throws, or the data cannot be computed. The
-     * reliability row is written before the screen shows, so a later Delete still keeps the drops counted.
+     * reliability row is written before the compute, so a run that never computes and is deleted still counts its
+     * drops; it is a cache of the data (R29), so a write that fails costs a recompute later, never the Summary.
      */
     suspend fun load() {
         _state.value = runCatching {
             val loaded = store.load(recordingId) ?: error("recording ${recordingId.value} not found")
-            val summary = RunSummary.compute(loaded, profile)
-            reliability.saveReliability(recordingId, ReliabilityRecord.of(loaded))
             data = loaded
+            runCatching { reliability.saveReliability(recordingId, ReliabilityRecord.of(loaded)) }
+            val summary = runCatching { RunSummary.compute(loaded, profile) }
+                .getOrElse { e -> return@runCatching State.Failed(e.message ?: e.toString(), type = loaded.recording.type) }
+            _edits.value = SummaryEdits(tag = summary.suggestedTag, rpe = null, notes = null)
             State.Ready(summary)
         }.getOrElse { e -> State.Failed(e.message ?: e.toString()) }
     }
@@ -68,6 +80,11 @@ class SummarySession(
         if (_state.value !is State.Failed) return
         _state.value = State.Computing
         load()
+    }
+
+    /** A change on the "Your run" card; nothing reaches the store until [save]. */
+    fun edit(edits: SummaryEdits) {
+        _edits.value = edits
     }
 
     /**
@@ -84,11 +101,12 @@ class SummarySession(
     }
 
     /**
-     * Ready → Saved: `computing` → `saved` with the edits and the metric rows. A walk stores no tag (the chips are not
-     * shown for one). A store failure stays Ready with the error; a tap while busy does nothing.
+     * Ready → Saved: `computing` → `saved` with the [edits] and the metric rows. A walk stores no tag (the chips are
+     * not shown for one). A store failure stays Ready with the error; a tap while busy does nothing.
      */
-    suspend fun save(edits: SummaryEdits) {
-        val ready = claim() ?: return
+    suspend fun save() {
+        val ready = claim() as? State.Ready ?: return
+        val edits = _edits.value
         val tag = if (ready.summary.recording.type == RecordingType.Walk) null else edits.tag
         runCatching { store.saveRunSummary(ready.summary, tag, edits.rpe, edits.notes) }
             .onSuccess { _state.value = State.Saved }
@@ -100,26 +118,24 @@ class SummarySession(
      * stays where it was, with the error.
      */
     suspend fun delete() {
-        val from = claimForDelete() ?: return
+        val from = claim() ?: return
         runCatching { store.delete(recordingId) }
             .onSuccess { _state.value = State.Deleted }
             .onFailure { e ->
                 val reason = e.message ?: e.toString()
-                _state.value = when (from) { is State.Ready -> State.Ready(from.summary, error = reason); is State.Failed -> State.Failed(reason); else -> from }
+                _state.value = when (from) {
+                    is State.Ready -> State.Ready(from.summary, error = reason)
+                    is State.Failed -> State.Failed(reason, type = from.type)
+                    else -> from
+                }
             }
     }
 
-    /** Takes the Ready state for one store call: null when not Ready or already busy (the double tap). */
-    private fun claim(): State.Ready? {
-        var claimed: State.Ready? = null
-        _state.update { s ->
-            if (s is State.Ready && !s.busy) s.copy(busy = true, error = null).also { claimed = s } else s
-        }
-        return claimed
-    }
-
-    /** Like [claim], for Delete: Failed can be deleted too (the way out of a run that will never compute). */
-    private fun claimForDelete(): State? {
+    /**
+     * Takes the state for one store call, marking it busy: null when already busy (the double tap) or in a state with
+     * nothing to do. Save needs Ready; Delete takes Ready or Failed (the way out of a run that will never compute).
+     */
+    private fun claim(): State? {
         var claimed: State? = null
         _state.update { s ->
             when {

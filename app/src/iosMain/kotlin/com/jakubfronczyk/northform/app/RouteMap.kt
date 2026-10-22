@@ -72,7 +72,8 @@ private class DrawnRoute(onUserDrag: () -> Unit) {
     private var following = true
     private val lines = ArrayList<MKPolyline?>()
 
-    private var fitted = false
+    /** The fitted camera's one-time framing is done (summary-screen/04). */
+    private var fitDone = false
 
     fun sync(map: MKMapView, next: Route, follow: Boolean, followUser: Boolean, fit: Boolean = false) {
         if (follow && !following && !fit) { // "Re-center" tapped: back onto the dot (live) or the route's end (replay)
@@ -92,7 +93,7 @@ private class DrawnRoute(onUserDrag: () -> Unit) {
         val last = segments.lastOrNull()?.lastOrNull()
         if (fit) {
             // summary-screen/04: the whole route in view once; after that the user pans and zooms freely.
-            if (!fitted) { fitAll(map); fitted = true }
+            if (!fitDone) { fitAll(map); fitDone = true }
         } else if (follow && !followUser && last != null && last != route?.segments?.lastOrNull()?.lastOrNull()) center(map, next, animated = true)
         route = next
     }

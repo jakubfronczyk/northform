@@ -81,9 +81,11 @@ class RunFlowScriptTest {
         assertEquals(RunPhase.Cooldown(clock.now() + 60.seconds), session.snapshots.value.phase)
         assertEquals(EndResult.Finishing, session.end())
 
-        // The cool-down runs out: Done.
+        // The cool-down runs out: Done, and the flow closes itself (summary-screen/01: the root opens the Summary).
+        assertFalse(RunFlow.closesAt(session.snapshots.value), "open through the cool-down")
         advanceTimeBy(60_000); fake.advanceTo(clock.now())
         assertEquals(RunPhase.Done, session.snapshots.value.phase)
+        assertTrue(RunFlow.closesAt(session.snapshots.value))
 
         assertEquals(listOf(UserAction.Start, UserAction.Pause, UserAction.Resume, UserAction.Stop), fake.sent.map { it.first })
     }

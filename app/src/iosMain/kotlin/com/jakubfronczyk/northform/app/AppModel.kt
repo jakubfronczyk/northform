@@ -75,14 +75,11 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
      */
     fun checkUnfinished() {
         scope.launch {
-            // summary-screen/05 (GLOSSARY "Computing"): every write was done, so the user is owed the Summary, not the prompt.
-            val computing = runCatching { deps.store.unfinished()?.takeIf { it.state == RecordingState.Computing } }
-                .onFailure { deps.log("unfinished check failed: $it") }
-                .getOrNull()
-            if (computing != null) { openSummary(computing.id); return@launch }
-            _unfinished.value = runCatching { UnfinishedRun.find(deps) }
-                .onFailure { deps.log("unfinished check failed: $it") }
-                .getOrNull()
+            runCatching {
+                // summary-screen/05 (GLOSSARY "Computing"): every write was done, so the user is owed the Summary, not the prompt.
+                val computing = deps.store.unfinished()?.takeIf { it.state == RecordingState.Computing }
+                if (computing != null) openSummary(computing.id) else _unfinished.value = UnfinishedRun.find(deps)
+            }.onFailure { deps.log("unfinished check failed: $it") }
         }
     }
 
@@ -206,8 +203,11 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
         deps.log("run ${id.value.take(8)} summary: ${session.state.value::class.simpleName}")
     }
 
+    /** A change on the Summary's "Your run" card. */
+    fun editSummary(edits: SummaryEdits) { _summary.value?.edit(edits) }
+
     /** Save on the Summary: the session writes; the screen closes when it reports Saved, stays with the error otherwise. */
-    fun saveSummary(edits: SummaryEdits) = settleSummary("saved") { save(edits) }
+    fun saveSummary() = settleSummary("saved") { save() }
 
     /** Retry on a Summary that could not be computed. */
     fun retrySummary() { val session = _summary.value ?: return; scope.launch { session.retry() } }

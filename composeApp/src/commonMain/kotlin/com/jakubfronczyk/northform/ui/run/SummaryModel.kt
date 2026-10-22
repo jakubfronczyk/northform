@@ -45,8 +45,7 @@ data class SummaryModel(
     val hrMaxCurrent: String,
     /** The map's line (the platform map slot draws it). */
     val route: Route,
-    // ── The "Heart rate" card (H1, H3, H4, H7) ──
-    val hrAverage: String,
+    // ── The "Heart rate" card (H1, H3, H4, H7); Average is [avgHr] again ──
     val hrMax: String,
     /** "−31": the change a minute after the stop (the artboard's sign; H7's metric stores stop − later = +31). [NO_VALUE] when not measured. */
     val recovery: String,
@@ -58,17 +57,21 @@ data class SummaryModel(
     /** The six zone bands behind the line, bpm bounds from the profile; Z0 and Z5 open-ended to [bpmRange]. */
     val bands: List<Band>,
     val bpmRange: IntRange,
-    /** The sensor gaps as the line shows them; [GapLabel.text] only from 10 s ("sensor gap 12 s"), empty under. */
+    /** The sensor gaps as the line shows them; [GapLabel.label] only from 10 s ("sensor gap 12 s"), null under. */
     val gapLabels: List<GapLabel>,
     /** "Total per zone": Z0 → Z5, bar length as a fraction of the longest. */
     val zones: List<ZoneRow>,
     // ── Splits (R6, R7) ──
     val splits: List<SplitRow>,
 ) {
+    /** One 5 s bucket of the line (H4): seconds from the start, mean bpm. */
     data class LinePoint(val seconds: Double, val bpm: Int)
+    /** One zone band behind the line (H3): the zone number and its bpm bounds. */
     data class Band(val zone: Int, val lowBpm: Int, val highBpm: Int)
-    data class GapLabel(val fromSeconds: Double, val untilSeconds: Double, val text: String)
-    data class ZoneRow(val label: String, val name: String, val time: String, val fraction: Float, val zone: Int)
+    /** A sensor gap (GLOSSARY) as the line shows it; [label] null under 10 s. */
+    data class GapLabel(val fromSeconds: Double, val untilSeconds: Double, val label: String?)
+    /** One "Total per zone" row (H3): "Z3", its time, the bar as a fraction of the longest zone. */
+    data class ZoneRow(val label: String, val time: String, val fraction: Float, val zone: Int)
     /** One km; [paceFraction] is the pace bar (the fastest km fills it); [elev] "+12 / −4" m. */
     data class SplitRow(val km: String, val pace: String, val paceFraction: Float, val hr: String, val elev: String, val partial: Boolean)
 
@@ -93,7 +96,6 @@ data class SummaryModel(
                 hrMaxSuggestion = summary.hrMaxSuggestion?.toString(),
                 hrMaxCurrent = profile.hrMax.toString(),
                 route = summary.route,
-                hrAverage = summary.hrAvg?.toString() ?: NO_VALUE,
                 hrMax = summary.hrMax?.toString() ?: NO_VALUE,
                 recovery = summary.hrRecovery?.let { signed(-it) } ?: NO_VALUE,
                 recoveryDetail = summary.hrRecoveryReadings?.let { "${it.atStop} → ${it.later}" } ?: "skipped",
@@ -102,7 +104,7 @@ data class SummaryModel(
                 bands = bands(profile, bpmRange),
                 bpmRange = bpmRange,
                 gapLabels = summary.hrSeries.gaps.map { g ->
-                    GapLabel(g.from.inSecondsDouble, g.until.inSecondsDouble, if (g.length >= 10.seconds) "sensor gap ${g.length.inWholeSeconds} s" else "")
+                    GapLabel(g.from.inSecondsDouble, g.until.inSecondsDouble, if (g.length >= 10.seconds) "sensor gap ${g.length.inWholeSeconds} s" else null)
                 },
                 zones = zoneRows(summary.timeInZone),
                 splits = splitRows(summary.splits),
@@ -125,7 +127,7 @@ data class SummaryModel(
         private fun zoneRows(timeInZone: Map<Zone, Duration>): List<ZoneRow> {
             val longest = timeInZone.values.maxOrNull()?.takeIf { it > Duration.ZERO }
             return timeInZone.entries.sortedBy { it.key.number }.map { (zone, time) ->
-                ZoneRow(zone.label, zone.name, RunFormat.time(time), longest?.let { (time / it).toFloat() } ?: 0f, zone.number)
+                ZoneRow(zone.label, RunFormat.time(time), longest?.let { (time / it).toFloat() } ?: 0f, zone.number)
             }
         }
 
@@ -146,6 +148,7 @@ data class SummaryModel(
 
         private fun signed(n: Int) = if (n < 0) "−${-n}" else "+$n"
 
+        /** "run" / "walk": the word the screen builds its labels from (GLOSSARY: never "run" for a walk). */
         fun noun(type: RecordingType) = when (type) { RecordingType.Run -> "run"; RecordingType.Walk -> "walk" }
 
         private fun plural(n: Int, one: String, many: String = "${one}s") = "$n ${if (n == 1) one else many}"

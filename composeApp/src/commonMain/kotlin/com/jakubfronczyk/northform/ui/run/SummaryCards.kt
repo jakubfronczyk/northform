@@ -36,12 +36,12 @@ import com.jakubfronczyk.northform.ui.ValueCell
 internal fun HeartRateCard(m: SummaryModel) {
     SummaryCard("Heart rate") {
         Row(Modifier.fillMaxWidth()) {
-            ValueCell(m.hrAverage, Modifier.weight(1f), labelText = "Average", unit = "bpm")
+            ValueCell(m.avgHr, Modifier.weight(1f), labelText = "Average", unit = "bpm")
             ValueCell(m.hrMax, Modifier.weight(1f), labelText = "Max", unit = "bpm")
             ValueCell(m.recovery, Modifier.weight(1f), labelText = "1 min after stop", footer = { Text(m.recoveryDetail, style = Type.tertiaryText, color = Theme.text3) })
         }
         if (m.linePoints.isNotEmpty()) HrChart(m, Modifier.fillMaxWidth().height(150.dp))
-        for (gap in m.gapLabels) if (gap.text.isNotEmpty()) Text(gap.text, style = Type.tertiaryText, color = Theme.warn)
+        for (gap in m.gapLabels) gap.label?.let { Text(it, style = Type.tertiaryText, color = Theme.warn) }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Total per zone", style = Type.tertiaryText, color = Theme.text2)
             for (z in m.zones) ZoneBar(z)

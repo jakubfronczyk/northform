@@ -92,7 +92,8 @@ class AppModelReplayTest {
         assertTrue(ready.summary.distance > 200, "the same run the screen showed")
         assertNotNull(store.records.reliability(run.id), "the reliability row is written before the Summary shows")
 
-        model.saveSummary(SummaryEdits(tag = RunTag.Easy, rpe = 4, notes = null)) // Save tapped
+        model.editSummary(SummaryEdits(tag = RunTag.Easy, rpe = 4, notes = null))
+        model.saveSummary() // Save tapped
         runCurrent()
         assertNull(model.summary.value, "back to Today")
         val saved = assertNotNull(store.records.load(run.id)).recording
@@ -100,6 +101,24 @@ class AppModelReplayTest {
         assertEquals(RunTag.Easy, saved.tag)
         assertEquals(5, alerts.played.count { it == Alert.CountdownTick })
         assertTrue(phases.any { "→ gate" in it } && phases.any { "→ active" in it } && phases.any { "→ done" in it }, "lifecycle log: $phases")
+    }
+
+    /** code review a.3: a recording a crash left `active` still goes to the crash prompt, and no Summary opens. */
+    @Test
+    fun an_active_recording_found_at_launch_opens_the_crash_prompt_not_the_summary() = runTest {
+        val script = straightRun()
+        val store = InMemoryRecordingStore()
+        val first = AppModel(replayDeps(script, store, RecordedAlerts()), backgroundScope)
+        first.startRun(); runCurrent()
+        val run = assertNotNull(first.activeRun.value)
+        run.session.tap(UserAction.Start); advanceTimeBy(60.seconds); runCurrent()
+        assertEquals(RecordingState.Active, assertNotNull(store.records.load(run.id)).recording.state, "the 'crash' happens mid-run")
+
+        val second = AppModel(replayDeps(script, store, RecordedAlerts()), backgroundScope)
+        second.checkUnfinished(); runCurrent()
+
+        assertNotNull(second.unfinished.value, "the R28 prompt")
+        assertNull(second.summary.value)
     }
 
     /** summary-screen/05: a recording a crash left in `computing` opens the Summary at launch, never the crash prompt. */

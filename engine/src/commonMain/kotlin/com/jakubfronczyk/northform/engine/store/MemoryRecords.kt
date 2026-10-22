@@ -103,6 +103,7 @@ class MemoryRecords private constructor(
         entries[id] = entry(id).copy(reliability = record)
     }
 
+    /** The row [saveReliability] kept (the twin of `SqlRecordingStore.reliability`); null when none was written. */
     fun reliability(id: RecordingId): ReliabilityRecord? = entries[id]?.reliability
 
     private fun entry(id: RecordingId): Entry = entries[id] ?: throw RecordingStoreError.NotFound(id)

@@ -74,11 +74,16 @@ fun RunFlow(
                 is RunPhase.Countdown -> CountdownScreen(phase.endsAt, session.wallClock)
                 RunPhase.Active, is RunPhase.Paused -> LiveRunScreen(snapshot, route, session.wallClock, send, map)
                 is RunPhase.Cooldown -> StoppedScreen(snapshot, skip = { send(UserAction.SkipCooldown) })
-                // The run is in `computing`: the flow closes itself and the root opens the Summary (summary-screen/01).
-                RunPhase.Done -> LaunchedEffect(Unit) { onClose() }
+                RunPhase.Done -> LaunchedEffect(Unit) { onClose() } // RunFlow.closesAt: the root opens the Summary
             }
         }
     }
+}
+
+/** The flow's own rules, plain Kotlin so the script test can pin them. */
+object RunFlow {
+    /** summary-screen/01: the run is in `computing` once the snapshot is Done; the flow closes itself and the root opens the Summary. */
+    fun closesAt(snapshot: RunSnapshot): Boolean = snapshot.phase == RunPhase.Done
 }
 
 /** The bare screens' shared frame: centred, a title block in the middle, the action at the bottom. */
