@@ -9,6 +9,7 @@ import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RunTag
 import com.jakubfronczyk.northform.core.UserAction
+import com.jakubfronczyk.northform.core.metrics.HrRecovery
 import com.jakubfronczyk.northform.core.metrics.RecordingMetrics
 import com.jakubfronczyk.northform.core.ports.RecordingData
 import com.jakubfronczyk.northform.engine.store.InMemoryRecordingStore
@@ -68,6 +69,25 @@ class RunSummaryTest {
         // 55 samples 6..60: 45 × 150 + 10 × 120 → 144.5 → 145 (half away from zero)
         assertEquals(145, summary.hrAvg)
         assertEquals(-30, summary.hrRecovery, "150 at stop, 180 a minute later")
+        assertEquals(HrRecovery.Readings(atStop = 150, later = 180), summary.hrRecoveryReadings)
+    }
+
+    /** summary-screen/04: the map's line is the counted route, broken at the pause (D40: a pause is a route break). */
+    @Test
+    fun the_route_is_replayed_from_the_fixes_with_a_break_at_the_pause() {
+        val summary = RunSummary.compute(played().stored, profile)
+        assertEquals(2, summary.route.segments.size, "before the pause, after the resume")
+        assertTrue(summary.route.segments.all { it.size >= 2 }, "each segment is a drawable line")
+        assertTrue(summary.route.segments.first().first().startsSegment)
+    }
+
+    /** summary-screen/03: the chart's series stops at the stop, like the averages. */
+    @Test
+    fun the_heart_rate_series_covers_the_effort_only() {
+        val summary = RunSummary.compute(played().stored, profile)
+        assertEquals(55.seconds, summary.hrSeries.points.last().at, "the sample at the stop counts: a last bucket at 55 s of a 55 s effort")
+        assertTrue(summary.hrSeries.points.none { it.bpm == 180 }, "the cool-down's 180s are not in the line")
+        assertEquals(emptyList(), summary.hrSeries.gaps)
     }
 
     @Test

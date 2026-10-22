@@ -7,7 +7,7 @@ import platform.Foundation.stringWithContentsOfFile
 
 /**
  * Kotlin/Native test binaries carry no resources; read the file from the module directory, which is
- * the working directory Gradle starts the test executable in. TODO(walking-skeleton): verify on the
+ * the working directory Gradle starts the test executable in. TODO: verify on the
  * macOS CI job; `just test` runs the JVM tests only.
  */
 @OptIn(ExperimentalForeignApi::class)

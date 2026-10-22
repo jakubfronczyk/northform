@@ -5,6 +5,9 @@ import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.ports.FlushBatch
 import com.jakubfronczyk.northform.engine.run.CrashChoice
+import com.jakubfronczyk.northform.engine.run.EndResult
+import com.jakubfronczyk.northform.engine.run.SummaryEdits
+import com.jakubfronczyk.northform.engine.run.SummarySession
 import com.jakubfronczyk.northform.engine.run.CrashPrompt
 import com.jakubfronczyk.northform.engine.run.crashMark
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +30,10 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     private val _activeRun = MutableStateFlow<ActiveRun?>(null)
     /** What the screens show: the run flow while non-null, Today otherwise. */
     val activeRun: StateFlow<ActiveRun?> = _activeRun.asStateFlow()
+
+    private val _summary = MutableStateFlow<SummarySession?>(null)
+    /** The Summary of the run that just finished (R27): on screen while non-null, until Save or Delete. */
+    val summary: StateFlow<SummarySession?> = _summary.asStateFlow()
 
     private val _unfinished = MutableStateFlow<UnfinishedRun?>(null)
     /** A recording a crash left behind (R28): the prompt is up while non-null, until the user chooses. */
@@ -68,9 +75,11 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
      */
     fun checkUnfinished() {
         scope.launch {
-            _unfinished.value = runCatching { UnfinishedRun.find(deps) }
-                .onFailure { deps.log("unfinished check failed: $it") }
-                .getOrNull()
+            runCatching {
+                // summary-screen/05 (GLOSSARY "Computing"): every write was done, so the user is owed the Summary, not the prompt.
+                val computing = deps.store.unfinished()?.takeIf { it.state == RecordingState.Computing }
+                if (computing != null) openSummary(computing.id) else _unfinished.value = UnfinishedRun.find(deps)
+            }.onFailure { deps.log("unfinished check failed: $it") }
         }
     }
 
@@ -178,9 +187,46 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
         deps.clearAlerts()
         finishing.update { it + (run.id to run) }
         scope.launch {
-            deps.log("run ${run.id.value.take(8)} closed: ${run.close()}")
+            val result = run.close()
+            deps.log("run ${run.id.value.take(8)} closed: $result")
             finishing.update { it - run.id }
             deps.log("session stop")
+            if (result == EndResult.Finishing) openSummary(run.id)
+        }
+    }
+
+    /** The run is in `computing`: load it, write its reliability row, compute, and put the Summary on screen. */
+    private suspend fun openSummary(id: RecordingId) {
+        val session = SummarySession(id, deps.store, deps.reliability, deps.profile)
+        _summary.value = session
+        session.load()
+        deps.log("run ${id.value.take(8)} summary: ${session.state.value::class.simpleName}")
+    }
+
+    /** A change on the Summary's "Your run" card. */
+    fun editSummary(edits: SummaryEdits) { _summary.value?.edit(edits) }
+
+    /** Save on the Summary: the session writes; the screen closes when it reports Saved, stays with the error otherwise. */
+    fun saveSummary() = settleSummary("saved") { save() }
+
+    /** Retry on a Summary that could not be computed. */
+    fun retrySummary() { val session = _summary.value ?: return; scope.launch { session.retry() } }
+
+    /** SU6: Update on the HRmax card; this Summary only (the profile store is the Settings feature's). */
+    fun acceptHrMax() { _summary.value?.acceptHrMax() }
+
+    /** Delete on the Summary, after the screen's confirm sheet (R27). */
+    fun deleteSummary() = settleSummary("deleted") { delete() }
+
+    private fun settleSummary(done: String, call: suspend SummarySession.() -> Unit) {
+        val session = _summary.value ?: return
+        scope.launch {
+            session.call()
+            val state = session.state.value
+            if (state is SummarySession.State.Saved || state is SummarySession.State.Deleted) {
+                _summary.value = null
+                deps.log("run ${session.recordingId.value.take(8)} $done")
+            }
         }
     }
 }

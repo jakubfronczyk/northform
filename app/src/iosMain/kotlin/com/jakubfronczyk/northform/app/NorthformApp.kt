@@ -21,6 +21,7 @@ import com.jakubfronczyk.northform.persistence.SqlRecordingStore
 import com.jakubfronczyk.northform.persistence.nativeDriver
 import com.jakubfronczyk.northform.replay.RecordingTap
 import com.jakubfronczyk.northform.ui.AppRoot
+import com.jakubfronczyk.northform.ui.run.SummaryScreen
 import com.jakubfronczyk.northform.ui.crash.CrashPromptScreen
 import com.jakubfronczyk.northform.ui.run.GateSensor
 import com.jakubfronczyk.northform.ui.sensor.SensorScreen
@@ -107,10 +108,12 @@ object NorthformApp {
         // 4  the app's wiring: live ports on the phone, replay in the simulator (`AppDeps.swift:27-37`)
         live = !AppDeps.isSimulator
         val runAlerts = RunAlertPlayer(alerts, DeviceLog::runTrace)
+        val sqlStore = SqlRecordingStore(nativeDriver())
         val deps = AppDeps(
             source = if (live) RunSource.Live(sensor, location, KeepAlive(DeviceLog.location::notice).asRunKeepAlive(), ::requestRunPermissions)
                      else RunSource.Replay { BundleFixtures.script("straight-run-3min") },
-            store = LoggingStore(SqlRecordingStore(nativeDriver()), DeviceLog::runTrace),
+            store = LoggingStore(sqlStore, DeviceLog::runTrace),
+            reliability = sqlStore,
             wallClock = wallClock,
             alerts = runAlerts,
             clearAlerts = runAlerts::clear,
@@ -176,6 +179,7 @@ object NorthformApp {
     fun rootViewController(): UIViewController = ComposeUIViewController {
         val activeRun by model.activeRun.collectAsState()
         val unfinished by model.unfinished.collectAsState()
+        val summary by model.summary.collectAsState()
         val gateSensor by remember { gateSensorStates() }.collectAsState(null)
         AppRoot(
             activeRun = activeRun?.session,
@@ -187,6 +191,7 @@ object NorthformApp {
             gateSensor = gateSensor,
             connectSensor = ::connectPairedSensor,
             crashPrompt = unfinished?.let { run -> { CrashPromptScreen(run.facts, now = IosWallClock::now, onChoice = model::resolveUnfinished) } },
+            summary = summary?.let { session -> { SummaryScreen(session.state.collectAsState().value, edits = session.edits.collectAsState().value, onEdit = model::editSummary, onSave = model::saveSummary, onDelete = model::deleteSummary, onAcceptHrMax = model::acceptHrMax, onRetry = model::retrySummary, map = { route -> RouteMap(route, showsUserLocation = false) }) } },
         )
     }
 }

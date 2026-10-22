@@ -74,10 +74,16 @@ fun RunFlow(
                 is RunPhase.Countdown -> CountdownScreen(phase.endsAt, session.wallClock)
                 RunPhase.Active, is RunPhase.Paused -> LiveRunScreen(snapshot, route, session.wallClock, send, map)
                 is RunPhase.Cooldown -> StoppedScreen(snapshot, skip = { send(UserAction.SkipCooldown) })
-                RunPhase.Done -> DoneScreen(snapshot, close = onClose)
+                RunPhase.Done -> LaunchedEffect(Unit) { onClose() } // RunFlow.closesAt: the root opens the Summary
             }
         }
     }
+}
+
+/** The flow's own rules, plain Kotlin so the script test can pin them. */
+object RunFlow {
+    /** summary-screen/01: the run is in `computing` once the snapshot is Done; the flow closes itself and the root opens the Summary. */
+    fun closesAt(snapshot: RunSnapshot): Boolean = snapshot.phase == RunPhase.Done
 }
 
 /** The bare screens' shared frame: centred, a title block in the middle, the action at the bottom. */
@@ -115,14 +121,4 @@ fun StoppedScreen(snapshot: RunSnapshot, skip: () -> Unit) = BareScreen {
     Text("Cool-down: measuring heart-rate recovery", style = Type.secondaryText, color = Theme.text3)
     Spacer(Modifier.weight(1f))
     BigButton("Skip", skip)
-}
-
-/** `RunView.swift:89`. */
-@Composable
-fun DoneScreen(snapshot: RunSnapshot, close: () -> Unit) = BareScreen {
-    Spacer(Modifier.weight(1f))
-    Text("Saved", style = Type.screenTitle, color = Theme.text)
-    Text("${RunFormat.distance(snapshot.distance)} km · ${RunFormat.time(snapshot.totalTime)}", style = Type.number22, color = Theme.text2)
-    Spacer(Modifier.weight(1f))
-    BigButton("Done", close)
 }

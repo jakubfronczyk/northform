@@ -88,5 +88,23 @@ object RunFormat {
         return "${(secondsOfDay / 3600).toInt().pad2()}:${(secondsOfDay / 60 % 60).toInt().pad2()}"
     }
 
+    /** "Tue 30 Sep" in a recording's own time zone (the Summary's date line, R27). Civil date from days since the epoch (Howard Hinnant's algorithm); no date library. */
+    fun date(instant: Instant, tzOffset: Int): String {
+        val days = (instant.epochSeconds + tzOffset).floorDiv(86_400L)
+        val z = days + 719_468
+        val era = z.floorDiv(146_097L)
+        val doe = z - era * 146_097
+        val yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365
+        val doy = doe - (365 * yoe + yoe / 4 - yoe / 100)
+        val mp = (5 * doy + 2) / 153
+        val day = doy - (153 * mp + 2) / 5 + 1
+        val month = if (mp < 10) mp + 3 else mp - 9
+        val weekday = (days + 4).mod(7L).toInt() // 1970-01-01 was a Thursday
+        return "${WEEKDAYS[weekday]} $day ${MONTHS[(month - 1).toInt()]}"
+    }
+
+    private val WEEKDAYS = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+    private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
     private fun Int.pad2() = toString().padStart(2, '0')
 }

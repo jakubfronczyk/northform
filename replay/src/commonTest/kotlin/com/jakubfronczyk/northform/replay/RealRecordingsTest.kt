@@ -37,7 +37,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 /**
- * THE GATE (walking-skeleton step 4): the bundled recordings replayed through the Kotlin reducer must
+ * THE GATE of the port: the bundled recordings replayed through the Kotlin reducer must
  * match the Swift pins exactly. Ports `GPSDistanceTests`, `StraightRunTests`, `DriftTests`,
  * `PaceCharacterizationTests`, `CurrentPaceTests` and `HRLostAlertTests` where they read fixtures.
  */

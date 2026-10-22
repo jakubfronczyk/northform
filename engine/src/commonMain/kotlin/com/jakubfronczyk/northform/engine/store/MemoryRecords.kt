@@ -13,6 +13,7 @@ import com.jakubfronczyk.northform.core.RunTag
 import com.jakubfronczyk.northform.core.ports.FlushBatch
 import com.jakubfronczyk.northform.core.ports.RecordingData
 import com.jakubfronczyk.northform.core.ports.RecordingStoreError
+import com.jakubfronczyk.northform.core.reliability.ReliabilityRecord
 import kotlin.time.Instant
 
 /**
@@ -35,6 +36,7 @@ class MemoryRecords private constructor(
         val events: List<RecordingEvent> = emptyList(),
         val metrics: List<MetricResult> = emptyList(),
         val lastPersistedAt: Instant? = null,
+        val reliability: ReliabilityRecord? = null,
     )
 
     /** A snapshot of the store as it is now (the Swift struct copy). Entries are immutable, so a shallow map copy is enough. */
@@ -95,6 +97,14 @@ class MemoryRecords private constructor(
 
     /** The metric rows `saveSummary` stored (the in-memory twin of `SqlRecordingStore.metrics`); empty when none or unknown. */
     fun metrics(id: RecordingId): List<MetricResult> = entries[id]?.metrics ?: emptyList()
+
+    /** The in-memory twin of `SqlRecordingStore.saveReliability`: upsert, any state. */
+    fun saveReliability(id: RecordingId, record: ReliabilityRecord) {
+        entries[id] = entry(id).copy(reliability = record)
+    }
+
+    /** The row [saveReliability] kept (the twin of `SqlRecordingStore.reliability`); null when none was written. */
+    fun reliability(id: RecordingId): ReliabilityRecord? = entries[id]?.reliability
 
     private fun entry(id: RecordingId): Entry = entries[id] ?: throw RecordingStoreError.NotFound(id)
 

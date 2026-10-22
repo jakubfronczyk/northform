@@ -30,6 +30,8 @@ import com.jakubfronczyk.northform.ui.Theme
 fun RouteCanvas(route: Route, modifier: Modifier = Modifier) {
     val camera = LocalMapCamera.current
     val metres = remember(route) { RouteProjection.metres(route) }
+    // A fitted camera (the Summary) looks at the whole route's middle; the live one at the route end plus the drag.
+    val fit = remember(metres, camera.fitted) { if (camera.fitted) RouteProjection.fit(metres) else null }
     // The path in metres from the route end, y = south so one uniform scale maps it to pixels.
     val path = remember(metres) {
         Path().apply {
@@ -50,8 +52,8 @@ fun RouteCanvas(route: Route, modifier: Modifier = Modifier) {
         },
     ) {
         if (metres.isEmpty()) return@Canvas
-        val pan = camera.pan
-        val mpp = RouteProjection.metresPerPixel(size.width, size.height).toFloat()
+        val pan = if (fit != null) fit.centre + camera.pan else camera.pan
+        val mpp = (if (fit != null) fit.spanMetres / minOf(size.width, size.height).coerceAtLeast(1f) else RouteProjection.metresPerPixel(size.width, size.height)).toFloat()
         // The route end (metres 0,0) sits at the middle moved against the pan; then metres → pixels.
         translate(size.width / 2 - (pan.eastMetres / mpp).toFloat(), size.height / 2 + (pan.northMetres / mpp).toFloat()) {
             scale(1 / mpp, pivot = Offset.Zero) {

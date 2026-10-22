@@ -7,6 +7,8 @@ import com.jakubfronczyk.northform.core.RunTag
 import com.jakubfronczyk.northform.core.ports.FlushBatch
 import com.jakubfronczyk.northform.core.ports.RecordingData
 import com.jakubfronczyk.northform.core.ports.RecordingStore
+import com.jakubfronczyk.northform.core.ports.ReliabilityStore
+import com.jakubfronczyk.northform.core.reliability.ReliabilityRecord
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Instant
@@ -16,7 +18,7 @@ import kotlin.time.Instant
  * skeleton until the database exists (D7/D12 are Phase 1). Lost on quit. The Swift `actor` becomes
  * a `Mutex` around the plain records — no reentrancy here, each method is one locked step.
  */
-class InMemoryRecordingStore : RecordingStore {
+class InMemoryRecordingStore : RecordingStore, ReliabilityStore {
     val records = MemoryRecords()
     private val lock = Mutex()
 
@@ -29,4 +31,5 @@ class InMemoryRecordingStore : RecordingStore {
     override suspend fun delete(id: RecordingId) = lock.withLock { records.delete(id) }
     override suspend fun unfinished(): Recording? = lock.withLock { records.unfinished() }
     override suspend fun load(id: RecordingId): RecordingData? = lock.withLock { records.load(id) }
+    override suspend fun saveReliability(id: RecordingId, record: ReliabilityRecord) = lock.withLock { records.saveReliability(id, record) }
 }

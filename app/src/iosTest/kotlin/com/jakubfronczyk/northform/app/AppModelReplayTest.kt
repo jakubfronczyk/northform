@@ -6,6 +6,10 @@ import com.jakubfronczyk.northform.core.ports.Alert
 import com.jakubfronczyk.northform.core.ports.AlertPlayer
 import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.core.ports.RecordingStore
+import com.jakubfronczyk.northform.core.ports.ReliabilityStore
+import com.jakubfronczyk.northform.core.RunTag
+import com.jakubfronczyk.northform.engine.run.SummaryEdits
+import com.jakubfronczyk.northform.engine.run.SummarySession
 import com.jakubfronczyk.northform.engine.store.InMemoryRecordingStore
 import com.jakubfronczyk.northform.persistence.SqlRecordingStore
 import com.jakubfronczyk.northform.persistence.nativeDriver
@@ -22,6 +26,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -29,7 +34,7 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * The simulator proof for walking-skeleton step 7: the composition root drives a REPLAY run through the
+ * The simulator proof of the end-to-end flow: the composition root drives a REPLAY run through the
  * whole flow, Gate → Countdown → Active → Cool-down → Done, on a virtual clock, with the phase log the
  * app writes. Same `AppModel` the phone uses; only the ports differ (replay here, live there).
  */
@@ -40,9 +45,10 @@ class AppModelReplayTest {
     private fun straightRun(): ReplayScript = Fixture.parse(BundledFixtureText.STRAIGHT_RUN_3MIN)
 
     /** The simulator wiring: a replay source on the test's virtual clock, an in-memory store. */
-    private fun TestScope.replayDeps(script: ReplayScript, store: RecordingStore, alerts: AlertPlayer, log: (String) -> Unit = {}) = AppDeps(
+    private fun TestScope.replayDeps(script: ReplayScript, store: RecordingStore, alerts: AlertPlayer, reliability: ReliabilityStore = store as ReliabilityStore, log: (String) -> Unit = {}) = AppDeps(
         source = RunSource.Replay { script },
         store = store,
+        reliability = reliability,
         wallClock = virtualWallClock(script.meta.start),
         alerts = alerts,
         log = log,
@@ -77,13 +83,64 @@ class AppModelReplayTest {
         advanceTimeBy(61.seconds); runCurrent()
         assertEquals(RunPhase.Done, run.session.snapshots.value.phase, "the Summary screen")
 
-        model.closeRun() // Done tapped
+        model.closeRun() // the flow closes itself at Done
         advanceTimeBy(1.seconds); runCurrent()
         assertNull(model.activeRun.value)
-        val stored = assertNotNull(store.records.load(run.id))
-        assertEquals(RecordingState.Computing, stored.recording.state)
+        assertEquals(RecordingState.Computing, assertNotNull(store.records.load(run.id)).recording.state)
+        val summary = assertNotNull(model.summary.value, "the Summary opens for the finished run")
+        val ready = assertIs<SummarySession.State.Ready>(summary.state.value)
+        assertTrue(ready.summary.distance > 200, "the same run the screen showed")
+        assertNotNull(store.records.reliability(run.id), "the reliability row is written before the Summary shows")
+
+        model.editSummary(SummaryEdits(tag = RunTag.Easy, rpe = 4, notes = null))
+        model.saveSummary() // Save tapped
+        runCurrent()
+        assertNull(model.summary.value, "back to Today")
+        val saved = assertNotNull(store.records.load(run.id)).recording
+        assertEquals(RecordingState.Saved, saved.state)
+        assertEquals(RunTag.Easy, saved.tag)
         assertEquals(5, alerts.played.count { it == Alert.CountdownTick })
         assertTrue(phases.any { "→ gate" in it } && phases.any { "→ active" in it } && phases.any { "→ done" in it }, "lifecycle log: $phases")
+    }
+
+    /** code review a.3: a recording a crash left `active` still goes to the crash prompt, and no Summary opens. */
+    @Test
+    fun an_active_recording_found_at_launch_opens_the_crash_prompt_not_the_summary() = runTest {
+        val script = straightRun()
+        val store = InMemoryRecordingStore()
+        val first = AppModel(replayDeps(script, store, RecordedAlerts()), backgroundScope)
+        first.startRun(); runCurrent()
+        val run = assertNotNull(first.activeRun.value)
+        run.session.tap(UserAction.Start); advanceTimeBy(60.seconds); runCurrent()
+        assertEquals(RecordingState.Active, assertNotNull(store.records.load(run.id)).recording.state, "the 'crash' happens mid-run")
+
+        val second = AppModel(replayDeps(script, store, RecordedAlerts()), backgroundScope)
+        second.checkUnfinished(); runCurrent()
+
+        assertNotNull(second.unfinished.value, "the R28 prompt")
+        assertNull(second.summary.value)
+    }
+
+    /** summary-screen/05: a recording a crash left in `computing` opens the Summary at launch, never the crash prompt. */
+    @Test
+    fun a_computing_recording_found_at_launch_opens_the_summary_not_the_crash_prompt() = runTest {
+        val script = straightRun()
+        val store = InMemoryRecordingStore()
+        val first = AppModel(replayDeps(script, store, RecordedAlerts()), backgroundScope)
+        first.startRun(); runCurrent()
+        val run = assertNotNull(first.activeRun.value)
+        run.session.tap(UserAction.Start); advanceTimeBy(126.seconds); runCurrent()
+        run.session.tap(UserAction.Stop); advanceTimeBy(61.seconds); runCurrent()
+        first.closeRun(); advanceTimeBy(1.seconds); runCurrent()
+        assertEquals(RecordingState.Computing, assertNotNull(store.records.load(run.id)).recording.state, "the 'crash' happens here, Summary never confirmed")
+
+        val second = AppModel(replayDeps(script, store, RecordedAlerts()), backgroundScope) // the app reopens
+        second.checkUnfinished(); runCurrent()
+
+        assertNull(second.unfinished.value, "no crash prompt for a computing recording")
+        val summary = assertNotNull(second.summary.value, "the Summary opens directly")
+        assertIs<SummarySession.State.Ready>(summary.state.value)
+        assertEquals(run.id, summary.recordingId)
     }
 
     /**
@@ -115,6 +172,13 @@ class AppModelReplayTest {
             assertEquals(RecordingState.Computing, stored.recording.state)
             assertTrue(stored.hr.size > 100 && stored.fixes.size > 100, "${stored.hr.size} hr, ${stored.fixes.size} fixes")
             assertEquals(stored.recording, store.unfinished(), "a crash here would find it (R28)")
+            assertNotNull(store.reliability(run.id), "the reliability row is in SQLite too")
+
+            assertNotNull(model.summary.value, "the Summary is up")
+            model.deleteSummary() // bin, then the sheet's red button
+            runCurrent()
+            assertNull(model.summary.value, "back to Today")
+            assertNull(store.load(run.id), "gone from SQLite")
         } finally {
             driver.close()
             DatabaseFileContext.deleteDatabase(name)

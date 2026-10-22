@@ -108,7 +108,13 @@ private fun notStored(signal: Signal, lost: Boolean, stored: List<RecordingEvent
  * is dropped, fixes after the stop are ignored, a pause or stop while running counts the lag
  * (`flushLag`), a resume restarts the smoothing. `RunSummaryTest` holds it equal to [rebuild].
  */
-fun RunReducer.distance(data: RecordingData): Double {
+fun RunReducer.distance(data: RecordingData): Double = replayed(data).distance
+
+/** What the tracker replay of [distance] yields: the number and the line it drew (the Summary's map, summary-screen/04). */
+data class Replayed(val distance: Double, val route: Route)
+
+/** The [distance] replay, keeping the route points of every counted segment as the live session does (`RunEffect.Route`). */
+fun RunReducer.replayed(data: RecordingData): Replayed {
     val inputs = ArrayList<RunInput>()
     data.fixes.forEach { inputs += RunInput.Fix(it) }
     for (event in data.events) when (event.kind) {
@@ -122,9 +128,13 @@ fun RunReducer.distance(data: RecordingData): Double {
     var stopped = false
     var lastFixAt: Instant? = null
     var distance = 0.0
+    var route = Route()
     fun count(step: DistanceTracker.Step) {
         tracker = step.tracker
-        step.segment?.let { distance += it.metres }
+        step.segment?.let { segment ->
+            distance += segment.metres
+            for (point in segment.routePoints) route += point
+        }
     }
     for (input in InputOrder.sorted(inputs)) when (input) {
         is RunInput.Fix -> {
@@ -141,7 +151,7 @@ fun RunReducer.distance(data: RecordingData): Double {
         }
         else -> Unit
     }
-    return distance
+    return Replayed(distance, route)
 }
 
 /**

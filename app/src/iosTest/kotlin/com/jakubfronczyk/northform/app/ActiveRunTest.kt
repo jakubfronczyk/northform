@@ -49,9 +49,10 @@ class ActiveRunTest {
     ): AppDeps {
         val clock = virtualWallClock(script.meta.start)
         val timeline = ReplayTimeline(script, clock) // never played: the live branch, not the fixture, is under test
+        val store = InMemoryRecordingStore()
         return AppDeps(
             source = RunSource.Live(ReplaySensor(timeline), ReplayLocation(timeline), trace.keepAlive, trace.permissions),
-            store = InMemoryRecordingStore(), wallClock = clock, alerts = RecordedAlerts(), log = log,
+            store = store, reliability = store, wallClock = clock, alerts = RecordedAlerts(), log = log,
             newRecordingId = { "00000000-0000-0000-0000-00000000000b" },
             liveActivity = liveActivity,
         )

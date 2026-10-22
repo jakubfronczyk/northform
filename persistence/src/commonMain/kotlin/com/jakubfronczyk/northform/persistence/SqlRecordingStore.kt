@@ -19,6 +19,7 @@ import com.jakubfronczyk.northform.core.ports.FlushBatch
 import com.jakubfronczyk.northform.core.ports.RecordingData
 import com.jakubfronczyk.northform.core.ports.RecordingStore
 import com.jakubfronczyk.northform.core.ports.RecordingStoreError
+import com.jakubfronczyk.northform.core.ports.ReliabilityStore
 import com.jakubfronczyk.northform.core.reliability.ReliabilityRecord
 import com.jakubfronczyk.northform.core.fromWire
 import com.jakubfronczyk.northform.core.wire
@@ -44,7 +45,7 @@ import com.jakubfronczyk.northform.persistence.Recording as RecordingRow
 class SqlRecordingStore(
     driver: SqlDriver,
     private val io: CoroutineContext = Dispatchers.IO,
-) : RecordingStore {
+) : RecordingStore, ReliabilityStore {
     private val db = NorthformDb(driver)
     private val q get() = db.recordingQueries
 
@@ -130,7 +131,7 @@ class SqlRecordingStore(
      * the run's state machine. Upsert, any state (summary computing writes it; a rule bump recomputes it);
      * `NotFound` if the recording does not exist. Durations are stored as nanoseconds, the list as text.
      */
-    suspend fun saveReliability(id: RecordingId, record: ReliabilityRecord): Unit = tx {
+    override suspend fun saveReliability(id: RecordingId, record: ReliabilityRecord): Unit = tx {
         row(id)
         db.reliabilityQueries.upsertReliability(
             recording_id = id.value, version = ReliabilityRecord.version.toLong(),

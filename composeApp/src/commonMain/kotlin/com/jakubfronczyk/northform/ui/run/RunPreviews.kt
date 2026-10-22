@@ -3,6 +3,9 @@ package com.jakubfronczyk.northform.ui.run
 import androidx.compose.runtime.Composable
 import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
+import com.jakubfronczyk.northform.core.RunTag
+import com.jakubfronczyk.northform.engine.run.SummaryEdits
+import com.jakubfronczyk.northform.engine.run.SummarySession
 import androidx.compose.ui.tooling.preview.Preview
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
@@ -37,4 +40,13 @@ private fun previewGate(snapshot: RunSnapshot, sensor: GateSensor? = null) {
 @Preview @Composable fun NoHrYetPreview() = previewRun(FakeRunSession.running.copy(hrLost = true, hrNow = null, hrAvg = null, hrMax = null, zone = null))
 @Preview @Composable fun GpsLostPreview() = previewRun(FakeRunSession.running.copy(gpsLost = true))
 @Preview @Composable fun CooldownPreview() = previewRun(FakeRunSession.running.copy(phase = RunPhase.Cooldown(Clock.System.now() + 45.seconds)))
-@Preview @Composable fun DonePreview() = previewRun(FakeRunSession.running.copy(phase = RunPhase.Done))
+// Summary (R27): one preview per artboard state, from the FakeSummary fixture (summary-screen/01).
+private val previewEdits = SummaryEdits(tag = RunTag.Tempo, rpe = 7, notes = null)
+@Preview @Composable fun SummaryComputingPreview() = SummaryScreen(SummarySession.State.Computing, edits = previewEdits, onEdit = {}, onSave = {}, onDelete = {})
+@Preview @Composable fun SummaryRunPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.run), edits = previewEdits, onEdit = {}, onSave = {}, onDelete = {})
+@Preview @Composable fun SummaryWalkPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.walk), edits = previewEdits, onEdit = {}, onSave = {}, onDelete = {})
+@Preview @Composable fun SummarySaveFailedPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.run, error = "disk full"), edits = previewEdits, onEdit = {}, onSave = {}, onDelete = {})
+@Preview @Composable fun SummarySkippedCooldownPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.skippedCooldown), edits = previewEdits, onEdit = {}, onSave = {}, onDelete = {})
+@Preview @Composable fun SummaryNewHrMaxPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.newHrMax), edits = previewEdits, onEdit = {}, onSave = {}, onDelete = {})
+@Preview @Composable fun SummaryFailedPreview() = SummaryScreen(SummarySession.State.Failed("database locked"), edits = previewEdits, onEdit = {}, onSave = {}, onDelete = {})
+@Preview @Composable fun SummarySavingPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.run, busy = true), edits = previewEdits, onEdit = {}, onSave = {}, onDelete = {})

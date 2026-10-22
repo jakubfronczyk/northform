@@ -6,6 +6,7 @@ import com.jakubfronczyk.northform.core.ports.AlertPlayer
 import com.jakubfronczyk.northform.core.ports.HeartRateSensor
 import com.jakubfronczyk.northform.core.ports.LocationProvider
 import com.jakubfronczyk.northform.core.ports.RecordingStore
+import com.jakubfronczyk.northform.core.ports.ReliabilityStore
 import com.jakubfronczyk.northform.core.ports.WallClock
 import com.jakubfronczyk.northform.engine.run.LiveActivityEvent
 import com.jakubfronczyk.northform.replay.RecordingTap
@@ -87,6 +88,8 @@ sealed interface RunSource {
 class AppDeps(
     val source: RunSource,
     val store: RecordingStore,
+    /** Where the Summary caches a recording's reliability log (R29); the same SQL store on the phone. */
+    val reliability: ReliabilityStore,
     val wallClock: WallClock,
     val alerts: AlertPlayer,
     /** Removes this run's lock-screen notifications once it closes (`AppModel.swift:131`). */

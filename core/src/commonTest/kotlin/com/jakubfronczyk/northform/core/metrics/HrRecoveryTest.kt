@@ -62,3 +62,21 @@ class HrRecoveryTest {
         assertEquals(30, HrRecovery.compute(coolDown(), stop, stop + 30.seconds, cooldown = 30.seconds))
     }
 }
+
+/** summary-screen/03: the two readings behind the number ("172 → 141"). */
+class HrRecoveryReadingsTest {
+    private val t0 = Instant.fromEpochSeconds(1_767_225_600)
+    private val stop = t0 + 600.seconds
+    private fun coolDown() = (590..660).map { s -> HrSample(t0 + s.seconds, if (s <= 600) 160 else 160 - (s - 600)) }
+
+    @Test
+    fun readings_are_the_bpm_at_stop_and_sixty_seconds_later() {
+        assertEquals(HrRecovery.Readings(atStop = 160, later = 100), HrRecovery.readings(coolDown(), stop, cooldownEndedAt = stop + 60.seconds))
+        assertEquals(60, HrRecovery.compute(coolDown(), stop, cooldownEndedAt = stop + 60.seconds), "compute is their difference")
+    }
+
+    @Test
+    fun a_skipped_cool_down_has_no_readings() {
+        assertEquals(null, HrRecovery.readings(coolDown(), stop, cooldownEndedAt = stop + 10.seconds))
+    }
+}
