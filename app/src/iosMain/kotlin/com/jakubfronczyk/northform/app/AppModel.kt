@@ -13,6 +13,7 @@ import com.jakubfronczyk.northform.engine.run.CrashPrompt
 import com.jakubfronczyk.northform.engine.run.crashMark
 import com.jakubfronczyk.northform.ui.SavedList
 import kotlinx.coroutines.CoroutineScope
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -73,14 +74,25 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     /**
      * Re-reads the saved list; a failed read keeps the last one and says so (History's Retry; Today never shows it).
      * Reads can overlap (launch and a quick Save) and finish in any order: each takes a number first, and only the
-     * latest one is shown.
+     * latest one is shown. The decision and the write are one `update {}` (a compare-and-set that retries on the newest
+     * list), so a Delete's `without` landing meanwhile is never overwritten, and a failure keeps the list as it is then.
+     * A cancelled read changes nothing.
      */
     fun refreshSaved() {
         val read = savedReads.incrementAndFetch()
         scope.launch {
-            val next = runCatching { SavedList.Loaded(deps.saved.latest(Int.MAX_VALUE)) }
-                .getOrElse { e -> deps.log("saved list read failed: $e"); SavedList.Failed(_saved.value.recordings) }
-            if (read == savedReads.load()) _saved.value = next
+            val result = try {
+                Result.success(deps.saved.latest(Int.MAX_VALUE))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                deps.log("saved list read failed: $e")
+                Result.failure(e)
+            }
+            _saved.update { now ->
+                if (read != savedReads.load()) now // a newer read owns the list
+                else result.fold({ SavedList.Loaded(it) }, { SavedList.Failed(now.recordings) })
+            }
         }
     }
 

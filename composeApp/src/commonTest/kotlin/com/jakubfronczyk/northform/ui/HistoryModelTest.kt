@@ -29,7 +29,7 @@ class HistoryModelTest {
     private val walk = saved("walk", RecordingType.Walk, null, "2025-09-27T15:45:00Z", 4.10, (48.minutes + 12.seconds).inWholeSeconds.toInt(), null)
 
     private fun listed(vararg saved: SavedRecording, filter: HistoryFilter = HistoryFilter()) =
-        assertIs<HistoryModel.Listed>(HistoryModel.from(SavedList.Loaded(saved.toList()), filter, now, tz))
+        assertIs<HistoryModel.Listed>(HistoryModel.from(SavedList.Loaded(saved.toList()), filter, now))
 
     @Test
     fun every_saved_recording_is_a_row_newest_first_formatted_as_today_s_recent() {
@@ -50,14 +50,15 @@ class HistoryModelTest {
     @Test
     fun nothing_saved_is_nothing_here_yet() {
         val m = listed()
-        assertEquals("Nothing here yet", m.emptyLine)
+        assertEquals(HistoryModel.Empty.NothingSaved, m.empty)
+        assertEquals("Nothing here yet", m.empty?.line)
         assertEquals(emptyList(), m.rows)
     }
 
     @Test
     fun loading_shows_nothing_and_a_failed_read_offers_retry() {
-        assertEquals(HistoryModel.Loading, HistoryModel.from(SavedList.Loading, HistoryFilter(), now, tz))
-        assertEquals(HistoryModel.Failed, HistoryModel.from(SavedList.Failed(listOf(tempo)), HistoryFilter(), now, tz))
+        assertEquals(HistoryModel.Loading, HistoryModel.from(SavedList.Loading, HistoryFilter(), now))
+        assertEquals(HistoryModel.Failed, HistoryModel.from(SavedList.Failed(listOf(tempo)), HistoryFilter(), now))
         assertEquals("Couldn't load history", HistoryModel.Failed.line)
     }
 
@@ -81,7 +82,7 @@ class HistoryModelTest {
         val jan = saved("jan", RecordingType.Run, null, "2025-01-05T08:00:00Z", 5.0, 30 * 60, 140)
         val feb = saved("feb", RecordingType.Run, null, "2025-02-28T08:00:00Z", 5.0, 30 * 60, 140)
         val lastFeb = saved("lastfeb", RecordingType.Run, null, "2024-02-29T08:00:00Z", 5.0, 30 * 60, 140)
-        val m = assertIs<HistoryModel.Listed>(HistoryModel.from(SavedList.Loaded(listOf(feb, jan, lastFeb)), HistoryFilter(), march, tz))
+        val m = assertIs<HistoryModel.Listed>(HistoryModel.from(SavedList.Loaded(listOf(feb, jan, lastFeb)), HistoryFilter(), march))
         assertEquals(listOf("Fri 28 Feb · 10:00", "Sun 5 Jan · 10:00", "Thu 29 Feb 2024 · 10:00"), m.rows.map { it.date })
     }
 
@@ -134,7 +135,25 @@ class HistoryModelTest {
     @Test
     fun filters_that_hide_everything_say_so_and_not_nothing_here_yet() {
         val m = listed(tempo, walk, filter = HistoryFilter(tag = RunTag.Intervals))
-        assertEquals("No recordings match these filters", m.emptyLine)
+        assertEquals(HistoryModel.Empty.NoMatch, m.empty)
+        assertEquals("No recordings match these filters", m.empty?.line)
         assertEquals("0 recordings", m.count)
+    }
+
+    /** Nothing saved is "Nothing here yet" whatever the filters say. */
+    @Test
+    fun nothing_saved_under_a_filter_is_still_nothing_here_yet() =
+        assertEquals(HistoryModel.Empty.NothingSaved, listed(filter = HistoryFilter(type = RecordingType.Run)).empty)
+
+    /**
+     * Spec: the year shows only when the recording started in an earlier year than now, both in the recording's zone.
+     * New Year's Eve 23:00 in UTC−3 is still the recording's year there, though the phone in UTC+2 is already in the next.
+     */
+    @Test
+    fun now_s_year_is_read_in_the_recording_s_zone_too() {
+        val nye = saved("nye", RecordingType.Run, null, "2025-01-01T01:30:00Z", 5.0, 20 * 60, 140, zone = -3 * 3600) // 31 Dec 22:30 there
+        val justAfter = Instant.parse("2025-01-01T02:00:00Z") // 31 Dec 23:00 in UTC−3, 1 Jan 04:00 on the phone
+        val m = assertIs<HistoryModel.Listed>(HistoryModel.from(SavedList.Loaded(listOf(nye)), HistoryFilter(), justAfter))
+        assertEquals("Tue 31 Dec · 22:30", m.rows.single().date)
     }
 }

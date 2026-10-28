@@ -16,6 +16,8 @@ import com.jakubfronczyk.northform.testing.seedComputing
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.coroutines.cancellation.CancellationException
 
 /** history-screen/01: one damaged recording never fails the list (History reads everything). */
 class StoredSavedRecordingsTest {
@@ -43,5 +45,20 @@ class StoredSavedRecordingsTest {
 
         assertEquals(listOf("new", "old"), saved.map { it.recording.id.value })
         assertEquals(1, left.count { "damaged" in it }, "logged: $left")
+    }
+
+    /** A cancelled read is the caller's to see, never a recording "left out". */
+    @Test
+    fun a_cancelled_read_is_rethrown_not_logged_as_a_damaged_recording() = runTest {
+        val store = InMemoryRecordingStore()
+        store.seedComputing(data("a", 0))
+        store.saveSummary(RecordingId("a"), tag = null, rpe = null, notes = null, metrics = emptyList())
+        val cancelled = object : RecordingStore by store {
+            override suspend fun load(id: RecordingId): RecordingData? = throw CancellationException("screen gone")
+        }
+        val left = ArrayList<String>()
+
+        assertFailsWith<CancellationException> { StoredSavedRecordings(store, cancelled, log = { left += it }).latest(10) }
+        assertEquals(emptyList(), left)
     }
 }

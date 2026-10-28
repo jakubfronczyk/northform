@@ -48,7 +48,7 @@ data class TodayModel(
                 date = RunFormat.date(now, tzOffset),
                 sensor = sensor(sensor, sensorName),
                 last = newest?.let(::card),
-                recent = saved.drop(1).take(SHOWN - 1).map { RecordingRow.of(it, now, tzOffset) },
+                recent = saved.drop(1).take(SHOWN - 1).map { RecordingRow.of(it) },
                 emptyLine = if (newest == null) "No recordings yet" else null,
             )
         }

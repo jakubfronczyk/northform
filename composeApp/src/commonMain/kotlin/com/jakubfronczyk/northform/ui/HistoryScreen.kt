@@ -45,7 +45,7 @@ fun HistoryScreen(
     onFilter: (HistoryFilter) -> Unit,
     back: () -> Unit,
     retry: () -> Unit,
-    openRecording: (RecordingId) -> Unit = {},
+    openRecording: (RecordingId) -> Unit,
     listState: LazyListState = rememberLazyListState(),
 ) {
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
@@ -69,13 +69,13 @@ fun HistoryScreen(
                         Text("Newest first", style = Type.tertiaryText.copy(fontSize = 12.sp), color = Theme.text3)
                     }
                 }
-                model.emptyLine?.let { line ->
+                model.empty?.let { empty ->
                     // Artboard: centred under a dashed rule; "Nothing here yet" as a title, the filters' line in grey.
-                    val nothingSaved = model.filter == HistoryFilter()
+                    val nothingSaved = empty == HistoryModel.Empty.NothingSaved
                     item {
                         DashedLine()
                         Box(Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) {
-                            Text(line, style = if (nothingSaved) Type.statusLabel.copy(fontSize = 16.sp) else Type.tertiaryText, color = if (nothingSaved) Theme.text else Theme.text2)
+                            Text(empty.line, style = if (nothingSaved) Type.statusLabel.copy(fontSize = 16.sp) else Type.tertiaryText, color = if (nothingSaved) Theme.text else Theme.text2)
                         }
                     }
                 }

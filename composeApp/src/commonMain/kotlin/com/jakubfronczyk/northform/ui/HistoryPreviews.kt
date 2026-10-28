@@ -8,7 +8,7 @@ import com.jakubfronczyk.northform.core.RunTag
 // History (history-screen/01, 02) on Today's fake week.
 @Composable
 private fun previewHistory(saved: SavedList, filter: HistoryFilter = HistoryFilter()) =
-    HistoryScreen(HistoryModel.from(saved, filter, previewNow, PREVIEW_TZ), onFilter = {}, back = {}, retry = {})
+    HistoryScreen(HistoryModel.from(saved, filter, previewNow), onFilter = {}, back = {}, retry = {}, openRecording = {})
 
 @Preview @Composable fun HistoryPreview() = previewHistory(SavedList.Loaded(previewWeek))
 @Preview @Composable fun HistoryNothingSavedPreview() = previewHistory(SavedList.Loaded(emptyList()))

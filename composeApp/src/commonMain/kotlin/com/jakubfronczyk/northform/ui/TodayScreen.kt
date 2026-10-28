@@ -49,8 +49,8 @@ fun TodayScreen(
     model: TodayModel,
     start: (RecordingType) -> Unit,
     openSensor: () -> Unit,
-    openRecording: (RecordingId) -> Unit = {},
-    openHistory: () -> Unit = {},
+    openRecording: (RecordingId) -> Unit,
+    openHistory: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 64.dp, bottom = 50.dp),

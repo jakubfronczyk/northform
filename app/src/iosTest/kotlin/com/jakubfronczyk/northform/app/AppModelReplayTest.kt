@@ -3,6 +3,7 @@ package com.jakubfronczyk.northform.app
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.RecordingId
+import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.Recording
 import com.jakubfronczyk.northform.core.metrics.Headline
 import com.jakubfronczyk.northform.core.ports.SavedRecording
@@ -38,6 +39,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNotEquals
+import kotlin.coroutines.cancellation.CancellationException
+import com.jakubfronczyk.northform.engine.run.RunSummary
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.coroutines.EmptyCoroutineContext
@@ -159,8 +163,7 @@ class AppModelReplayTest {
         val saved = object : SavedRecordings {
             override suspend fun latest(n: Int) = if (calls++ == 0) slow.await() else newer
         }
-        val store = InMemoryRecordingStore()
-        val model = AppModel(AppDeps(source = RunSource.Replay { straightRun() }, store = store, reliability = store, wallClock = virtualWallClock(straightRun().meta.start), alerts = RecordedAlerts(), saved = saved), backgroundScope)
+        val model = appOver(InMemoryRecordingStore(), saved)
 
         model.refreshSaved(); runCurrent() // the launch read, still waiting
         model.refreshSaved(); runCurrent() // a later read (after a Save) answers first
@@ -174,10 +177,25 @@ class AppModelReplayTest {
         Headline(1000.0, 300.seconds, 300.seconds, null),
     )
 
-    private fun TestScope.modelOver(saved: SavedRecordings): AppModel {
-        val store = InMemoryRecordingStore()
-        return AppModel(AppDeps(source = RunSource.Replay { straightRun() }, store = store, reliability = store, wallClock = virtualWallClock(straightRun().meta.start), alerts = RecordedAlerts(), saved = saved), backgroundScope)
-    }
+    private fun TestScope.modelOver(saved: SavedRecordings) = appOver(InMemoryRecordingStore(), saved)
+
+    /**
+     * The history-screen wiring: a replay app over the in-memory [store], reading [saved] (the store's own by default) and
+     * writing through [port] (the store, or a wrapper that fails or waits).
+     */
+    private fun TestScope.appOver(
+        store: InMemoryRecordingStore,
+        saved: SavedRecordings = StoredSavedRecordings(store, store) {},
+        port: RecordingStore = store,
+        profile: Profile = AppDeps.sampleProfile,
+        newRecordingId: () -> String = { "00000000-0000-0000-0000-00000000000a" },
+    ) = AppModel(
+        AppDeps(
+            source = RunSource.Replay { straightRun() }, store = port, reliability = store, wallClock = virtualWallClock(straightRun().meta.start),
+            alerts = RecordedAlerts(), profile = profile, newRecordingId = newRecordingId, saved = saved,
+        ),
+        backgroundScope,
+    )
 
     /** history-screen/01: one list for Today and History, so it holds every saved recording, not Today's three. */
     @Test
@@ -188,6 +206,16 @@ class AppModelReplayTest {
         model.refreshSaved(); runCurrent()
 
         assertEquals(SavedList.Loaded(five), model.saved.value)
+    }
+
+    /** PR #3 review: a cancelled read is not a failed one: History must not say "Couldn't load history" for it. */
+    @Test
+    fun a_cancelled_read_is_not_published_as_failed() = runTest {
+        val model = modelOver(object : SavedRecordings { override suspend fun latest(n: Int): List<SavedRecording> = throw CancellationException("gone") })
+
+        model.refreshSaved(); runCurrent()
+
+        assertEquals(SavedList.Loading, model.saved.value)
     }
 
     /** history-screen/01: a failed read is flagged for History and keeps the last list for Today. */
@@ -224,7 +252,7 @@ class AppModelReplayTest {
         val store = InMemoryRecordingStore()
         val id = saveReplayRun(AppModel(replayDeps(straightRun(), store, RecordedAlerts()), backgroundScope))
         val raised = AppDeps.sampleProfile.copy(hrMax = AppDeps.sampleProfile.hrMax + 10) // the profile changed since
-        val model = AppModel(AppDeps(source = RunSource.Replay { straightRun() }, store = store, reliability = store, wallClock = virtualWallClock(straightRun().meta.start), alerts = RecordedAlerts(), profile = raised, saved = StoredSavedRecordings(store, store) {}), backgroundScope)
+        val model = appOver(store, profile = raised)
         model.checkUnfinished(); runCurrent()
 
         model.openRecording(id); runCurrent()
@@ -233,6 +261,8 @@ class AppModelReplayTest {
         assertTrue(session.review)
         val ready = assertIs<SummarySession.State.Ready>(session.state.value)
         assertEquals(AppDeps.sampleProfile, ready.summary.profile, "the stored profile, not today's")
+        val withToday = RunSummary.compute(assertNotNull(store.records.load(id)), raised)
+        assertNotEquals(withToday.trimp, ready.summary.trimp, "what the runner sees differs: TRIMP as it was, not under today's HRmax")
         assertEquals(SummaryEdits(RunTag.Easy, 4, "flat"), session.edits.value)
     }
 
@@ -272,9 +302,7 @@ class AppModelReplayTest {
         val real = StoredSavedRecordings(store, store) {}
         var fail = false
         val saved = object : SavedRecordings { override suspend fun latest(n: Int) = if (fail) error("disk") else real.latest(n) }
-        val model = AppModel(replayDeps(straightRun(), store, RecordedAlerts()).let { d ->
-            AppDeps(source = d.source, store = store, reliability = store, wallClock = d.wallClock, alerts = d.alerts, newRecordingId = d.newRecordingId, saved = saved)
-        }, backgroundScope)
+        val model = appOver(store, saved)
         val id = saveReplayRun(model)
         model.openRecording(id); runCurrent()
 
@@ -295,8 +323,7 @@ class AppModelReplayTest {
         val saved = object : SavedRecordings {
             override suspend fun latest(n: Int) = when (mode) { "stale" -> stale.await(); "fail" -> error("disk"); else -> real.latest(n) }
         }
-        val d = replayDeps(straightRun(), store, RecordedAlerts())
-        val model = AppModel(AppDeps(source = d.source, store = store, reliability = store, wallClock = d.wallClock, alerts = d.alerts, newRecordingId = d.newRecordingId, saved = saved), backgroundScope)
+        val model = appOver(store, saved)
         val id = saveReplayRun(model)
         val withRow = model.saved.value.recordings
         model.openRecording(id); runCurrent()
@@ -317,9 +344,8 @@ class AppModelReplayTest {
         val slow = object : RecordingStore by store {
             override suspend fun delete(id: RecordingId) { gate.await(); store.delete(id) }
         }
-        val d = replayDeps(straightRun(), store, RecordedAlerts())
         var next = 0
-        val model = AppModel(AppDeps(source = d.source, store = slow, reliability = store, wallClock = d.wallClock, alerts = d.alerts, newRecordingId = { "00000000-0000-0000-0000-00000000000${next++}" }, saved = StoredSavedRecordings(store, store) {}), backgroundScope)
+        val model = appOver(store, port = slow, newRecordingId = { "00000000-0000-0000-0000-00000000000${next++}" })
         val first = saveReplayRun(model)
         val second = saveReplayRun(model)
 
