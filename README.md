@@ -4,21 +4,21 @@ Run and walk recorder for iPhone in Kotlin Multiplatform: heart rate from a Pola
 over raw Bluetooth GATT, GPS, a pure recording engine that replays real runs bit for bit.
 
 **Two real recordings, a 4.8 km run and a 3.0 km walk of about 40 minutes each, replay through the
-engine and reproduce all 5,143 pace ticks of the reference implementation exactly**, with distance
-pinned to ±0.5 m and each run's sensor drop and reconnect counted. 599 tests, none of which needs a
-phone or a sensor. 97% of the app is Kotlin; Swift is 406 lines behind a checked seam.
+engine and reproduce the pace series of the original Swift build tick for tick: 5,143 ticks, to
+0.001 s/km.** 599 tests, no phone or sensor needed.
 
 | Claim | Where it comes from |
 |---|---|
-| 5,143 pace ticks identical (2,613 + 2,530), FNV-1a hash of the whole series | `RealRecordingsTest.pace_and_splits_on_real_recordings_stay_exactly` |
+| 5,143 ticks (2,613 + 2,530) of current and split pace, formatted `%.3f`, hashed with FNV-1a and compared to the Swift build's hash | `RealRecordingsTest.pace_and_splits_on_real_recordings_stay_exactly` |
 | 4,829.7 m and 2,987.5 m, ±0.5 m | `RealRecordingsTest.real_recording_totals_stay_put` |
-| 1 drop, 1 reconnect, its duration, 0 crashes per recording | `ReliabilityPinTest` |
+| the one sensor drop each fixture contains: 1 drop, 1 reconnect, its duration, 0 crashes | `ReliabilityPinTest` |
 | state rebuilt from the database equals the live state at save checkpoints | `RealRecordingsTest.rebuild_matches_live_on_real_runs` |
-| 599 tests: 380 on the JVM, 219 in the iOS simulator | the command under [Run it](#run-it-without-a-phone) |
+| 599 tests: 380 on the JVM, 219 in the iOS simulator | `just test-all`, then the count command under [Run it](#run-it-without-a-phone) |
 | 14,890 lines of Kotlin (tests excluded), 406 of Swift | `git ls-files '*.kt' \| grep -vE '/src/[a-zA-Z]*Test/' \| xargs cat \| wc -l`, same for `'*.swift'` |
 
-The reference is the native Swift build this app was ported from: its pace series was hashed and
-pinned before the port, and the Kotlin engine has to land on the same hash.
+The Swift build this app was ported from is not public. Its output on both recordings was hashed
+before the port, and the hash is pinned in the test, so any change in the Kotlin engine's pace
+values shows up as a failing test.
 
 ---
 
@@ -91,6 +91,7 @@ build file declares, so breaking the rule is a compile error rather than a revie
 | `:engine` | reducer, session mailbox, `SensorLink` | `:core` |
 | `:persistence` | SQLDelight store, schema migrations, backup codec | `:core` |
 | `:replay` | fixture codec, bundled fixtures, the real-recording tests | `:core`, `:engine`, `:persistence` |
+| `:testSupport` | reducer harness and run helpers, used by tests only | `:core`, `:engine` |
 | `:adapters` | iOS CoreBluetooth, location, notifications, Live Activity bridge | `:core`, `:engine` |
 | `:composeApp` | Compose Multiplatform UI | `:core`, `:engine`, never `:adapters` |
 | `:app` | composition root, the dynamic framework Xcode embeds | all of the above |
@@ -114,7 +115,7 @@ corner radius or named size outside `ui/theme/` (47 UI files checked).
 | Failure | What the code does | Test |
 |---|---|---|
 | Sensor drops | `SensorLink` reconnects with backoff; drop, reconnect time and HR-lost time go to a per-recording reliability log | `ReliabilityPinTest` |
-| Bluetooth switched off | stored as `bluetoothOff`, counted apart from drops | `RealRecordingsTest` |
+| Bluetooth switched off | stored as `bluetoothOff`, counted apart from drops | `RealRecordingsTest.rebuild_matches_live_across_bluetooth_off` (a synthetic 90 s run) |
 | Late sample (phone locked) | judged by the time it was taken, never by arrival | `RunReducerTest.a_late_heart_rate_sample_ends_a_loss_only_if_it_would_have_prevented_it` |
 | A save fails in SQLite | the batch is retried, nothing lost or stored twice | `SqlWriteFailureTest`, `failed_write_is_retried_without_loss_or_duplicates` |
 | App backgrounded mid-save | a background task is held until the batch is confirmed | `BackgroundFlushTest` |
@@ -134,11 +135,15 @@ xcodegen).
 ```bash
 mise install          # the pinned JDK, Gradle, just and xcodegen
 just test             # :core :engine :replay :persistence on the JVM, no Xcode needed
-just test-sim         # Kotlin/Native tests of :app in the iOS simulator (boot order, crash resume)
+just test-all         # the full suite: the JVM tests plus :composeApp and :app in the iOS simulator
 just check-seam       # the Swift seam rule
 just check-style      # the one-theme rule
+cp iosApp/Configuration/Local.xcconfig.example iosApp/Configuration/Local.xcconfig
 just open             # generate the Xcode project from iosApp/project.yml and open it
 ```
+
+`Local.xcconfig` holds the signing team and is not committed. The simulator needs no team, so the
+example's placeholder is enough to build and run there.
 
 In Xcode pick the `Northform` scheme and any iPhone simulator, then ⌘R. The app detects the
 simulator and records from a bundled fixture instead of Bluetooth and GPS: tap Run, and
@@ -147,18 +152,17 @@ sensor drop at 60 s and its pause. `NorthformApp.HARDCODED_PROFILE` (in
 `app/src/iosMain/.../NorthformApp.kt`) starts the install with a sample profile so it opens on Today;
 set it to `false` to go through first-launch Setup.
 
-The full suite and its count:
+The test count, after `just test-all`:
 
 ```bash
-./gradlew jvmTest :composeApp:iosSimulatorArm64Test :app:iosSimulatorArm64Test
 cat */build/test-results/*/TEST-*.xml | grep -o '<testsuite [^>]*tests="[0-9]*"' \
   | grep -o 'tests="[0-9]*"' | tr -dc '0-9\n' | paste -sd+ - | bc      # 599
 ```
 
 ### On your own iPhone
 
-A free Apple ID is enough. In Xcode set Signing → Team to your Personal Team on both the `Northform`
-and `NorthformWidget` targets, change the bundle identifiers if Xcode reports them taken, and run on
+A free Apple ID is enough. Put your Personal Team id in `iosApp/Configuration/Local.xcconfig`
+(`DEVELOPMENT_TEAM`, from Xcode ▸ Settings ▸ Accounts), run `just open` again, change the bundle identifiers if Xcode reports them taken, and run on
 the device. Free provisioning expires after 7 days; run from Xcode again to renew. On a device the
 app uses the real sensor and GPS, and debug builds write each recording as a replay fixture to
 Documents/Recordings, visible in the Files app.

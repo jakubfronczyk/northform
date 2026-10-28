@@ -17,6 +17,10 @@ test:
 test-sim:
     ./gradlew :app:iosSimulatorArm64Test :replay:iosSimulatorArm64Test
 
+# The full suite: every JVM test, then the Compose UI and app tests in the iOS simulator. Needs Xcode.
+test-all:
+    ./gradlew jvmTest :composeApp:iosSimulatorArm64Test :app:iosSimulatorArm64Test
+
 # Link the iOS framework without Xcode — proves the Kotlin side builds for device.
 link:
     ./gradlew :app:linkDebugFrameworkIosArm64
@@ -29,7 +33,7 @@ project:
 open: project
     open iosApp/Northform.xcodeproj
 
-# D16 seam rule: Swift may reference only the three allowed Kotlin symbols and no platform decision APIs.
+# Seam rule (ADR 0001): Swift may reference only the allow-listed Kotlin symbols in tools/check-seam.sh and no platform decision APIs.
 check-seam:
     tools/check-seam.sh
 
