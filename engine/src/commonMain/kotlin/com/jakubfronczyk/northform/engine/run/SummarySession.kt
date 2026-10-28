@@ -6,6 +6,7 @@ import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.RunTag
 import com.jakubfronczyk.northform.core.ports.RecordingData
 import com.jakubfronczyk.northform.core.ports.RecordingStore
+import com.jakubfronczyk.northform.core.ports.RecordingStoreError
 import com.jakubfronczyk.northform.core.ports.ReliabilityStore
 import com.jakubfronczyk.northform.core.reliability.ReliabilityRecord
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +28,12 @@ class SummarySession(
     private val store: RecordingStore,
     private val reliability: ReliabilityStore,
     private val profile: Profile,
+    /**
+     * history-screen/03: a saved recording reopened from Today or History. The edits are the stored tag, RPE and notes;
+     * Save and the HRmax accept do nothing (editing after Save is Later); Delete, Failed and Retry are as for a new one.
+     * The caller passes the profile the recording was stored with as [profile].
+     */
+    val review: Boolean = false,
 ) {
     /** Where the Summary is in its life: what the screen draws (summary-screen/01, 05). */
     sealed interface State {
@@ -70,7 +77,8 @@ class SummarySession(
             runCatching { reliability.saveReliability(recordingId, ReliabilityRecord.of(loaded)) }
             val summary = runCatching { RunSummary.compute(loaded, profile) }
                 .getOrElse { e -> return@runCatching State.Failed(e.message ?: e.toString(), type = loaded.recording.type) }
-            _edits.value = SummaryEdits(tag = summary.suggestedTag, rpe = null, notes = null)
+            val r = loaded.recording
+            _edits.value = if (review) SummaryEdits(r.tag, r.rpe, r.notes) else SummaryEdits(tag = summary.suggestedTag, rpe = null, notes = null)
             State.Ready(summary)
         }.getOrElse { e -> State.Failed(e.message ?: e.toString()) }
     }
@@ -93,6 +101,7 @@ class SummarySession(
      * Settings feature's. Nothing happens without a suggestion or while busy.
      */
     fun acceptHrMax() {
+        if (review) return
         val ready = _state.value as? State.Ready ?: return
         if (ready.busy) return
         val suggested = ready.summary.hrMaxSuggestion ?: return
@@ -105,6 +114,7 @@ class SummarySession(
      * not shown for one). A store failure stays Ready with the error; a tap while busy does nothing.
      */
     suspend fun save() {
+        if (review) return // before claim(): no busy flash
         val ready = claim() as? State.Ready ?: return
         val edits = _edits.value
         val tag = if (ready.summary.recording.type == RecordingType.Walk) null else edits.tag
@@ -115,11 +125,13 @@ class SummarySession(
 
     /**
      * Ready or Failed → Deleted (R27: after the screen's confirm sheet): the recording is removed. A store failure
-     * stays where it was, with the error.
+     * stays where it was, with the error. A recording already gone counts as deleted (history-screen/03: a row left on a
+     * list that could not be re-read).
      */
     suspend fun delete() {
         val from = claim() ?: return
         runCatching { store.delete(recordingId) }
+            .recoverCatching { e -> if (e !is RecordingStoreError.NotFound) throw e }
             .onSuccess { _state.value = State.Deleted }
             .onFailure { e ->
                 val reason = e.message ?: e.toString()

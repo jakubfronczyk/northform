@@ -49,8 +49,8 @@ fun TodayScreen(
     model: TodayModel,
     start: (RecordingType) -> Unit,
     openSensor: () -> Unit,
-    openRecording: (RecordingId) -> Unit = {},
-    openHistory: () -> Unit = {},
+    openRecording: (RecordingId) -> Unit,
+    openHistory: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 64.dp, bottom = 50.dp),
@@ -110,7 +110,7 @@ private fun SensorCard(sensor: TodayModel.Sensor, onClick: () -> Unit) {
 /** A start tile: Run filled in the primary colour, Walk outlined. */
 @Composable
 private fun Tile(title: String, fill: Color?, sub: Color, modifier: Modifier, onClick: () -> Unit) {
-    val framed = if (fill != null) modifier.background(fill, CardShape) else modifier.background(Theme.card, CardShape).border(1.5.dp, Theme.ring, CardShape)
+    val framed = if (fill != null) modifier.background(fill, CardShape) else modifier.background(Theme.card, CardShape).border(1.5.dp, Theme.outline, CardShape)
     Column(
         framed.height(150.dp).clip(CardShape).clickable(onClick = onClick).padding(16.dp),
         verticalArrangement = Arrangement.Bottom,
@@ -139,7 +139,7 @@ private fun LastCard(card: TodayModel.Card, onClick: () -> Unit) {
 }
 
 @Composable
-private fun RecentRow(row: TodayModel.Row, onClick: () -> Unit) {
+internal fun RecentRow(row: RecordingRow, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 66.dp).clickable(onClick = onClick).padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),

@@ -2,14 +2,16 @@ package com.jakubfronczyk.northform.app
 
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RecordingType
-import com.jakubfronczyk.northform.core.Recording
 import com.jakubfronczyk.northform.core.RecordingId
+import com.jakubfronczyk.northform.core.Profile
+import com.jakubfronczyk.northform.core.Recording
 import com.jakubfronczyk.northform.core.metrics.Headline
 import com.jakubfronczyk.northform.core.ports.SavedRecording
 import kotlinx.coroutines.CompletableDeferred
 import com.jakubfronczyk.northform.core.ports.SavedRecordings
 import com.jakubfronczyk.northform.core.ports.SavedRows
 import com.jakubfronczyk.northform.engine.store.StoredSavedRecordings
+import com.jakubfronczyk.northform.ui.SavedList
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.ports.Alert
 import com.jakubfronczyk.northform.core.ports.AlertPlayer
@@ -37,6 +39,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNotEquals
+import kotlin.coroutines.cancellation.CancellationException
+import com.jakubfronczyk.northform.engine.run.RunSummary
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.coroutines.EmptyCoroutineContext
@@ -62,7 +67,7 @@ class AppModelReplayTest {
         alerts = alerts,
         log = log,
         newRecordingId = { "00000000-0000-0000-0000-00000000000a" },
-        saved = (store as? SavedRows)?.let { StoredSavedRecordings(it, store) } ?: SavedRecordings.None,
+        saved = (store as? SavedRows)?.let { StoredSavedRecordings(it, store, log) } ?: SavedRecordings.None,
     )
 
     @Test
@@ -109,7 +114,7 @@ class AppModelReplayTest {
         val saved = assertNotNull(store.records.load(run.id)).recording
         assertEquals(RecordingState.Saved, saved.state)
         assertEquals(RunTag.Easy, saved.tag)
-        assertEquals(listOf(run.id), model.saved.value.map { it.recording.id }, "today-screen/01: Today re-reads once the Summary closes")
+        assertEquals(listOf(run.id), model.saved.value.recordings.map { it.recording.id }, "today-screen/01: Today re-reads once the Summary closes")
         assertEquals(5, alerts.played.count { it == Alert.CountdownTick })
         assertTrue(phases.any { "→ gate" in it } && phases.any { "→ active" in it } && phases.any { "→ done" in it }, "lifecycle log: $phases")
     }
@@ -144,28 +149,213 @@ class AppModelReplayTest {
         first.saveSummary(); runCurrent()
 
         val relaunched = AppModel(replayDeps(straightRun(), store, RecordedAlerts()), backgroundScope)
-        assertEquals(emptyList(), relaunched.saved.value.map { it.recording.id })
+        assertEquals(SavedList.Loading, relaunched.saved.value, "history-screen/01: nothing read yet")
         relaunched.checkUnfinished(); runCurrent()
-        assertEquals(listOf(run.id), relaunched.saved.value.map { it.recording.id })
+        assertEquals(listOf(run.id), relaunched.saved.value.recordings.map { it.recording.id })
     }
 
     /** today-screen code review: a slow read that finishes after a newer one never puts the older list back. */
     @Test
     fun an_older_saved_read_finishing_last_does_not_overwrite_a_newer_one() = runTest {
         val slow = CompletableDeferred<List<SavedRecording>>()
-        val newer = listOf(SavedRecording(Recording(id = RecordingId("new"), type = RecordingType.Run, state = RecordingState.Saved, startUtc = straightRun().meta.start, tzOffset = 0), Headline(1000.0, 300.seconds, 300.seconds, null)))
+        val newer = listOf(savedRun("new"))
         var calls = 0
         val saved = object : SavedRecordings {
             override suspend fun latest(n: Int) = if (calls++ == 0) slow.await() else newer
         }
-        val store = InMemoryRecordingStore()
-        val model = AppModel(AppDeps(source = RunSource.Replay { straightRun() }, store = store, reliability = store, wallClock = virtualWallClock(straightRun().meta.start), alerts = RecordedAlerts(), saved = saved), backgroundScope)
+        val model = appOver(InMemoryRecordingStore(), saved)
 
         model.refreshSaved(); runCurrent() // the launch read, still waiting
         model.refreshSaved(); runCurrent() // a later read (after a Save) answers first
         slow.complete(emptyList()); runCurrent()
 
-        assertEquals(listOf(RecordingId("new")), model.saved.value.map { it.recording.id })
+        assertEquals(listOf(RecordingId("new")), model.saved.value.recordings.map { it.recording.id })
+    }
+
+    private fun savedRun(id: String) = SavedRecording(
+        Recording(id = RecordingId(id), type = RecordingType.Run, state = RecordingState.Saved, startUtc = straightRun().meta.start, tzOffset = 0),
+        Headline(1000.0, 300.seconds, 300.seconds, null),
+    )
+
+    private fun TestScope.modelOver(saved: SavedRecordings) = appOver(InMemoryRecordingStore(), saved)
+
+    /**
+     * The history-screen wiring: a replay app over the in-memory [store], reading [saved] (the store's own by default) and
+     * writing through [port] (the store, or a wrapper that fails or waits).
+     */
+    private fun TestScope.appOver(
+        store: InMemoryRecordingStore,
+        saved: SavedRecordings = StoredSavedRecordings(store, store) {},
+        port: RecordingStore = store,
+        profile: Profile = AppDeps.sampleProfile,
+        newRecordingId: () -> String = { "00000000-0000-0000-0000-00000000000a" },
+    ) = AppModel(
+        AppDeps(
+            source = RunSource.Replay { straightRun() }, store = port, reliability = store, wallClock = virtualWallClock(straightRun().meta.start),
+            alerts = RecordedAlerts(), profile = profile, newRecordingId = newRecordingId, saved = saved,
+        ),
+        backgroundScope,
+    )
+
+    /** history-screen/01: one list for Today and History, so it holds every saved recording, not Today's three. */
+    @Test
+    fun the_saved_list_holds_every_saved_recording() = runTest {
+        val five = (1..5).map { savedRun("r$it") }
+        val model = modelOver(object : SavedRecordings { override suspend fun latest(n: Int) = five.take(n) })
+
+        model.refreshSaved(); runCurrent()
+
+        assertEquals(SavedList.Loaded(five), model.saved.value)
+    }
+
+    /** PR #3 review: a cancelled read is not a failed one: History must not say "Couldn't load history" for it. */
+    @Test
+    fun a_cancelled_read_is_not_published_as_failed() = runTest {
+        val model = modelOver(object : SavedRecordings { override suspend fun latest(n: Int): List<SavedRecording> = throw CancellationException("gone") })
+
+        model.refreshSaved(); runCurrent()
+
+        assertEquals(SavedList.Loading, model.saved.value)
+    }
+
+    /** history-screen/01: a failed read is flagged for History and keeps the last list for Today. */
+    @Test
+    fun a_failed_read_keeps_the_last_list_and_says_so() = runTest {
+        var fail = false
+        val model = modelOver(object : SavedRecordings {
+            override suspend fun latest(n: Int) = if (fail) error("disk") else listOf(savedRun("a"))
+        })
+        model.refreshSaved(); runCurrent()
+
+        fail = true
+        model.refreshSaved(); runCurrent()
+
+        val failed = assertIs<SavedList.Failed>(model.saved.value)
+        assertEquals(listOf(RecordingId("a")), failed.recordings.map { it.recording.id })
+    }
+
+    /** A replay run started, stopped, cooled down and saved with tag Easy, RPE 4; returns its id. */
+    private suspend fun TestScope.saveReplayRun(model: AppModel): RecordingId {
+        model.startRun(); runCurrent()
+        val run = assertNotNull(model.activeRun.value)
+        run.session.tap(UserAction.Start)
+        advanceTimeBy(66.seconds); run.session.tap(UserAction.Stop); runCurrent()
+        advanceTimeBy(61.seconds); runCurrent()
+        model.closeRun(); advanceTimeBy(1.seconds); runCurrent()
+        model.editSummary(SummaryEdits(tag = RunTag.Easy, rpe = 4, notes = "flat")); model.saveSummary(); runCurrent()
+        return run.id
+    }
+
+    /** history-screen/03: a saved recording reopens read-only, computed with the profile it was saved with (D24). */
+    @Test
+    fun a_saved_recording_reopens_in_review_with_its_stored_profile_and_edits() = runTest {
+        val store = InMemoryRecordingStore()
+        val id = saveReplayRun(AppModel(replayDeps(straightRun(), store, RecordedAlerts()), backgroundScope))
+        val raised = AppDeps.sampleProfile.copy(hrMax = AppDeps.sampleProfile.hrMax + 10) // the profile changed since
+        val model = appOver(store, profile = raised)
+        model.checkUnfinished(); runCurrent()
+
+        model.openRecording(id); runCurrent()
+
+        val session = assertNotNull(model.summary.value)
+        assertTrue(session.review)
+        val ready = assertIs<SummarySession.State.Ready>(session.state.value)
+        assertEquals(AppDeps.sampleProfile, ready.summary.profile, "the stored profile, not today's")
+        val withToday = RunSummary.compute(assertNotNull(store.records.load(id)), raised)
+        assertNotEquals(withToday.trimp, ready.summary.trimp, "what the runner sees differs: TRIMP as it was, not under today's HRmax")
+        assertEquals(SummaryEdits(RunTag.Easy, 4, "flat"), session.edits.value)
+    }
+
+    @Test
+    fun back_closes_the_review_and_changes_nothing_stored() = runTest {
+        val store = InMemoryRecordingStore()
+        val model = AppModel(replayDeps(straightRun(), store, RecordedAlerts()), backgroundScope)
+        val id = saveReplayRun(model)
+        val before = store.records.load(id)
+
+        model.openRecording(id); runCurrent()
+        model.closeSummary()
+
+        assertNull(model.summary.value)
+        assertEquals(before, store.records.load(id))
+        assertEquals(listOf(id), model.saved.value.recordings.map { it.recording.id })
+    }
+
+    @Test
+    fun delete_in_review_closes_it_and_the_recording_leaves_the_list() = runTest {
+        val store = InMemoryRecordingStore()
+        val model = AppModel(replayDeps(straightRun(), store, RecordedAlerts()), backgroundScope)
+        val id = saveReplayRun(model)
+
+        model.openRecording(id); runCurrent()
+        model.deleteSummary(); runCurrent()
+
+        assertNull(model.summary.value)
+        assertNull(store.records.load(id))
+        assertEquals(emptyList(), model.saved.value.recordings)
+    }
+
+    /** history-screen/03: the deleted row goes at once, so a re-read that fails cannot leave it on the list to tap. */
+    @Test
+    fun a_deleted_recording_leaves_the_list_even_when_the_re_read_fails() = runTest {
+        val store = InMemoryRecordingStore()
+        val real = StoredSavedRecordings(store, store) {}
+        var fail = false
+        val saved = object : SavedRecordings { override suspend fun latest(n: Int) = if (fail) error("disk") else real.latest(n) }
+        val model = appOver(store, saved)
+        val id = saveReplayRun(model)
+        model.openRecording(id); runCurrent()
+
+        fail = true
+        model.deleteSummary(); runCurrent()
+
+        val failed = assertIs<SavedList.Failed>(model.saved.value)
+        assertEquals(emptyList(), failed.recordings)
+    }
+
+    /** history code review: a read that queried before a Delete and answers after it must not put the row back. */
+    @Test
+    fun a_read_from_before_the_delete_never_brings_the_deleted_row_back() = runTest {
+        val store = InMemoryRecordingStore()
+        val real = StoredSavedRecordings(store, store) {}
+        val stale = CompletableDeferred<List<SavedRecording>>()
+        var mode = "real"
+        val saved = object : SavedRecordings {
+            override suspend fun latest(n: Int) = when (mode) { "stale" -> stale.await(); "fail" -> error("disk"); else -> real.latest(n) }
+        }
+        val model = appOver(store, saved)
+        val id = saveReplayRun(model)
+        val withRow = model.saved.value.recordings
+        model.openRecording(id); runCurrent()
+        mode = "stale"; model.refreshSaved(); runCurrent() // in flight, it saw the row
+
+        mode = "fail"
+        model.deleteSummary(); runCurrent() // the re-read after the delete fails
+        stale.complete(withRow); runCurrent() // the old read answers last
+
+        assertEquals(emptyList(), model.saved.value.recordings)
+    }
+
+    /** history code review: Back while a Delete is at the store, then another recording opened: the Delete must not close it. */
+    @Test
+    fun a_delete_finishing_after_back_does_not_close_the_next_review() = runTest {
+        val store = InMemoryRecordingStore()
+        val gate = CompletableDeferred<Unit>()
+        val slow = object : RecordingStore by store {
+            override suspend fun delete(id: RecordingId) { gate.await(); store.delete(id) }
+        }
+        var next = 0
+        val model = appOver(store, port = slow, newRecordingId = { "00000000-0000-0000-0000-00000000000${next++}" })
+        val first = saveReplayRun(model)
+        val second = saveReplayRun(model)
+
+        model.openRecording(first); runCurrent()
+        model.deleteSummary(); runCurrent() // waiting at the store
+        model.closeSummary()
+        model.openRecording(second); runCurrent()
+        gate.complete(Unit); runCurrent()
+
+        assertEquals(second, model.summary.value?.recordingId)
     }
 
     /** code review a.3: a recording a crash left `active` still goes to the crash prompt, and no Summary opens. */

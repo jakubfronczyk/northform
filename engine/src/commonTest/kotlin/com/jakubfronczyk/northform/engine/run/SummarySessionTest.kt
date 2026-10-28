@@ -402,3 +402,92 @@ class SummarySessionHeadlineTest {
         assertNull(metrics["avg_hr"])
     }
 }
+
+/** history-screen/03: a saved recording reopened in review, read-only but deletable. */
+class SummarySessionReviewTest {
+    private val config = RunHarness.config
+
+    private suspend fun savedStore(): InMemoryRecordingStore {
+        val store = InMemoryRecordingStore()
+        store.seedComputing(
+            RecordingData(
+                recording = Recording(id = config.recordingId, type = config.type, state = RecordingState.Computing, startUtc = at(5), tzOffset = config.tzOffset, endUtc = at(60)),
+                hr = (6..60).map { HrSample(at(it), 150) },
+                fixes = (6..60).map { fix(it, north = (it - 5) * 3.0) },
+                events = listOf(RecordingEvent(at(120), EventKind.CooldownEnd, EventSource.Auto)),
+                lastPersistedAt = at(120),
+            ),
+        )
+        val fresh = SummarySession(config.recordingId, store, store, config.profile)
+        fresh.load(); fresh.edit(SummaryEdits(RunTag.Long, rpe = 6, notes = "hills")); fresh.save()
+        return store
+    }
+
+    @Test
+    fun a_saved_recording_loads_with_the_edits_it_was_saved_with() = runTest {
+        val store = savedStore()
+        val review = SummarySession(config.recordingId, store, store, config.profile, review = true)
+
+        review.load()
+
+        assertIs<SummarySession.State.Ready>(review.state.value)
+        assertEquals(SummaryEdits(RunTag.Long, rpe = 6, notes = "hills"), review.edits.value, "not the suggestion")
+    }
+
+    @Test
+    fun save_and_the_hrmax_accept_change_nothing() = runTest {
+        val store = savedStore()
+        val before = store.records.metrics(config.recordingId)
+        val review = SummarySession(config.recordingId, store, store, config.profile, review = true)
+        review.load()
+        val ready = review.state.value
+
+        review.edit(SummaryEdits(RunTag.Easy, rpe = 1, notes = null)); review.save(); review.acceptHrMax()
+
+        assertEquals(ready, review.state.value, "no busy flash, no Saved")
+        assertEquals(RunTag.Long, assertNotNull(store.load(config.recordingId)).recording.tag)
+        assertEquals(before, store.records.metrics(config.recordingId))
+    }
+
+    @Test
+    fun delete_removes_the_saved_recording() = runTest {
+        val store = savedStore()
+        val review = SummarySession(config.recordingId, store, store, config.profile, review = true)
+        review.load()
+
+        review.delete()
+
+        assertIs<SummarySession.State.Deleted>(review.state.value)
+        assertNull(store.load(config.recordingId))
+    }
+
+    /** A row still on a stale list: the recording went meanwhile, so the delete has nothing left to do. */
+    @Test
+    fun a_delete_that_finds_the_recording_already_gone_counts_as_deleted() = runTest {
+        val store = savedStore()
+        val review = SummarySession(config.recordingId, store, store, config.profile, review = true)
+        review.load()
+        store.delete(config.recordingId)
+
+        review.delete()
+
+        assertIs<SummarySession.State.Deleted>(review.state.value)
+    }
+
+    /** Story 25: a reopened recording that cannot be computed is Failed, and Delete still removes it. */
+    @Test
+    fun a_reopened_recording_that_cannot_be_computed_is_failed_and_can_be_deleted() = runTest {
+        val store = savedStore()
+        val broken = object : RecordingStore by store {
+            override suspend fun load(id: RecordingId) = store.load(id)?.let { it.copy(recording = it.recording.copy(endUtc = null)) } // no stop: nothing to compute
+        }
+        val review = SummarySession(config.recordingId, broken, store, config.profile, review = true)
+
+        review.load()
+        assertIs<SummarySession.State.Failed>(review.state.value)
+        review.delete()
+
+        assertIs<SummarySession.State.Deleted>(review.state.value)
+        assertNull(store.load(config.recordingId))
+    }
+}

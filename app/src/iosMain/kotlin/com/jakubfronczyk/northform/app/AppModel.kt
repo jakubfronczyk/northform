@@ -4,7 +4,6 @@ import com.jakubfronczyk.northform.core.EventKind
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RecordingType
-import com.jakubfronczyk.northform.core.ports.SavedRecording
 import com.jakubfronczyk.northform.core.ports.FlushBatch
 import com.jakubfronczyk.northform.engine.run.CrashChoice
 import com.jakubfronczyk.northform.engine.run.EndResult
@@ -12,8 +11,9 @@ import com.jakubfronczyk.northform.engine.run.SummaryEdits
 import com.jakubfronczyk.northform.engine.run.SummarySession
 import com.jakubfronczyk.northform.engine.run.CrashPrompt
 import com.jakubfronczyk.northform.engine.run.crashMark
-import com.jakubfronczyk.northform.ui.TodayModel
+import com.jakubfronczyk.northform.ui.SavedList
 import kotlinx.coroutines.CoroutineScope
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,9 +40,9 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     /** The Summary of the run that just finished (R27): on screen while non-null, until Save or Delete. */
     val summary: StateFlow<SummarySession?> = _summary.asStateFlow()
 
-    private val _saved = MutableStateFlow<List<SavedRecording>>(emptyList())
-    /** Today's list (today-screen spec): the newest saved recordings, re-read at launch and whenever the Summary closes. */
-    val saved: StateFlow<List<SavedRecording>> = _saved.asStateFlow()
+    private val _saved = MutableStateFlow<SavedList>(SavedList.Loading)
+    /** Every saved recording (history-screen spec: one list, Today takes three), re-read at launch and whenever the Summary closes. */
+    val saved: StateFlow<SavedList> = _saved.asStateFlow()
 
     private val _unfinished = MutableStateFlow<UnfinishedRun?>(null)
     /** A recording a crash left behind (R28): the prompt is up while non-null, until the user chooses. */
@@ -72,15 +72,27 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     }
 
     /**
-     * Re-reads Today's list; a failed read keeps the last one (logged), never an error on Today. Reads can overlap
-     * (launch and a quick Save) and finish in any order: each takes a number first, and only the latest one is shown.
+     * Re-reads the saved list; a failed read keeps the last one and says so (History's Retry; Today never shows it).
+     * Reads can overlap (launch and a quick Save) and finish in any order: each takes a number first, and only the
+     * latest one is shown. The decision and the write are one `update {}` (a compare-and-set that retries on the newest
+     * list), so a Delete's `without` landing meanwhile is never overwritten, and a failure keeps the list as it is then.
+     * A cancelled read changes nothing.
      */
     fun refreshSaved() {
         val read = savedReads.incrementAndFetch()
         scope.launch {
-            runCatching { deps.saved.latest(TodayModel.SHOWN) }
-                .onSuccess { if (read == savedReads.load()) _saved.value = it }
-                .onFailure { deps.log("saved list read failed: $it") }
+            val result = try {
+                Result.success(deps.saved.latest(Int.MAX_VALUE))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                deps.log("saved list read failed: $e")
+                Result.failure(e)
+            }
+            _saved.update { now ->
+                if (read != savedReads.load()) now // a newer read owns the list
+                else result.fold({ SavedList.Loaded(it) }, { SavedList.Failed(now.recordings) })
+            }
         }
     }
 
@@ -231,6 +243,23 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
         deps.log("run ${id.value.take(8)} summary: ${session.state.value::class.simpleName}")
     }
 
+    /**
+     * history-screen/03: a saved recording tapped on Today or History, reopened read-only, computed with the profile its
+     * metrics were stored with (D24; the current one when it has none). One Summary at a time, never over a run.
+     */
+    fun openRecording(id: RecordingId) {
+        if (_summary.value != null || _activeRun.value != null) return
+        val saved = _saved.value.recordings.firstOrNull { it.recording.id == id } ?: return
+        val session = SummarySession(id, deps.store, deps.reliability, saved.profile ?: deps.profile, review = true)
+        _summary.value = session
+        scope.launch { session.load() }
+    }
+
+    /** Back on a reopened Summary: there is nothing to settle, so it closes and the root shows what was under it. */
+    fun closeSummary() {
+        if (_summary.value?.review == true) _summary.value = null
+    }
+
     /** A change on the Summary's "Your run" card. */
     fun editSummary(edits: SummaryEdits) { _summary.value?.edit(edits) }
 
@@ -252,8 +281,12 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
             session.call()
             val state = session.state.value
             if (state is SummarySession.State.Saved || state is SummarySession.State.Deleted) {
-                refreshSaved() // Today is visible again: Save added a recording, Delete may have removed one
-                _summary.value = null
+                // The re-read first: it takes the next read number, so a read from before the Delete that answers late
+                // is dropped. Then the row goes at once, so a re-read that fails cannot leave a deleted row to tap.
+                refreshSaved() // Today is visible again: Save added a recording, Delete removed one
+                if (state is SummarySession.State.Deleted) _saved.update { it.without(session.recordingId) }
+                // Only this Summary: after Back during the store call, another one may be on screen by now.
+                _summary.compareAndSet(session, null)
                 deps.log("run ${session.recordingId.value.take(8)} $done")
             }
         }

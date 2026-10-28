@@ -1,6 +1,8 @@
 package com.jakubfronczyk.northform.ui.run
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -64,20 +66,27 @@ fun SummaryScreen(
     onRetry: () -> Unit = {},
     /** The platform map (D13), as the run flow injects it; it reads [LocalMapCamera], provided here fitted to the route. */
     map: @Composable (route: Route) -> Unit = { route -> RouteCanvas(route) },
+    /**
+     * history-screen/03: a saved recording reopened from Today or History (`SummaryReview`): a Back control, the "Your
+     * run" block read-only, no HRmax card, no Save. The bin and its sheet stay. The mode is a value, from the session.
+     */
+    review: Boolean,
+    /** Back on a reopened Summary; drawn only in [review]. */
+    onBack: () -> Unit,
 ) {
     when (val s = state) {
         SummarySession.State.Computing -> Box(Modifier.fillMaxSize().background(Theme.bg), contentAlignment = Alignment.Center) {
             Text("Computing…", style = Type.secondaryText, color = Theme.text2)
         }
-        is SummarySession.State.Ready -> SummaryContent(SummaryModel.from(s.summary), edits, onEdit, error = s.error, busy = s.busy, onSave = onSave, onDelete = onDelete, onAcceptHrMax = onAcceptHrMax, map = map)
-        is SummarySession.State.Failed -> FailedContent(s.reason, noun = s.type?.let(SummaryModel::noun) ?: "recording", busy = s.busy, onRetry = onRetry, onDelete = onDelete)
+        is SummarySession.State.Ready -> SummaryContent(SummaryModel.from(s.summary), edits, onEdit, error = s.error, busy = s.busy, onSave = onSave, onDelete = onDelete, onAcceptHrMax = onAcceptHrMax, map = map, review = review, onBack = onBack)
+        is SummarySession.State.Failed -> FailedContent(s.reason, noun = s.type?.let(SummaryModel::noun) ?: "recording", busy = s.busy, onRetry = onRetry, onDelete = onDelete, review = review, onBack = onBack)
         SummarySession.State.Saved, SummarySession.State.Deleted -> Unit // the root removes the screen
     }
 }
 
 /** "Couldn't compute this run": Retry, or Delete through the same confirm sheet (summary-screen/05). Never a silent Today. */
 @Composable
-private fun FailedContent(reason: String, noun: String, busy: Boolean, onRetry: () -> Unit, onDelete: () -> Unit) {
+private fun FailedContent(reason: String, noun: String, busy: Boolean, onRetry: () -> Unit, onDelete: () -> Unit, review: Boolean, onBack: () -> Unit) {
     var confirmDelete by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         Column(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(top = 64.dp, bottom = 50.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -90,12 +99,13 @@ private fun FailedContent(reason: String, noun: String, busy: Boolean, onRetry: 
             Spacer(Modifier.height(12.dp))
             BigButton("Delete $noun", { confirmDelete = true }, fill = null, enabled = !busy)
         }
+        if (review) BackButton(onBack)
         if (confirmDelete) DeleteConfirmSheet(what = noun, detail = "Nothing could be computed from it. This can't be undone.", onKeep = { confirmDelete = false }, onDelete = { confirmDelete = false; onDelete() })
     }
 }
 
 @Composable
-private fun SummaryContent(m: SummaryModel, edits: SummaryEdits, onEdit: (SummaryEdits) -> Unit, error: String?, busy: Boolean, onSave: () -> Unit, onDelete: () -> Unit, onAcceptHrMax: () -> Unit, map: @Composable (route: Route) -> Unit) {
+private fun SummaryContent(m: SummaryModel, edits: SummaryEdits, onEdit: (SummaryEdits) -> Unit, error: String?, busy: Boolean, onSave: () -> Unit, onDelete: () -> Unit, onAcceptHrMax: () -> Unit, map: @Composable (route: Route) -> Unit, review: Boolean, onBack: () -> Unit) {
     var confirmDelete by remember { mutableStateOf(false) }
 
     // One fitted camera for this Summary: the whole route once, then the user's pans and zooms (summary-screen/04).
@@ -126,7 +136,7 @@ private fun SummaryContent(m: SummaryModel, edits: SummaryEdits, onEdit: (Summar
             Text(m.dataQuality, style = Type.tertiaryText, color = Theme.text3)
             Spacer(Modifier.height(24.dp))
 
-            if (m.hrMaxSuggestion != null) {
+            if (m.hrMaxSuggestion != null && !review) {
                 HrMaxCard(m.hrMaxSuggestion, m.hrMaxCurrent, enabled = !busy, onAccept = onAcceptHrMax)
                 Spacer(Modifier.height(16.dp))
             }
@@ -134,16 +144,17 @@ private fun SummaryContent(m: SummaryModel, edits: SummaryEdits, onEdit: (Summar
             Spacer(Modifier.height(16.dp))
             SplitsCard(m)
             Spacer(Modifier.height(16.dp))
-            EditsCard(m, edits, onEdit)
+            EditsCard(m, edits, onEdit, readOnly = review)
             Spacer(Modifier.height(24.dp))
 
             if (error != null) {
-                Text("Couldn't save: $error", style = Type.secondaryText, color = Theme.warn)
+                Text("Couldn't ${if (review) "delete" else "save"}: $error", style = Type.secondaryText, color = Theme.warn)
                 Spacer(Modifier.height(12.dp))
             }
-            BigButton("Save ${m.typeLabel.lowercase()}", enabled = !busy, onClick = onSave)
+            if (!review) BigButton("Save ${m.typeLabel.lowercase()}", enabled = !busy, onClick = onSave)
             }
         }
+        if (review) BackButton(onBack)
         // `DeleteConfirm.dc.html`: "Tempo · 10.21 km · 30 Sep. This can't be undone."
         if (confirmDelete) DeleteConfirmSheet(what = m.typeLabel.lowercase(), detail = "${edits.tag?.name ?: m.typeLabel} · ${m.distance} km · ${m.dateLine.substringBefore(" ·")}. This can't be undone.", onKeep = { confirmDelete = false }, onDelete = { confirmDelete = false; onDelete() })
     }
@@ -165,9 +176,9 @@ private fun HrMaxCard(suggested: String, current: String, enabled: Boolean, onAc
     }
 }
 
-/** The "Your run" card: Type chips (a run only), "How hard did it feel?" 0–10 in two rows, Notes. */
+/** The "Your run" card: Type chips (a run only), "How hard did it feel?" 0–10 in two rows, Notes. [readOnly]: what was saved, no taps. */
 @Composable
-private fun EditsCard(m: SummaryModel, edits: SummaryEdits, onEdit: (SummaryEdits) -> Unit) {
+private fun EditsCard(m: SummaryModel, edits: SummaryEdits, onEdit: (SummaryEdits) -> Unit, readOnly: Boolean = false) {
     val tag = edits.tag
     val rpe = edits.rpe
     val notes = edits.notes ?: ""
@@ -180,7 +191,7 @@ private fun EditsCard(m: SummaryModel, edits: SummaryEdits, onEdit: (SummaryEdit
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Type", style = Type.tertiaryText, color = Theme.text2)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (t in RunTag.entries) OptionPill(t.name, selected = t == tag, modifier = Modifier.weight(1f)) { onTag(if (t == tag) null else t) }
+                    for (t in RunTag.entries) OptionPill(t.name, selected = t == tag, modifier = Modifier.weight(1f), enabled = !readOnly) { onTag(if (t == tag) null else t) }
                 }
             }
         }
@@ -192,7 +203,7 @@ private fun EditsCard(m: SummaryModel, edits: SummaryEdits, onEdit: (SummaryEdit
             }
             for (row in listOf(0..5, 6..10)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (n in row) OptionPill("$n", selected = n == rpe, modifier = Modifier.weight(1f)) { onRpe(if (n == rpe) null else n) }
+                    for (n in row) OptionPill("$n", selected = n == rpe, modifier = Modifier.weight(1f), enabled = !readOnly) { onRpe(if (n == rpe) null else n) }
                     if (row.first == 6) Spacer(Modifier.weight(1f))
                 }
             }
@@ -200,8 +211,8 @@ private fun EditsCard(m: SummaryModel, edits: SummaryEdits, onEdit: (SummaryEdit
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Notes", style = Type.tertiaryText, color = Theme.text2)
             Box(Modifier.fillMaxWidth().background(Theme.bg, RoundedCornerShape(12.dp)).padding(12.dp)) {
-                if (notes.isEmpty()) Text("Legs heavy after km 7", style = Type.secondaryText, color = Theme.text3)
-                BasicTextField(notes, onNotes, textStyle = Type.secondaryText.copy(color = Theme.text), cursorBrush = SolidColor(Theme.accent), modifier = Modifier.fillMaxWidth())
+                if (notes.isEmpty()) Text(if (readOnly) "No notes" else "Legs heavy after km 7", style = Type.secondaryText, color = Theme.text3)
+                BasicTextField(notes, onNotes, readOnly = readOnly, textStyle = Type.secondaryText.copy(color = Theme.text), cursorBrush = SolidColor(Theme.accent), modifier = Modifier.fillMaxWidth())
             }
         }
     }
@@ -209,10 +220,10 @@ private fun EditsCard(m: SummaryModel, edits: SummaryEdits, onEdit: (SummaryEdit
 
 /** One selectable pill of the Type row and the RPE grid: filled in the accent when selected, outlined otherwise. */
 @Composable
-private fun OptionPill(text: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun OptionPill(text: String, selected: Boolean, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     val shape = RoundedCornerShape(12.dp)
     val framed = if (selected) modifier.background(Theme.accent, shape) else modifier.border(1.dp, Theme.line, shape)
-    Box(framed.height(44.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+    Box(framed.height(44.dp).clickable(enabled = enabled, onClick = onClick), contentAlignment = Alignment.Center) {
         Text(text, style = Type.statusLabel, color = if (selected) Theme.bg else Theme.text)
     }
 }
@@ -243,4 +254,13 @@ private fun DeleteConfirmSheet(what: String, detail: String, onKeep: () -> Unit,
             BigButton("Keep $what", onKeep, fill = null)
         }
     }
+}
+
+/** history-screen/03: Back on a reopened Summary, over the map's top-left corner as on the gate. */
+@Composable
+private fun BackButton(onClick: () -> Unit) {
+    Box(
+        Modifier.padding(start = 16.dp, top = 64.dp).size(44.dp).background(Theme.bg.copy(alpha = 0.85f), CircleShape).clip(CircleShape).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Text("‹", style = Type.number22, color = Theme.text) }
 }
