@@ -8,7 +8,16 @@ import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_main_queue
 
 /**
- * Keeps the process alive while locked: a `CLBackgroundActivitySession` (iOS 17+), which keeps a
+ * Keeps the process alive while locked during a run (D14). `LiveLocation` holds it for as long as `fixes()`
+ * is collected; a fake in tests.
+ */
+interface KeepAlive {
+    fun hold()
+    fun release()
+}
+
+/**
+ * The phone's [KeepAlive]: a `CLBackgroundActivitySession` (iOS 17+), which keeps a
  * When-In-Use app "in use" and shows the blue pill. Facts from Apple's `CLBackgroundActivitySession.h`:
  *
  * - `init` is `NS_UNAVAILABLE`: a session exists only through the class method
@@ -18,17 +27,18 @@ import platform.darwin.dispatch_get_main_queue
  *   refined overlay of the class method, which is why the Swift build worked.
  * - A new session only becomes active with effective authorization, `location` in `UIBackgroundModes`,
  *   and while the app is in the foreground and in direct use: hold it at run start, after the location
- *   permission was answered (`AppModel`).
+ *   permission was answered: `LiveLocation.fixes()` holds it on first collection, and a run collects only
+ *   after `RunSource.Live.open` asked for location.
  * - The iOS 18 variant reports diagnostics; they are logged under `location`, so a locked walk explains
  *   itself afterwards (`insufficientlyInUse`, `authorizationDenied`, …).
  *
  * Created on the main thread like the Swift build (Core Location objects expect a run loop).
  */
 @OptIn(ExperimentalForeignApi::class)
-class KeepAlive(private val log: (String) -> Unit = {}) {
+class BackgroundActivityKeepAlive(private val log: (String) -> Unit = {}) : KeepAlive {
     private var session: CLBackgroundActivitySession? = null
 
-    fun hold() = onMain {
+    override fun hold() = onMain {
         if (session != null) return@onMain
         session = CLBackgroundActivitySession.backgroundActivitySessionWithQueue(dispatch_get_main_queue()) { diagnostic ->
             log("background session ${diagnostic?.describe() ?: "no diagnostic"}")
@@ -36,7 +46,7 @@ class KeepAlive(private val log: (String) -> Unit = {}) {
         log("background session created")
     }
 
-    fun release() = onMain {
+    override fun release() = onMain {
         session?.invalidate()
         session = null
         log("background session invalidated")

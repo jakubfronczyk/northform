@@ -24,7 +24,7 @@ import com.jakubfronczyk.northform.adapters.ble.BluetoothAuthorization
 import com.jakubfronczyk.northform.adapters.ble.CoreBluetoothCentral
 import com.jakubfronczyk.northform.adapters.clock.IosWallClock
 import com.jakubfronczyk.northform.adapters.liveactivity.LiveActivityBridge
-import com.jakubfronczyk.northform.adapters.location.KeepAlive
+import com.jakubfronczyk.northform.adapters.location.BackgroundActivityKeepAlive
 import com.jakubfronczyk.northform.adapters.location.LiveLocation
 import com.jakubfronczyk.northform.adapters.location.LocationAuthorization
 import com.jakubfronczyk.northform.adapters.location.LocationAuthorizationMonitor
@@ -118,7 +118,7 @@ object NorthformApp {
         val wallClock = IosWallClock
         alerts = NotificationAlertPlayer(scope, DeviceLog.run::notice)
         locationAuthorization = LocationAuthorizationMonitor() // main thread: boot() runs in didFinishLaunching
-        location = LiveLocation(locationUpdates, wallClock, locationAuthorization.state, DeviceLog.location::notice)
+        location = LiveLocation(locationUpdates, wallClock, locationAuthorization.state, BackgroundActivityKeepAlive(DeviceLog.location::notice), DeviceLog.location::notice)
 
         // 2  the central manager is created HERE, so willRestoreState lands in a live Kotlin delegate — once iOS has an
         //    answer about Bluetooth (ADR 0005, amended). Undetermined means a fresh install: no sensor can be paired, so
@@ -142,7 +142,7 @@ object NorthformApp {
         val runAlerts = RunAlertPlayer(alerts, DeviceLog::runTrace)
         val sqlStore = SqlRecordingStore(nativeDriver())
         deps = AppDeps(
-            source = if (live) RunSource.Live(sensor, location, KeepAlive(DeviceLog.location::notice).asRunKeepAlive(), ::requestRunPermissions)
+            source = if (live) RunSource.Live(sensor, location, ::requestRunPermissions)
                      else RunSource.Replay { BundleFixtures.script("straight-run-3min") },
             store = LoggingStore(sqlStore, DeviceLog::runTrace),
             reliability = sqlStore,
@@ -173,7 +173,7 @@ object NorthformApp {
 
     /**
      * Asked before the run screen opens, location first (SU4 order, `AppModel.swift:66-74`): the keep-alive
-     * session only becomes active with location authorization. Locked-screen alerts are notifications
+     * `LiveLocation` holds once the run collects GPS only becomes active with location authorization. Locked-screen alerts are notifications
      * (D105): iOS asks once, the answer never blocks a run.
      */
     private suspend fun requestRunPermissions() {
@@ -254,12 +254,6 @@ object NorthformApp {
             val connected = change.state as? SensorState.Connected
             GateSensor(connected = connected != null, batteryPercent = connected?.battery, paired = paired != null, name = paired?.name)
         }
-
-    /** `KeepAlive` is an `:adapters` class; `RunKeepAlive` is the app's seam for it (a fake in tests). */
-    private fun KeepAlive.asRunKeepAlive() = object : RunKeepAlive {
-        override fun hold() = this@asRunKeepAlive.hold()
-        override fun release() = this@asRunKeepAlive.release()
-    }
 
     /** The Compose root. Swift wraps it in a UIViewControllerRepresentable and renders nothing of its own. */
     fun rootViewController(): UIViewController = ComposeUIViewController {

@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.app
 
+import com.jakubfronczyk.northform.adapters.location.KeepAlive
 import com.jakubfronczyk.northform.adapters.location.LiveLocation
 import com.jakubfronczyk.northform.adapters.location.LocationAuthorization
 import com.jakubfronczyk.northform.adapters.location.LocationSink
@@ -61,7 +62,7 @@ class LiveLocationMappingTest {
     private fun TestScope.fixFrom(location: CLLocation, stationary: Boolean): LocationFix {
         val updates = FakeUpdates()
         val received = ArrayList<LocationFix>()
-        val live = LiveLocation(updates, virtualWallClock(start), MutableStateFlow(LocationAuthorization.WhenInUse))
+        val live = LiveLocation(updates, virtualWallClock(start), MutableStateFlow(LocationAuthorization.WhenInUse), keepAlive = NoKeepAlive)
         live.fixes().onEach { received += it }.launchIn(backgroundScope)
         runCurrent()
         updates.sink!!.onUpdate(location, stationary)
@@ -91,4 +92,10 @@ class LiveLocationMappingTest {
         val jsonl = Fixture.encode(ReplayScript(meta, listOf(ReplayInput.Fix(fix))))
         for (key in listOf("sAcc", "course", "cAcc", "vAcc", "alt", "speed")) assertFalse(jsonl.contains("\"$key\""), "$key absent: $jsonl")
     }
+}
+
+/** No real `CLBackgroundActivitySession` in a unit test. */
+private object NoKeepAlive : KeepAlive {
+    override fun hold() {}
+    override fun release() {}
 }
