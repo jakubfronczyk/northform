@@ -5,7 +5,7 @@ over raw Bluetooth GATT, GPS, a pure recording engine that replays real runs bit
 
 **Two real recordings, a 4.8 km run and a 3.0 km walk of about 40 minutes each, replay through the
 engine and reproduce the pace series of the original Swift build tick for tick: 5,143 ticks, to
-0.001 s/km.** 599 tests, no phone or sensor needed.
+0.001 s/km.** 664 tests, no phone or sensor needed.
 
 | Claim | Where it comes from |
 |---|---|
@@ -13,7 +13,7 @@ engine and reproduce the pace series of the original Swift build tick for tick: 
 | 4,829.7 m and 2,987.5 m, ±0.5 m | `RealRecordingsTest.real_recording_totals_stay_put` |
 | the one sensor drop each fixture contains: 1 drop, 1 reconnect, its duration, 0 crashes | `ReliabilityPinTest` |
 | state rebuilt from the database equals the live state at save checkpoints | `RealRecordingsTest.rebuild_matches_live_on_real_runs` |
-| 599 tests: 380 on the JVM, 219 in the iOS simulator | `just test-all`, then the count command under [Run it](#run-it-without-a-phone) |
+| 664 tests: 380 on the JVM, 284 in the iOS simulator | `just test-all`, then the count command under [Run it](#run-it-without-a-phone) |
 | 14,890 lines of Kotlin (tests excluded), 406 of Swift | `git ls-files '*.kt' \| grep -vE '/src/[a-zA-Z]*Test/' \| xargs cat \| wc -l`, same for `'*.swift'` |
 
 The Swift build this app was ported from is not public. Its output on both recordings was hashed
@@ -156,7 +156,7 @@ The test count, after `just test-all`:
 
 ```bash
 cat */build/test-results/*/TEST-*.xml | grep -o '<testsuite [^>]*tests="[0-9]*"' \
-  | grep -o 'tests="[0-9]*"' | tr -dc '0-9\n' | paste -sd+ - | bc      # 599
+  | grep -o 'tests="[0-9]*"' | tr -dc '0-9\n' | paste -sd+ - | bc      # 664
 ```
 
 ### On your own iPhone

@@ -17,9 +17,9 @@ test:
 test-sim:
     ./gradlew :app:iosSimulatorArm64Test :replay:iosSimulatorArm64Test
 
-# The full suite: every JVM test, then the Compose UI and app tests in the iOS simulator. Needs Xcode.
+# The full suite: every JVM test, then the Compose UI, app and replay tests in the iOS simulator. Needs Xcode.
 test-all:
-    ./gradlew jvmTest :composeApp:iosSimulatorArm64Test :app:iosSimulatorArm64Test
+    ./gradlew jvmTest :composeApp:iosSimulatorArm64Test :app:iosSimulatorArm64Test :replay:iosSimulatorArm64Test
 
 # Link the iOS framework without Xcode — proves the Kotlin side builds for device.
 link:
