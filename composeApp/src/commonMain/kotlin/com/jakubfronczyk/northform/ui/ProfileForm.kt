@@ -17,13 +17,18 @@ data class ProfileForm(
     val weight: String,
     /** cm. */
     val height: String,
+    /** Blank: estimated from the age (first-launch-setup, D54). */
     val hrMax: String,
+    /** Blank: 60. */
     val hrRest: String,
 ) {
     enum class Field { BirthDate, Weight, Height, HrMax, HrRest }
 
-    /** One message per invalid field; [profile] only when there are none (Save is enabled exactly then). */
-    data class Checked(val errors: Map<Field, String>, val ageHint: String?, val profile: Profile?)
+    /**
+     * One message per invalid field; [profile] only when there are none (Save is enabled exactly then). [maxHint] is the
+     * live estimate under the max field: "Not sure? We estimate 187 from your age…", "—" until the birth date is valid.
+     */
+    data class Checked(val errors: Map<Field, String>, val ageHint: String?, val maxHint: String, val profile: Profile?)
 
     /** @param now and [tzOffset] are the phone's (the age); [zones] are kept as they are (the zone editor owns them). */
     fun check(now: Instant, tzOffset: Int, zones: HRZones): Checked {
@@ -38,13 +43,17 @@ data class ProfileForm(
         fun <T> field(field: Field, message: String, value: T?): T? = value.also { if (it == null) errors[field] = message }
         val kg = field(Field.Weight, "30–250 kg", decimal(weight)?.takeIf { it in WEIGHT })
         val cm = field(Field.Height, "100–250 cm", decimal(height)?.takeIf { it in HEIGHT })
-        val max = field(Field.HrMax, "100–230 bpm", hrMax.trim().toIntOrNull()?.takeIf { it in HR_MAX })
-        val rest = field(Field.HrRest, "30–120 bpm", hrRest.trim().toIntOrNull()?.takeIf { it in HR_REST })
+        val estimate = age?.takeIf { it in AGE }?.let(Profile::estimatedHrMax)
+        val max = when {
+            hrMax.isBlank() -> field(Field.HrMax, "Enter your birth date to estimate it", estimate)
+            else -> field(Field.HrMax, "100–230 bpm", hrMax.trim().toIntOrNull()?.takeIf { it in HR_MAX })
+        }
+        val rest = if (hrRest.isBlank()) DEFAULT_REST else field(Field.HrRest, "30–120 bpm", hrRest.trim().toIntOrNull()?.takeIf { it in HR_REST })
         if (max != null && rest != null && max - rest < MIN_RESERVE) errors[Field.HrMax] = "At least 20 above resting"
         val profile = if (errors.isEmpty()) {
             Profile(born!!, sex, kg!!, cm!!, hrMax = max!!, hrRest = rest!!, zones = zones)
         } else null
-        return Checked(errors, age?.let { "Age $it" }, profile)
+        return Checked(errors, age?.let { "Age $it" }, "Not sure? We estimate ${estimate ?: "—"} from your age and update it when you go higher.", profile)
     }
 
     companion object {
@@ -55,6 +64,8 @@ data class ProfileForm(
         val HR_REST = 30..120
         /** Max at least this far above rest: a smaller heart-rate reserve makes every zone a few bpm wide. */
         const val MIN_RESERVE = 20
+        /** A blank resting heart rate: the profile's own default. */
+        const val DEFAULT_REST = 60
 
         /** The form a saved profile opens as. */
         fun of(p: Profile) = ProfileForm(RunFormat.birthDate(p.birthDate), p.sex, RunFormat.number(p.weightKg), RunFormat.number(p.heightCm), p.hrMax.toString(), p.hrRest.toString())

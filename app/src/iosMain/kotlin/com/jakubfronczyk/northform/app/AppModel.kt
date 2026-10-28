@@ -4,7 +4,6 @@ import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.async
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import com.jakubfronczyk.northform.ui.ExportState
 import com.jakubfronczyk.northform.core.Profile
@@ -55,17 +54,30 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     /** An edit has been made this launch: the launch read must not replace it with the older stored profile. */
     private val profileEdited = AtomicBoolean(false)
 
+    private val _needsSetup = MutableStateFlow<Boolean?>(null)
     /**
-     * The launch read of the stored profile, once. Everything that computes with the profile awaits it first, so a run
-     * started as the app opens still uses the stored one: its metrics keep that profile for good (D24).
+     * first-launch-setup: true while no profile is stored, so the root shows Setup; null until the launch read lands (the
+     * root shows nothing rather than flash Today). A read that fails can't tell, and Setup would overwrite a profile that
+     * may exist, so the app opens as usual (false).
      */
-    private val profileRead: Deferred<Unit> = scope.async(start = CoroutineStart.LAZY) {
+    val needsSetup: StateFlow<Boolean?> = _needsSetup.asStateFlow()
+
+    /**
+     * The launch read of the stored profile, once, started with the model. Everything that computes with the profile
+     * awaits it, so a run started as the app opens still uses the stored one: its metrics keep that profile for good (D24).
+     */
+    private val profileRead: Deferred<Unit> = scope.async {
         try {
-            deps.profileStore.profile()?.let { stored -> if (!profileEdited.load()) _profile.value = stored }
+            val stored = deps.profileStore.profile()
+            if (!profileEdited.load()) {
+                stored?.let { _profile.value = it }
+                _needsSetup.value = stored == null
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             deps.log("profile read failed: $e")
+            if (!profileEdited.load()) _needsSetup.value = false
         }
     }
 
@@ -350,6 +362,7 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     fun saveProfile(profile: Profile) {
         profileEdited.store(true)
         _profile.value = profile
+        _needsSetup.value = false
         scope.launch {
             profileWrites.withLock {
                 try {

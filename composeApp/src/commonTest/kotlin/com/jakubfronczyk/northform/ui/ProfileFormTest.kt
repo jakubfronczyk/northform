@@ -60,8 +60,8 @@ class ProfileFormTest {
         val cases = listOf(
             Triple(Field.Weight, listOf("30", "250", "61,3"), listOf("29.9", "250.1", "", "abc")),
             Triple(Field.Height, listOf("100", "250"), listOf("99", "251", "")),
-            Triple(Field.HrMax, listOf("100", "230"), listOf("99", "231", "", "187.5")),
-            Triple(Field.HrRest, listOf("30", "80"), listOf("29", "121", "")),
+            Triple(Field.HrMax, listOf("100", "230", ""), listOf("99", "231", "187.5")), // blank: estimated (first-launch-setup)
+            Triple(Field.HrRest, listOf("30", "80", ""), listOf("29", "121")), // blank: 60
         )
         for ((field, ok, bad) in cases) {
             fun with(v: String) = when (field) {
@@ -83,5 +83,25 @@ class ProfileFormTest {
         assertNull(error(valid.copy(hrMax = "120", hrRest = "100"), Field.HrMax))
         assertEquals("At least 20 above resting", error(valid.copy(hrMax = "119", hrRest = "100"), Field.HrMax))
         assertNull(check(valid.copy(hrMax = "119", hrRest = "100")).profile, "Save stays off")
+    }
+
+    // ── first-launch-setup/01 ──
+
+    @Test
+    fun a_blank_max_is_estimated_from_the_age_and_the_hint_says_so() {
+        val c = check(valid.copy(hrMax = ""))
+        assertEquals(187, c.profile?.hrMax, "208 − 0.7 × 30")
+        assertEquals("Not sure? We estimate 187 from your age and update it when you go higher.", c.maxHint)
+        assertEquals("Not sure? We estimate — from your age and update it when you go higher.", check(valid.copy(hrMax = "", birthDate = "")).maxHint)
+    }
+
+    @Test
+    fun a_blank_rest_is_60() {
+        assertEquals(60, check(valid.copy(hrRest = "  ")).profile?.hrRest)
+    }
+
+    @Test
+    fun the_estimate_still_has_to_clear_rest_by_20() {
+        assertEquals("At least 20 above resting", error(valid.copy(birthDate = "01.10.1926", hrMax = "", hrRest = "120"), Field.HrMax), "estimate 138 − 120 < 20")
     }
 }

@@ -76,6 +76,12 @@ data class Profile(
 
     companion object {
         /**
+         * HRmax from age when the runner doesn't know it (D54, SU6; first-launch-setup): Tanaka's 208 − 0.7 × age,
+         * rounded half away from zero. A starting point only: SU6 suggests the real one when a run goes higher.
+         */
+        fun estimatedHrMax(age: Int): Int = (208 - 0.7 * age).roundedHalfAwayFromZero().toInt()
+
+        /**
          * `Profile.swift:101` — the one definition of valid profile heart rates, shared with replay
          * fixtures. The bounds are the valid-sample range ([HeartRate.valid], metrics/06): a resting HR
          * below a valid sample or a max above one could never be measured.

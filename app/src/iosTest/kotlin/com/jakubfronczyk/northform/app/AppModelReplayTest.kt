@@ -295,6 +295,38 @@ class AppModelReplayTest {
         assertTrue(store.records.metrics(id).all { it.profile == mine }, "the run's metrics carry the stored profile")
     }
 
+    /** first-launch-setup/01: with no stored profile the app needs Setup, unknown until the launch read lands. */
+    @Test
+    fun no_stored_profile_needs_setup_and_saving_step_one_ends_it() = runTest {
+        val profiles = InMemoryProfileStore()
+        val model = appOver(InMemoryRecordingStore(), profiles = profiles)
+        assertNull(model.needsSetup.value, "unknown before the read: the root shows nothing yet")
+        runCurrent()
+        assertEquals(true, model.needsSetup.value)
+
+        val mine = AppDeps.sampleProfile.copy(hrMax = 195)
+        model.saveProfile(mine); runCurrent()
+
+        assertEquals(false, model.needsSetup.value)
+        assertEquals(mine, profiles.profile())
+    }
+
+    @Test
+    fun a_stored_profile_never_needs_setup() = runTest {
+        val model = appOver(InMemoryRecordingStore(), profiles = InMemoryProfileStore(AppDeps.sampleProfile))
+        runCurrent()
+        assertEquals(false, model.needsSetup.value)
+    }
+
+    /** A read that fails can't tell; Setup would overwrite a profile that may exist, so the app opens as usual. */
+    @Test
+    fun a_failed_profile_read_does_not_force_setup() = runTest {
+        val failing = object : ProfileStore by InMemoryProfileStore() { override suspend fun profile(): Profile? = error("locked") }
+        val model = appOver(InMemoryRecordingStore(), profiles = failing)
+        runCurrent()
+        assertEquals(false, model.needsSetup.value)
+    }
+
     /** profile-settings review: a run started before the launch read of the profile lands still computes with the stored one. */
     @Test
     fun a_run_started_before_the_profile_is_read_still_uses_the_stored_profile() = runTest {

@@ -34,4 +34,14 @@ class ProfileTest {
         val b = LocationFix(Instant.fromEpochSeconds(0), 53.0, 13.0, 5.0)
         assertTrue(abs(Geo.distance(a, b) - 111_195) < 1, "${Geo.distance(a, b)} m")
     }
+
+    /** first-launch-setup (D54, SU6): HRmax from age, Tanaka's 208 − 0.7 × age, rounded half away from zero. */
+    @Test
+    fun the_hrmax_estimate_is_208_minus_0_7_times_age() {
+        assertEquals(187, Profile.estimatedHrMax(age = 30))
+        assertEquals(199, Profile.estimatedHrMax(age = 13), "198.9")
+        assertEquals(138, Profile.estimatedHrMax(age = 100))
+        assertEquals(173, Profile.estimatedHrMax(age = 50), "173.0")
+        assertEquals(191, Profile.estimatedHrMax(age = 25), "190.5 rounds up")
+    }
 }
