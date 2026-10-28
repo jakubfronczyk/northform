@@ -18,16 +18,13 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.RunReducer
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
@@ -36,6 +33,8 @@ import com.jakubfronczyk.northform.ui.DashedLine
 import com.jakubfronczyk.northform.ui.theme.Theme
 import com.jakubfronczyk.northform.ui.theme.Type
 import com.jakubfronczyk.northform.ui.ValueCell
+import com.jakubfronczyk.northform.ui.theme.Shapes
+import com.jakubfronczyk.northform.ui.theme.Dimens
 
 /**
  * The start gate (Gate artboard; R24, E1, E13; `RunView.swift:38` was the bare version): the map
@@ -60,11 +59,11 @@ fun GateScreen(
         Box(Modifier.fillMaxWidth().height(290.dp)) {
             map(route)
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 64.dp),
+                Modifier.fillMaxWidth().padding(horizontal = Dimens.gutter).padding(top = Dimens.screenTop),
                 horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
-                    Modifier.size(44.dp).background(Theme.bg.copy(alpha = 0.85f), CircleShape).clip(CircleShape).clickable(onClick = close),
+                    Modifier.size(Dimens.iconButton).background(Theme.overlay, CircleShape).clip(CircleShape).clickable(onClick = close),
                     contentAlignment = Alignment.Center,
                 ) { NfIcon(NfIcons.gateBack, Theme.text, size = 20.dp, label = "Back to Today") }
                 Chip(model.typeLabel, Theme.of(snapshot.type))
@@ -72,13 +71,13 @@ fun GateScreen(
         }
         Column(
             Modifier.fillMaxWidth().weight(1f)
-                .offset(y = (-22).dp) // the sheet overlaps the map by 22 dp (artboard margin-top: -22px)
-                .background(Theme.bg, RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 50.dp - 22.dp),
+                .offset(y = -Dimens.sheetOverlap) // the sheet overlaps the map by 22 dp (artboard margin-top: -22px)
+                .background(Theme.bg, Shapes.sheet)
+                .padding(start = Dimens.gutter, end = Dimens.gutter, top = 20.dp, bottom = Dimens.screenBottom - Dimens.sheetOverlap),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(model.title, style = GateType.title, color = Theme.text)
+                Text(model.title, style = Type.gateTitle, color = Theme.text)
                 Text(model.subtitle, style = Type.rowLabel, color = Theme.text2)
             }
             ReadinessCard(model, connectSensor, pairSensor)
@@ -87,11 +86,11 @@ fun GateScreen(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 BigButton(
                     model.startLabel, start, fill = if (model.startEnabled) Theme.primary else Theme.track,
-                    textColor = if (model.startEnabled) Color.White else Theme.dim, enabled = model.startEnabled, icon = NfIcons.play,
+                    textColor = if (model.startEnabled) Theme.onPrimary else Theme.dim, enabled = model.startEnabled, icon = NfIcons.play,
                 )
                 if (model.showStartAnyway) {
-                    Box(Modifier.fillMaxWidth().height(44.dp).clickable(onClick = start), contentAlignment = Alignment.Center) {
-                        Text("Start anyway", style = Type.statusLabel.copy(fontSize = 16.sp), color = Theme.text)
+                    Box(Modifier.fillMaxWidth().height(Dimens.textButton).clickable(onClick = start), contentAlignment = Alignment.Center) {
+                        Text("Start anyway", style = Type.bodyStrong, color = Theme.text)
                     }
                 }
             }
@@ -102,7 +101,7 @@ fun GateScreen(
 /** The three rows: heart rate · GPS · sensor battery, dashed lines between them. */
 @Composable
 private fun ReadinessCard(model: GateModel, connectSensor: (() -> Unit)?, pairSensor: (() -> Unit)?) {
-    Column(Modifier.fillMaxWidth().background(Theme.card, RoundedCornerShape(22.dp)).padding(horizontal = 16.dp, vertical = 4.dp)) {
+    Column(Modifier.fillMaxWidth().background(Theme.card, Shapes.card).padding(horizontal = 16.dp, vertical = 4.dp)) {
         when (val hr = model.hr) {
             is GateModel.HrRow.Ready -> CardRow(icon = { CheckBadge() }, title = "Heart rate", sub = hr.source) {
                 BigValue(hr.bpm, "bpm")
@@ -110,7 +109,7 @@ private fun ReadinessCard(model: GateModel, connectSensor: (() -> Unit)?, pairSe
             GateModel.HrRow.Waiting -> CardRow(icon = { Spinner() }, title = "Heart rate · waiting…", sub = "No reading in the last 5 s") {}
             is GateModel.HrRow.NoSensor -> CardRow(
                 icon = { NfIcon(NfIcons.sensor, Theme.warn) },
-                title = "Heart rate", sub = "Sensor not connected", subColor = Theme.warn, minHeight = 68.dp,
+                title = "Heart rate", sub = "Sensor not connected", subColor = Theme.warn, minHeight = Dimens.rowTall,
             ) {
                 val onClick = when (hr.action) {
                     GateModel.SensorAction.Connect -> connectSensor
@@ -118,20 +117,20 @@ private fun ReadinessCard(model: GateModel, connectSensor: (() -> Unit)?, pairSe
                 }
                 if (onClick != null) {
                     Box(
-                        Modifier.height(44.dp).background(Theme.primary, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp))
+                        Modifier.height(Dimens.inlineButton).background(Theme.primary, Shapes.inlineButton).clip(Shapes.inlineButton)
                             .clickable(onClick = onClick).padding(horizontal = 18.dp),
                         contentAlignment = Alignment.Center,
-                    ) { Text(hr.action.label, style = Type.statusLabel.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = Color.White) }
+                    ) { Text(hr.action.label, style = Type.secondaryBold, color = Theme.onPrimary) }
                 }
             }
         }
         DashedLine()
         CardRow(icon = { if (model.gpsReady) CheckBadge() else Spinner() }, title = model.gpsTitle, sub = model.gpsSub, minHeight = 72.dp) {
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(model.fixLabel, style = Type.statusLabel.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), color = Theme.text)
+                Text(model.fixLabel, style = Type.secondaryBold, color = Theme.text)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     for (i in 0 until RunReducer.gateFixes) {
-                        Box(Modifier.size(18.dp, 6.dp).background(if (i < model.fixesLit) Theme.ok else RunPalette.unlit, RoundedCornerShape(3.dp)))
+                        Box(Modifier.size(18.dp, 6.dp).background(if (i < model.fixesLit) Theme.ok else Theme.unlit, Shapes.fixSegment))
                     }
                 }
             }
@@ -151,13 +150,13 @@ private fun CardRow(
     title: String,
     sub: String?,
     subColor: Color = Theme.text2,
-    minHeight: androidx.compose.ui.unit.Dp = 64.dp,
+    minHeight: androidx.compose.ui.unit.Dp = Dimens.row,
     trailing: @Composable () -> Unit,
 ) {
     Row(Modifier.fillMaxWidth().heightIn(min = minHeight), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) { icon() }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(title, style = Type.statusLabel.copy(fontSize = 16.sp), color = Theme.text)
+            Text(title, style = Type.bodyStrong, color = Theme.text)
             if (sub != null) Text(sub, style = Type.tertiaryText, color = subColor)
         }
         trailing()
@@ -179,17 +178,13 @@ private fun CheckBadge() {
 @Composable
 private fun Spinner() {
     Box(Modifier.size(28.dp).border(2.4.dp, Theme.track, CircleShape))
-    Box(Modifier.size(28.dp).border(2.4.dp, Theme.text.copy(alpha = 0.6f), RoundedCornerShape(topStartPercent = 50, topEndPercent = 50, bottomEndPercent = 0, bottomStartPercent = 0)))
+    Box(Modifier.size(28.dp).border(2.4.dp, Theme.spinnerArc, Shapes.spinnerArc))
 }
 
 @Composable
 private fun WarningLine(text: String) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp).heightIn(min = 24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         NfIcon(NfIcons.warning, Theme.warn, size = 20.dp)
-        Text(text, style = Type.statusLabel.copy(fontSize = 15.sp), color = Theme.warn)
+        Text(text, style = Type.secondaryStrong, color = Theme.warn)
     }
-}
-
-private object GateType {
-    val title = androidx.compose.ui.text.TextStyle(fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
 }

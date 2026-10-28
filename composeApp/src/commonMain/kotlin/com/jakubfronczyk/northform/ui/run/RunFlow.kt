@@ -19,7 +19,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.inSecondsDouble
 import com.jakubfronczyk.northform.core.ports.WallClock
@@ -36,6 +35,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.time.Instant
+import com.jakubfronczyk.northform.ui.theme.Dimens
 
 /**
  * The whole run flow, switched by phase (`Features/Run/RunView.swift:7-36`). Reads ONLY the session
@@ -90,7 +90,7 @@ object RunFlow {
 @Composable
 private fun BareScreen(content: @Composable ColumnScope.() -> Unit) {
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 50.dp),
+        Modifier.fillMaxSize().padding(horizontal = Dimens.gutter).padding(bottom = Dimens.screenBottom),
         horizontalAlignment = Alignment.CenterHorizontally,
         content = content,
     )

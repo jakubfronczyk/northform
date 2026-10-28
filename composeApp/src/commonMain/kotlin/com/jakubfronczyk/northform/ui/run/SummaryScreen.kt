@@ -8,7 +8,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -33,12 +31,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jakubfronczyk.northform.core.RunTag
 import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.SummaryEdits
@@ -47,6 +41,8 @@ import com.jakubfronczyk.northform.ui.BigButton
 import com.jakubfronczyk.northform.ui.theme.Theme
 import com.jakubfronczyk.northform.ui.theme.Type
 import com.jakubfronczyk.northform.ui.ValueCell
+import com.jakubfronczyk.northform.ui.theme.Shapes
+import com.jakubfronczyk.northform.ui.theme.Dimens
 
 /**
  * The Summary (R27, `SummaryDark.dc.html`, `SummaryWalk` = the same board for a walk): draws one
@@ -92,7 +88,7 @@ fun SummaryScreen(
 private fun FailedContent(reason: String, noun: String, busy: Boolean, onRetry: () -> Unit, onDelete: () -> Unit, review: Boolean, onBack: () -> Unit) {
     var confirmDelete by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(top = 64.dp, bottom = 50.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.fillMaxSize().padding(horizontal = Dimens.gutter).padding(top = Dimens.screenTop, bottom = Dimens.screenBottom), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.weight(1f))
             Text("Couldn't compute this $noun", style = Type.screenTitle, color = Theme.text)
             Spacer(Modifier.height(8.dp))
@@ -114,13 +110,13 @@ private fun SummaryContent(m: SummaryModel, edits: SummaryEdits, onEdit: (Summar
     // One fitted camera for this Summary: the whole route once, then the user's pans and zooms (summary-screen/04).
     val camera = remember { MapCamera(fitted = true) }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 50.dp)) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = Dimens.screenBottom)) {
             Box(Modifier.fillMaxWidth().height(340.dp)) {
                 CompositionLocalProvider(LocalMapCamera provides camera) { map(m.route) }
             }
-            Column(Modifier.padding(horizontal = 16.dp).padding(top = 16.dp)) {
+            Column(Modifier.padding(horizontal = Dimens.gutter).padding(top = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(m.typeLabel, style = Type.pillLabel, color = Theme.text, modifier = Modifier.background(Theme.card, RoundedCornerShape(999.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
+                Text(m.typeLabel, style = Type.pillLabel, color = Theme.text, modifier = Modifier.background(Theme.card, Shapes.tag).padding(horizontal = 10.dp, vertical = 4.dp))
                 Text(m.dateLine, style = Type.secondaryText, color = Theme.text2)
                 Spacer(Modifier.weight(1f))
                 BinButton(enabled = !busy) { confirmDelete = true }
@@ -167,7 +163,7 @@ private fun SummaryContent(m: SummaryModel, edits: SummaryEdits, onEdit: (Summar
 @Composable
 private fun HrMaxCard(suggested: String, current: String, enabled: Boolean, onAccept: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().background(Theme.card, RoundedCornerShape(18.dp)).border(1.dp, Theme.accent.copy(alpha = 0.5f), RoundedCornerShape(18.dp)).padding(16.dp),
+        Modifier.fillMaxWidth().background(Theme.card, Shapes.summaryCard).border(1.dp, Theme.accentBorder, Shapes.summaryCard).padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -188,7 +184,7 @@ private fun EditsCard(m: SummaryModel, edits: SummaryEdits, onEdit: (SummaryEdit
     val onTag = { t: RunTag? -> onEdit(edits.copy(tag = t)) }
     val onRpe = { n: Int? -> onEdit(edits.copy(rpe = n)) }
     val onNotes = { text: String -> onEdit(edits.copy(notes = text.ifEmpty { null })) }
-    Column(Modifier.fillMaxWidth().background(Theme.card, RoundedCornerShape(18.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(Modifier.fillMaxWidth().background(Theme.card, Shapes.summaryCard).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(m.yourLabel, style = Type.sheetTitle, color = Theme.text)
         if (m.showsTags) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -213,7 +209,7 @@ private fun EditsCard(m: SummaryModel, edits: SummaryEdits, onEdit: (SummaryEdit
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Notes", style = Type.tertiaryText, color = Theme.text2)
-            Box(Modifier.fillMaxWidth().background(Theme.bg, RoundedCornerShape(12.dp)).padding(12.dp)) {
+            Box(Modifier.fillMaxWidth().background(Theme.bg, Shapes.textArea).padding(12.dp)) {
                 if (notes.isEmpty()) Text(if (readOnly) "No notes" else "Legs heavy after km 7", style = Type.secondaryText, color = Theme.text3)
                 BasicTextField(notes, onNotes, readOnly = readOnly, textStyle = Type.secondaryText.copy(color = Theme.text), cursorBrush = SolidColor(Theme.accent), modifier = Modifier.fillMaxWidth())
             }
@@ -224,9 +220,9 @@ private fun EditsCard(m: SummaryModel, edits: SummaryEdits, onEdit: (SummaryEdit
 /** One selectable pill of the Type row and the RPE grid: filled in the accent when selected, outlined otherwise. */
 @Composable
 private fun OptionPill(text: String, selected: Boolean, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = Shapes.option
     val framed = if (selected) modifier.background(Theme.accent, shape) else modifier.border(1.dp, Theme.line, shape)
-    Box(framed.height(44.dp).clickable(enabled = enabled, onClick = onClick), contentAlignment = Alignment.Center) {
+    Box(framed.height(Dimens.option).clickable(enabled = enabled, onClick = onClick), contentAlignment = Alignment.Center) {
         Text(text, style = Type.statusLabel, color = if (selected) Theme.bg else Theme.text)
     }
 }
@@ -235,7 +231,7 @@ private fun OptionPill(text: String, selected: Boolean, modifier: Modifier = Mod
 @Composable
 private fun BinButton(enabled: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.size(36.dp).border(1.dp, Theme.line, RoundedCornerShape(10.dp)).clickable(enabled = enabled, onClick = onClick),
+        Modifier.size(36.dp).border(1.dp, Theme.line, Shapes.iconTile).clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { NfIcon(NfIcons.bin, if (enabled) Theme.text2 else Theme.dim, size = 18.dp, label = "Delete") }
 }
@@ -245,7 +241,7 @@ private fun BinButton(enabled: Boolean, onClick: () -> Unit) {
 @Composable
 private fun BackButton(onClick: () -> Unit) {
     Box(
-        Modifier.padding(start = 16.dp, top = 64.dp).size(44.dp).background(Theme.bg.copy(alpha = 0.85f), CircleShape).clip(CircleShape).clickable(onClick = onClick),
+        Modifier.padding(start = Dimens.gutter, top = Dimens.screenTop).size(Dimens.iconButton).background(Theme.overlay, CircleShape).clip(CircleShape).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { NfIcon(NfIcons.back, Theme.text, size = 22.dp, label = "Back") }
 }
