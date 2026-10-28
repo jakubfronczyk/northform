@@ -77,7 +77,7 @@ fun SettingsScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Theme.zoneColors.forEachIndexed { zone, color ->
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Box(Modifier.fillMaxWidth().height(8.dp).background(color, Shapes.bar))
+                            Box(Modifier.fillMaxWidth().height(8.dp).background(color, Shapes.capsule))
                             Text("Z$zone", style = Type.caption, color = Theme.text3)
                         }
                     }

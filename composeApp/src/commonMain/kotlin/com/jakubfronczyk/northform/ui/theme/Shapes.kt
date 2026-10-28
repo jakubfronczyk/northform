@@ -29,11 +29,6 @@ object Shapes {
     val textArea = RoundedCornerShape(12.dp)
     /** The Summary's bin button. */
     val iconTile = RoundedCornerShape(10.dp)
-    // Near-duplicate: `bar` (4 dp) and `barTall` (5 dp); kept apart for the owner to decide.
-    /** An 8 dp bar or segment: Settings' zone bar, the live zone bar, the splits' pace bar. */
-    val bar = RoundedCornerShape(4.dp)
-    /** A 10 dp bar: the zone editor's preview, the Summary's time per zone. */
-    val barTall = RoundedCornerShape(5.dp)
     /** The square inside the paused screen's stop circle. */
     val stopSquare = RoundedCornerShape(4.dp)
     /** One of the Gate's GPS fix bars. */
@@ -46,11 +41,11 @@ object Shapes {
     val inset = RoundedCornerShape(16.dp)
     /** A bottom sheet's top corners: the confirm sheet, the crash prompt, the Gate and live sheets over the map. */
     val sheet = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
-    // Near-duplicate: `capsule` (50 %) and `tag` (999 dp) both draw fully round ends; kept apart for the owner to decide.
-    /** Fully round ends at any height: the map chips, Re-center, the zone pill. */
+    /**
+     * Fully round ends at any height: the map chips, Re-center, the zone pill, the Summary's type tag, and every bar or
+     * segment (Settings' and the live zone bar, the zone editor's preview, the Summary's time per zone and pace bars).
+     */
     val capsule = RoundedCornerShape(50)
-    /** The Summary's type tag ("Run"). */
-    val tag = RoundedCornerShape(999.dp)
     /** The Gate spinner's turning half: the top two corners round, the bottom square. */
     val spinnerArc = RoundedCornerShape(topStartPercent = 50, topEndPercent = 50, bottomEndPercent = 0, bottomStartPercent = 0)
 }

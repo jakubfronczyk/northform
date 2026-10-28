@@ -82,14 +82,14 @@ fun CooldownContent(model: CooldownModel, skip: () -> Unit) = PinnedScreen(butto
         Text(model.totals, style = Type.rowLabel, color = Theme.text2)
     }
     Column(Modifier.padding(top = Dimens.headerGap), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(model.title, style = Type.heroTitle, color = Theme.text)
+        Text(model.title, style = Type.pageTitle, color = Theme.text)
         Text(model.subtitle, style = Type.lead, color = Theme.text2)
     }
     Box(Modifier.padding(top = Dimens.sectionGap).size(Dimens.cooldownRingBox).align(Alignment.CenterHorizontally), contentAlignment = Alignment.Center) {
         ProgressRing(model.ring, Dimens.cooldownRing, Dimens.cooldownRingStroke)
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(model.left, style = Type.cooldownLeft, color = Theme.text)
-            Text("left", style = Type.liveUnit, color = Theme.text2)
+            Text("left", style = Type.unitLabel, color = Theme.text2)
         }
     }
     RecoveryCard(model, Modifier.padding(top = Dimens.sectionGap))

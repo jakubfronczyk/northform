@@ -62,7 +62,7 @@ fun CrashPromptScreen(facts: CrashFacts, now: () -> Instant, onChoice: (CrashCho
     // A background alone has no pointer node, so hit-testing would fall through to the screen below. A no-op,
     // no-indication clickable is a hit target that yields to the sheet's own buttons (they consume the down first);
     // a pointerInput that consumed everything would instead cancel those buttons' taps in the Final pass.
-    Box(Modifier.fillMaxSize().background(Theme.scrimStrong).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}) {
+    Box(Modifier.fillMaxSize().background(Theme.scrim).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}) {
         Column(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .background(Theme.card, Shapes.sheet)

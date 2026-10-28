@@ -179,7 +179,7 @@ private fun BigCell(
     modifier: Modifier = Modifier,
     subColor: Color = Theme.warn,
 ) = ValueCell(
-    value, modifier, unit = unit, valueStyle = Type.number54Black, color = color, unitStyle = Type.unitLabel, unitLift = 10.dp, maxLines = 1,
+    value, modifier, unit = unit, valueStyle = Type.number54, color = color, unitStyle = Type.unitLabel, unitLift = 10.dp, maxLines = 1,
     label = { Row(Modifier.height(24.dp), verticalAlignment = Alignment.CenterVertically, content = label) },
     footer = { Text(sub, style = Type.tertiaryStrong, color = subColor, modifier = Modifier.height(16.dp)) },
 )
@@ -190,7 +190,7 @@ private fun ZoneBar(lit: Int?) {
     Row(Modifier.fillMaxWidth().height(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.Bottom) {
         for (z in 0..5) {
             val on = z == lit
-            Box(Modifier.weight(1f).height(if (on) 8.dp else 4.dp).background(if (on) Theme.zoneColors[z] else Theme.unlit, Shapes.bar))
+            Box(Modifier.weight(1f).height(if (on) 8.dp else 4.dp).background(if (on) Theme.zoneColors[z] else Theme.unlit, Shapes.capsule))
         }
     }
 }

@@ -62,7 +62,7 @@ object Dimens {
     val dot = 10.dp
     /** The zone editor's round ±1 stepper. */
     val stepper = 36.dp
-    /** A 10 dp bar (`Shapes.barTall`): the zone editor's preview. */
+    /** A 10 dp bar (`Shapes.capsule`): the zone editor's preview. */
     val barTall = 10.dp
     /** One of Setup's four progress segments. */
     val progressSegment = 4.dp

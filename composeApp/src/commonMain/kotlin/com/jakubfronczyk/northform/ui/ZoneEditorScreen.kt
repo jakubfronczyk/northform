@@ -71,7 +71,7 @@ fun ZoneEditorScreen(profile: Profile, backLabel: String, onSave: (Profile) -> U
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().height(Dimens.barTall).clip(Shapes.barTall), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(Modifier.fillMaxWidth().height(Dimens.barTall).clip(Shapes.capsule), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             editor.bar.forEachIndexed { zone, weight -> Box(Modifier.weight(weight.toFloat()).fillMaxHeight().background(Theme.zoneColors[zone])) }
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
