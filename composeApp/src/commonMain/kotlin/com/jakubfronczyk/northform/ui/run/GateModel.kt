@@ -18,6 +18,8 @@ data class GateSensor(val connected: Boolean, val batteryPercent: Int?, val pair
  * ✓; "Start anyway" sends the same `UserAction.Start`. Table-tested in `GateModelTest`.
  */
 data class GateModel(
+    /** The type chip: "Run" / "Walk" (today-screen/04: the tile that opened the gate). */
+    val typeLabel: String,
     val title: String,
     val subtitle: String,
     val hr: HrRow,
@@ -58,15 +60,17 @@ data class GateModel(
             val battery = sensor?.batteryPercent?.takeIf { !noSensor }?.let { Battery(it, low = it < LOW_BATTERY_BELOW) }
             val lowBattery = battery?.low == true
             val startOk = hrReady && gpsReady
+            val noun = SummaryModel.noun(snapshot.type)
             return GateModel(
+                typeLabel = noun.replaceFirstChar { it.uppercase() },
                 title = when {
                     noSensor -> "No heart rate yet"
-                    startOk -> "Ready to run"
+                    startOk -> "Ready to $noun"
                     else -> "Getting ready"
                 },
                 subtitle = when {
-                    noSensor && !sensor.paired -> "Pair a sensor, or start a GPS only run."
-                    noSensor -> "Connect the sensor, or start a GPS only run."
+                    noSensor && !sensor.paired -> "Pair a sensor, or start a GPS only $noun."
+                    noSensor -> "Connect the sensor, or start a GPS only $noun."
                     startOk && lowBattery -> "GPS is locked in. Sensor battery is low."
                     startOk -> "Heart rate and GPS are locked in"
                     !hrReady && !gpsReady -> "Waiting for heart rate and GPS."
@@ -82,10 +86,10 @@ data class GateModel(
                 gpsTitle = if (gpsReady) "GPS" else "GPS · finding signal…",
                 gpsSub = if (gpsReady) "Locked in" else "Needs ${RunReducer.gateFixes} fixes within ${RunReducer.gateFixAccuracy.toInt()} m",
                 battery = battery,
-                warning = battery?.takeIf { it.low }?.let { "Sensor battery ${it.percent} % · may not last the run" },
+                warning = battery?.takeIf { it.low }?.let { "Sensor battery ${it.percent} % · may not last the $noun" },
                 startLabel = when {
                     noSensor -> "Start · sensor not connected"
-                    startOk -> "Start run"
+                    startOk -> "Start $noun"
                     !gpsReady -> "Start · waiting for GPS"
                     else -> "Start · waiting for heart rate"
                 },

@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.ui.run
 
+import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
 import kotlin.test.Test
@@ -101,5 +102,19 @@ class GateModelTest {
     @Test
     fun a_heart_rate_reading_without_a_number_is_a_dash() {
         assertEquals(GateModel.HrRow.Ready(NO_VALUE), GateModel.from(ready.copy(hrNow = null)).hr)
+    }
+
+    /** today-screen/04: a walk's gate says walk wherever the run's says run, chip included. */
+    @Test
+    fun a_walk_gate_uses_its_own_noun() {
+        val walk = ready.copy(type = RecordingType.Walk)
+        val m = GateModel.from(walk)
+        assertEquals("Walk", m.typeLabel)
+        assertEquals("Ready to walk", m.title)
+        assertEquals("Start walk", m.startLabel)
+        assertEquals("Connect the sensor, or start a GPS only walk.", GateModel.from(walk, GateSensor(connected = false, batteryPercent = null, paired = true)).subtitle)
+        assertEquals("Pair a sensor, or start a GPS only walk.", GateModel.from(walk, GateSensor(connected = false, batteryPercent = null, paired = false)).subtitle)
+        assertEquals("Sensor battery 14 % · may not last the walk", GateModel.from(walk, GateSensor(connected = true, batteryPercent = 14, paired = true)).warning)
+        assertEquals("Run", GateModel.from(ready).typeLabel)
     }
 }

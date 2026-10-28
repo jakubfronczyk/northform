@@ -1,6 +1,10 @@
 package com.jakubfronczyk.northform.app
 
 import com.jakubfronczyk.northform.core.RecordingState
+import com.jakubfronczyk.northform.core.RecordingType
+import com.jakubfronczyk.northform.core.ports.SavedRecordings
+import com.jakubfronczyk.northform.core.ports.SavedRows
+import com.jakubfronczyk.northform.engine.store.StoredSavedRecordings
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.ports.Alert
 import com.jakubfronczyk.northform.core.ports.AlertPlayer
@@ -53,6 +57,7 @@ class AppModelReplayTest {
         alerts = alerts,
         log = log,
         newRecordingId = { "00000000-0000-0000-0000-00000000000a" },
+        saved = (store as? SavedRows)?.let { StoredSavedRecordings(it, store) } ?: SavedRecordings.None,
     )
 
     @Test
@@ -99,8 +104,44 @@ class AppModelReplayTest {
         val saved = assertNotNull(store.records.load(run.id)).recording
         assertEquals(RecordingState.Saved, saved.state)
         assertEquals(RunTag.Easy, saved.tag)
+        assertEquals(listOf(run.id), model.saved.value.map { it.recording.id }, "today-screen/01: Today re-reads once the Summary closes")
         assertEquals(5, alerts.played.count { it == Alert.CountdownTick })
         assertTrue(phases.any { "→ gate" in it } && phases.any { "→ active" in it } && phases.any { "→ done" in it }, "lifecycle log: $phases")
+    }
+
+    /** today-screen/04: the Walk tile's start records a walk, from the first row the store holds; the gate says so. */
+    @Test
+    fun the_walk_start_creates_a_recording_of_type_walk() = runTest {
+        val store = InMemoryRecordingStore()
+        val model = AppModel(replayDeps(straightRun(), store, RecordedAlerts()), backgroundScope)
+
+        model.startRun(RecordingType.Walk)
+        runCurrent()
+        val run = assertNotNull(model.activeRun.value)
+        assertEquals(RecordingType.Walk, run.session.snapshots.value.type, "the gate shows its walk copy")
+        run.session.tap(UserAction.Start)
+        advanceTimeBy(6.seconds); runCurrent()
+
+        assertEquals(RecordingType.Walk, assertNotNull(store.records.load(run.id)).recording.type)
+    }
+
+    /** today-screen/01: Today reads the saved list at launch. */
+    @Test
+    fun the_saved_list_is_read_at_launch() = runTest {
+        val store = InMemoryRecordingStore()
+        val first = AppModel(replayDeps(straightRun(), store, RecordedAlerts()), backgroundScope)
+        first.startRun(); runCurrent()
+        val run = assertNotNull(first.activeRun.value)
+        run.session.tap(UserAction.Start)
+        advanceTimeBy(66.seconds); run.session.tap(UserAction.Stop); runCurrent()
+        advanceTimeBy(61.seconds); runCurrent()
+        first.closeRun(); advanceTimeBy(1.seconds); runCurrent()
+        first.saveSummary(); runCurrent()
+
+        val relaunched = AppModel(replayDeps(straightRun(), store, RecordedAlerts()), backgroundScope)
+        assertEquals(emptyList(), relaunched.saved.value.map { it.recording.id })
+        relaunched.checkUnfinished(); runCurrent()
+        assertEquals(listOf(run.id), relaunched.saved.value.map { it.recording.id })
     }
 
     /** code review a.3: a recording a crash left `active` still goes to the crash prompt, and no Summary opens. */

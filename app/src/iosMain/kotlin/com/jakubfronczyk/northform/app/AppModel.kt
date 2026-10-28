@@ -3,6 +3,8 @@ package com.jakubfronczyk.northform.app
 import com.jakubfronczyk.northform.core.EventKind
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingState
+import com.jakubfronczyk.northform.core.RecordingType
+import com.jakubfronczyk.northform.core.ports.SavedRecording
 import com.jakubfronczyk.northform.core.ports.FlushBatch
 import com.jakubfronczyk.northform.engine.run.CrashChoice
 import com.jakubfronczyk.northform.engine.run.EndResult
@@ -10,6 +12,7 @@ import com.jakubfronczyk.northform.engine.run.SummaryEdits
 import com.jakubfronczyk.northform.engine.run.SummarySession
 import com.jakubfronczyk.northform.engine.run.CrashPrompt
 import com.jakubfronczyk.northform.engine.run.crashMark
+import com.jakubfronczyk.northform.ui.TodayModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +38,10 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     /** The Summary of the run that just finished (R27): on screen while non-null, until Save or Delete. */
     val summary: StateFlow<SummarySession?> = _summary.asStateFlow()
 
+    private val _saved = MutableStateFlow<List<SavedRecording>>(emptyList())
+    /** Today's list (today-screen spec): the newest saved recordings, re-read at launch and whenever the Summary closes. */
+    val saved: StateFlow<List<SavedRecording>> = _saved.asStateFlow()
+
     private val _unfinished = MutableStateFlow<UnfinishedRun?>(null)
     /** A recording a crash left behind (R28): the prompt is up while non-null, until the user chooses. */
     val unfinished: StateFlow<UnfinishedRun?> = _unfinished.asStateFlow()
@@ -51,10 +58,22 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     /** Runs whose screen closed after start: kept until their last write is done (D112). Immutable snapshots, swapped atomically. */
     private val finishing = MutableStateFlow<Map<RecordingId, ActiveRun>>(emptyMap())
 
-    /** `AppModel.swift:49` — one run at a time; never while the R28 prompt is waiting for its answer (it owns the screen). */
-    fun startRun() {
+    /**
+     * `AppModel.swift:49` — one run at a time; never while the R28 prompt is waiting for its answer (it owns the screen).
+     * [type] is the tile tapped on Today (today-screen/04), fixed when the recording is created.
+     */
+    fun startRun(type: RecordingType = RecordingType.Run) {
         if (_unfinished.value != null) return
-        openRun { ActiveRun.open(deps, scope) }
+        openRun { ActiveRun.open(deps, scope, type) }
+    }
+
+    /** Re-reads Today's list; a failed read keeps the last one (logged), never an error on Today. */
+    fun refreshSaved() {
+        scope.launch {
+            runCatching { deps.saved.latest(TodayModel.SHOWN) }
+                .onSuccess { _saved.value = it }
+                .onFailure { deps.log("saved list read failed: $it") }
+        }
     }
 
     /**
@@ -74,6 +93,7 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
      * path; nothing resumes until [resolveUnfinished] (R28: the user chooses).
      */
     fun checkUnfinished() {
+        refreshSaved()
         scope.launch {
             runCatching {
                 // summary-screen/05 (GLOSSARY "Computing"): every write was done, so the user is owed the Summary, not the prompt.
@@ -224,6 +244,7 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
             session.call()
             val state = session.state.value
             if (state is SummarySession.State.Saved || state is SummarySession.State.Deleted) {
+                refreshSaved() // Today is visible again: Save added a recording, Delete may have removed one
                 _summary.value = null
                 deps.log("run ${session.recordingId.value.take(8)} $done")
             }

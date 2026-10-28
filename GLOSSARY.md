@@ -65,6 +65,15 @@ _Avoid_: results, recap
 **Saved**:
 A recording the user confirmed on its summary, with its metrics, shown in History.
 
+**Today**:
+The home screen: the sensor, the Run and Walk starts, the latest saved recording and the two
+before it. Only saved recordings appear on it.
+_Avoid_: home, dashboard
+
+**History**:
+Every saved recording, newest first.
+_Avoid_: log, feed
+
 ### Signals and loss
 
 **Split**:

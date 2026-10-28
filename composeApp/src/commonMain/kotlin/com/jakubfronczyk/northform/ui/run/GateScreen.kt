@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.RunReducer
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
@@ -65,7 +66,7 @@ fun GateScreen(
                     Modifier.size(44.dp).background(Theme.bg.copy(alpha = 0.85f), CircleShape).clip(CircleShape).clickable(onClick = close),
                     contentAlignment = Alignment.Center,
                 ) { Text("‹", style = Type.number22, color = Theme.text) }
-                Chip("Run", Theme.accent)
+                Chip(model.typeLabel, if (snapshot.type == RecordingType.Walk) Theme.text2 else Theme.accent)
             }
         }
         Column(

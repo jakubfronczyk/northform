@@ -21,6 +21,8 @@ import com.jakubfronczyk.northform.persistence.SqlRecordingStore
 import com.jakubfronczyk.northform.persistence.nativeDriver
 import com.jakubfronczyk.northform.replay.RecordingTap
 import com.jakubfronczyk.northform.ui.AppRoot
+import com.jakubfronczyk.northform.ui.TodayModel
+import com.jakubfronczyk.northform.engine.store.StoredSavedRecordings
 import com.jakubfronczyk.northform.ui.run.SummaryScreen
 import com.jakubfronczyk.northform.ui.crash.CrashPromptScreen
 import com.jakubfronczyk.northform.ui.run.GateSensor
@@ -33,10 +35,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSOperationQueue
+import platform.Foundation.NSTimeZone
+import platform.Foundation.localTimeZone
+import platform.Foundation.secondsFromGMT
 import platform.UIKit.UIApplicationDidEnterBackgroundNotification
 import platform.UIKit.UIViewController
 import kotlin.coroutines.resume
@@ -114,6 +120,7 @@ object NorthformApp {
                      else RunSource.Replay { BundleFixtures.script("straight-run-3min") },
             store = LoggingStore(sqlStore, DeviceLog::runTrace),
             reliability = sqlStore,
+            saved = StoredSavedRecordings(sqlStore, sqlStore),
             wallClock = wallClock,
             alerts = runAlerts,
             clearAlerts = runAlerts::clear,
@@ -181,8 +188,11 @@ object NorthformApp {
         val unfinished by model.unfinished.collectAsState()
         val summary by model.summary.collectAsState()
         val gateSensor by remember { gateSensorStates() }.collectAsState(null)
+        val saved by model.saved.collectAsState()
+        val sensorName by remember { if (live) sensorDetails.paired.map { it?.name } else flowOf(null) }.collectAsState(null)
         AppRoot(
             activeRun = activeRun?.session,
+            today = TodayModel.from(saved, gateSensor, sensorName, IosWallClock.now(), NSTimeZone.localTimeZone.secondsFromGMT.toInt()),
             onStartRun = model::startRun,
             onCloseRun = model::closeRun,
             map = { route -> RouteMap(route, showsUserLocation = live) },
