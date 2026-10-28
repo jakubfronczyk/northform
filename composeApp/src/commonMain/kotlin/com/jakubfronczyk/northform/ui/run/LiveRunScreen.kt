@@ -291,7 +291,7 @@ private fun HoldButton(holding: Boolean, onHolding: (Boolean) -> Unit, modifier:
         contentAlignment = Alignment.Center,
     ) {
         if (holding) Box(Modifier.fillMaxHeight().fillMaxWidth(fill).align(Alignment.CenterStart).background(Theme.primary))
-        Text(if (holding) "Keep holding…" else "Hold to stop", style = Type.sheetTitle, color = Theme.text)
+        Text(if (holding) "Keep holding…" else "Hold to stop", style = Type.buttonLabel, color = Theme.text)
     }
 }
 
