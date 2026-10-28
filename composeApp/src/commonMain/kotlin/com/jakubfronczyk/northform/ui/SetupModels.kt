@@ -51,17 +51,19 @@ data class SetupPermissions(val bluetooth: Row, val location: Row, val locationN
     /** What the row's button does. */
     enum class Action { Allow, OpenSettings }
 
-    /** "Allowed" / "Not allowed", and the button beside it, if any. */
-    data class Row(val status: String, val action: Action?)
+    /** Whether iOS allows it, and the button beside it, if any. */
+    data class Row(val allowed: Boolean, val action: Action?) {
+        val status: String get() = if (allowed) "Allowed" else "Not allowed"
+    }
 
     companion object {
         fun of(bluetoothAllowed: Boolean, location: Location) = SetupPermissions(
-            bluetooth = if (bluetoothAllowed) Row("Allowed", null) else Row("Not allowed", Action.OpenSettings),
+            bluetooth = if (bluetoothAllowed) Row(true, null) else Row(false, Action.OpenSettings),
             location = when (location) {
-                Location.Allowed -> Row("Allowed", null)
-                Location.NotAsked -> Row("Not allowed", Action.Allow)
-                Location.Denied -> Row("Not allowed", Action.OpenSettings)
-                Location.Restricted -> Row("Not allowed", null) // parental controls or a profile: nothing the runner can change
+                Location.Allowed -> Row(true, null)
+                Location.NotAsked -> Row(false, Action.Allow)
+                Location.Denied -> Row(false, Action.OpenSettings)
+                Location.Restricted -> Row(false, null) // parental controls or a profile: nothing the runner can change
             },
             locationNote = if (location == Location.Denied) "Location is off for this app. Turn it on in iOS Settings, then come back." else null,
         )

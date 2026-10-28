@@ -1,5 +1,10 @@
 package com.jakubfronczyk.northform.app
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Composable
+import com.jakubfronczyk.northform.core.Profile
+import com.jakubfronczyk.northform.ui.SetupPermissions
+import com.jakubfronczyk.northform.ui.SetupScreen
 import platform.Foundation.NSLocale
 import com.jakubfronczyk.northform.ui.ZoneEditorScreen
 import com.jakubfronczyk.northform.ui.ProfileEditScreen
@@ -187,6 +192,34 @@ object NorthformApp {
         return name
     }
 
+    /**
+     * first-launch-setup: the four steps over the real ports — the profile through the app model, Location through the
+     * same request a run start makes (it does nothing once decided, so never two prompts), the sensor through the Sensor
+     * screen's model. [profile] is null until step 1 has saved one (the fallback must not prefill the form).
+     */
+    @Composable
+    private fun Setup(profile: Profile?, finish: () -> Unit) {
+        val sensorModel = remember { SensorScreenModel(sensor, sensorDetails) }
+        LaunchedEffect(sensorModel) { sensorModel.follow() }
+        val sensorUi by sensorModel.ui.collectAsState()
+        val location by locationAuthorization.state.collectAsState()
+        val bluetoothAllowed by remember { sensor.states().map { it.state !is SensorState.Unauthorized } }.collectAsState(true)
+        SetupScreen(
+            profile = profile, now = deps.wallClock.now(), tzOffset = deps.tzOffset(), onSaveProfile = model::saveProfile,
+            permissions = SetupPermissions.of(bluetoothAllowed, location.forSetup()),
+            allowLocation = { scope.launch { DeviceLog.app.notice("location authorization answered: ${requestWhenInUseAuthorization()}") } },
+            openSettings = ::openAppSettings,
+            sensor = sensorUi, search = sensorModel::connect, pair = sensorModel::pair, finish = finish,
+        )
+    }
+
+    private fun LocationAuthorization.forSetup() = when (this) {
+        LocationAuthorization.NotDetermined -> SetupPermissions.Location.NotAsked
+        LocationAuthorization.WhenInUse -> SetupPermissions.Location.Allowed
+        LocationAuthorization.Denied -> SetupPermissions.Location.Denied
+        LocationAuthorization.Restricted -> SetupPermissions.Location.Restricted
+    }
+
     /** "Version 1.0 (14)" from the bundle (Info.plist), as the Settings artboard prints it. */
     private fun appVersion(): String {
         val info = NSBundle.mainBundle.infoDictionary
@@ -224,6 +257,7 @@ object NorthformApp {
         val paired by remember { if (live) sensorDetails.paired else flowOf(null) }.collectAsState(null)
         val firmware by remember { if (live) sensorDetails.firmware else flowOf(null) }.collectAsState(null)
         val profile by model.profile.collectAsState()
+        val needsSetup by model.needsSetup.collectAsState()
         val export by model.export.collectAsState()
         val profileSaveError by model.profileSaveError.collectAsState()
         AppRoot(
@@ -234,6 +268,8 @@ object NorthformApp {
             openRecording = model::openRecording,
             settings = SettingsModel.from(profile, deps.wallClock.now(), deps.tzOffset(), paired, gateSensor?.batteryPercent, firmware, export, appVersion(), profileSaveError),
             exportBackup = model::exportBackup,
+            needsSetup = needsSetup,
+            setup = { finish -> Setup(if (needsSetup == true) null else profile, finish) },
             zoneEditor = { close -> ZoneEditorScreen(profile, onSave = { model.saveProfile(it); close() }, back = close) },
             profileEditor = { close -> ProfileEditScreen(profile, deps.wallClock.now(), deps.tzOffset(), onSave = { model.saveProfile(it); close() }, back = close) },
             forgetSensor = { scope.launch { runCatching { sensorDetails.forget() }.onFailure { DeviceLog.app.notice("forget failed: $it") } } },

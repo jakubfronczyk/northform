@@ -67,6 +67,9 @@ data class ProfileForm(
         /** A blank resting heart rate: the profile's own default. */
         const val DEFAULT_REST = 60
 
+        /** Setup's first step on a fresh install: nothing typed, Male preselected as on the artboard. */
+        val blank = ProfileForm("", Sex.Male, "", "", "", "")
+
         /** The form a saved profile opens as. */
         fun of(p: Profile) = ProfileForm(RunFormat.birthDate(p.birthDate), p.sex, RunFormat.number(p.weightKg), RunFormat.number(p.heightCm), p.hrMax.toString(), p.hrRest.toString())
 

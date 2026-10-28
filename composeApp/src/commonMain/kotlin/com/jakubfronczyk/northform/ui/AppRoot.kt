@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.ui
 
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,6 +34,10 @@ fun AppRoot(
     history: (HistoryFilter) -> HistoryModel,
     /** History's Retry after a failed read. */
     retryHistory: () -> Unit,
+    /** first-launch-setup: true while no profile is stored, null until the launch read lands (nothing is shown yet). */
+    needsSetup: Boolean?,
+    /** Setup over everything; `finish` after its last step. The composition root supplies the steps' inputs. */
+    setup: @Composable (finish: () -> Unit) -> Unit,
     /** What Settings shows (profile-settings spec). */
     settings: SettingsModel,
     /** Settings' Export backup. */
@@ -69,8 +74,13 @@ fun AppRoot(
     var showZoneEditor by remember { mutableStateOf(false) }
     var historyList by remember { mutableStateOf(LazyListState()) }
     var historyFilter by remember { mutableStateOf(HistoryFilter()) }
+    // Setup, once started, stays up to its last step: step 1 saves the profile (so it is no longer *needed*), steps 2–4 follow.
+    var inSetup by remember { mutableStateOf(false) }
+    LaunchedEffect(needsSetup) { if (needsSetup == true) inSetup = true }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         when {
+            needsSetup == null -> Unit // the launch read hasn't landed: never a flash of Today before Setup
+            inSetup || needsSetup == true -> setup { inSetup = false }
             // The Sensor sheet first: the gate's "Pair a sensor" opens it over a run still at the gate, and Close returns there.
             showSensor -> sensorScreen { showSensor = false }
             activeRun != null -> RunFlow(

@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.ui
 
+import com.jakubfronczyk.northform.core.HRZones
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
@@ -48,21 +49,41 @@ import com.jakubfronczyk.northform.ui.theme.Type
  * by [ProfileForm], its message under it; Save only when all are valid; Back discards. The zones are kept as they are.
  */
 @Composable
-fun ProfileEditScreen(initial: Profile, now: Instant, tzOffset: Int, onSave: (Profile) -> Unit, back: () -> Unit) {
-    var form by remember(initial) { mutableStateOf(ProfileForm.of(initial)) }
-    val checked = form.check(now, tzOffset, initial.zones)
+fun ProfileEditScreen(initial: Profile, now: Instant, tzOffset: Int, onSave: (Profile) -> Unit, back: () -> Unit) =
+    ProfileFormScreen(ProfileForm.of(initial), initial.zones, now, tzOffset, setup = false, onSubmit = onSave) {
+        Box(Modifier.offset(x = (-10).dp).size(Dimens.iconButton).clickable(onClick = back), contentAlignment = Alignment.Center) {
+            NfIcon(NfIcons.back, Theme.text, size = 22.dp, label = "Back to Settings")
+        }
+    }
+
+/**
+ * The same form as Setup's first step, "About you" (`SetupProfile.dc.html`, first-launch-setup/01): [initial] is blank on a
+ * fresh install, the saved profile when the runner comes back to it; Continue submits. [header] is Setup's progress.
+ */
+@Composable
+fun SetupAboutYouScreen(initial: ProfileForm, zones: HRZones, now: Instant, tzOffset: Int, onContinue: (Profile) -> Unit, header: @Composable () -> Unit) =
+    ProfileFormScreen(initial, zones, now, tzOffset, setup = true, onSubmit = onContinue, header = header)
+
+/** The profile form in its two contexts: Settings' editor ("Profile", Save) and Setup's first step ("About you", Continue). */
+@Composable
+private fun ProfileFormScreen(
+    initial: ProfileForm, zones: HRZones, now: Instant, tzOffset: Int, setup: Boolean,
+    onSubmit: (Profile) -> Unit, header: @Composable () -> Unit,
+) {
+    var form by remember(initial) { mutableStateOf(initial) }
+    val checked = form.check(now, tzOffset, zones)
+    // An empty field shows no error yet (nothing typed is not a mistake); Save / Continue stays off until all are valid.
+    fun shown(field: Field, value: String) = checked.errors[field]?.takeIf { value.isNotBlank() }
     Column(
         Modifier.fillMaxSize().background(Theme.bg).verticalScroll(rememberScrollState()).padding(horizontal = Dimens.gutter).padding(top = Dimens.screenTop, bottom = Dimens.screenBottom),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.offset(x = (-10).dp).size(Dimens.iconButton).clickable(onClick = back), contentAlignment = Alignment.Center) {
-                NfIcon(NfIcons.back, Theme.text, size = 22.dp, label = "Back to Settings")
-            }
-            Text("Profile", style = Type.pageTitle, color = Theme.text)
-            Text("Used for your heart rate zones.", style = Type.secondaryText, color = Theme.text2)
+            header()
+            Text(if (setup) "About you" else "Profile", style = Type.pageTitle, color = Theme.text)
+            Text(if (setup) "Used for your heart rate zones. You can change it later." else "Used for your heart rate zones.", style = Type.secondaryText, color = Theme.text2)
         }
-        Input("Birth date", form.birthDate, checked.errors[Field.BirthDate], hint = checked.ageHint, keyboard = KeyboardType.Text) { form = form.copy(birthDate = it) }
+        Input("Birth date", form.birthDate, shown(Field.BirthDate, form.birthDate), hint = checked.ageHint, keyboard = KeyboardType.Text) { form = form.copy(birthDate = it) }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Sex", style = Type.tertiaryText, color = Theme.text2)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -79,14 +100,14 @@ fun ProfileEditScreen(initial: Profile, now: Instant, tzOffset: Int, onSave: (Pr
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Input("Weight", form.weight, checked.errors[Field.Weight], unit = "kg", modifier = Modifier.weight(1f), keyboard = KeyboardType.Decimal) { form = form.copy(weight = it) }
-            Input("Height", form.height, checked.errors[Field.Height], unit = "cm", modifier = Modifier.weight(1f), keyboard = KeyboardType.Decimal) { form = form.copy(height = it) }
+            Input("Weight", form.weight, shown(Field.Weight, form.weight), unit = "kg", modifier = Modifier.weight(1f), keyboard = KeyboardType.Decimal) { form = form.copy(weight = it) }
+            Input("Height", form.height, shown(Field.Height, form.height), unit = "cm", modifier = Modifier.weight(1f), keyboard = KeyboardType.Decimal) { form = form.copy(height = it) }
         }
         Text("Heart rate", style = Type.cardTitle, color = Theme.text)
-        Input("Max heart rate", form.hrMax, checked.errors[Field.HrMax], unit = "bpm") { form = form.copy(hrMax = it) }
-        Input("Resting heart rate", form.hrRest, checked.errors[Field.HrRest], unit = "bpm", hint = "Default 60. Change it any time.") { form = form.copy(hrRest = it) }
+        Input("Max heart rate", form.hrMax, shown(Field.HrMax, form.hrMax), unit = "bpm", hint = checked.maxHint) { form = form.copy(hrMax = it) }
+        Input("Resting heart rate", form.hrRest, shown(Field.HrRest, form.hrRest), unit = "bpm", hint = "Default 60. Change it any time.") { form = form.copy(hrRest = it) }
         val profile = checked.profile
-        BigButton("Save", { if (profile != null) onSave(profile) }, enabled = profile != null, fill = if (profile != null) Theme.primary else Theme.track, textColor = if (profile != null) Theme.text else Theme.dim)
+        BigButton(if (setup) "Continue" else "Save", { if (profile != null) onSubmit(profile) }, enabled = profile != null, fill = if (profile != null) Theme.primary else Theme.track, textColor = if (profile != null) Theme.text else Theme.dim)
     }
 }
 

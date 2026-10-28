@@ -42,16 +42,17 @@ class SetupModelTest {
     @Test
     fun the_permission_rows_follow_what_ios_says() {
         val asked = SetupPermissions.of(bluetoothAllowed = true, location = Location.NotAsked)
-        assertEquals(SetupPermissions.Row("Allowed", action = null), asked.bluetooth)
-        assertEquals(SetupPermissions.Row("Not allowed", action = SetupPermissions.Action.Allow), asked.location)
+        assertEquals(SetupPermissions.Row(allowed = true, action = null), asked.bluetooth)
+        assertEquals(SetupPermissions.Row(allowed = false, action = SetupPermissions.Action.Allow), asked.location)
         assertNull(asked.locationNote)
+        assertEquals("Not allowed", asked.location.status)
 
         val denied = SetupPermissions.of(bluetoothAllowed = false, location = Location.Denied)
-        assertEquals(SetupPermissions.Row("Not allowed", action = SetupPermissions.Action.OpenSettings), denied.bluetooth)
-        assertEquals(SetupPermissions.Row("Not allowed", action = SetupPermissions.Action.OpenSettings), denied.location)
+        assertEquals(SetupPermissions.Row(allowed = false, action = SetupPermissions.Action.OpenSettings), denied.bluetooth)
+        assertEquals(SetupPermissions.Row(allowed = false, action = SetupPermissions.Action.OpenSettings), denied.location)
         assertEquals("Location is off for this app. Turn it on in iOS Settings, then come back.", denied.locationNote)
 
-        assertEquals(SetupPermissions.Row("Not allowed", action = null), SetupPermissions.of(true, Location.Restricted).location, "restricted: nothing the runner can change")
-        assertEquals(SetupPermissions.Row("Allowed", action = null), SetupPermissions.of(true, Location.Allowed).location)
+        assertEquals(SetupPermissions.Row(allowed = false, action = null), SetupPermissions.of(true, Location.Restricted).location, "restricted: nothing the runner can change")
+        assertEquals(SetupPermissions.Row(allowed = true, action = null), SetupPermissions.of(true, Location.Allowed).location)
     }
 }
