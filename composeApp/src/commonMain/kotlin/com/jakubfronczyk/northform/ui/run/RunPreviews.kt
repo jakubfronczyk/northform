@@ -28,6 +28,8 @@ private fun previewGate(snapshot: RunSnapshot, sensor: GateSensor? = null, locat
 }
 // run-flow-ui/07: location off for the app (with Open Settings) and restricted by the phone (without): GPS can never lock.
 @Preview @Composable fun GateLocationDeniedPreview() = previewGate(gate.copy(hrLost = false, hrNow = 74), GateSensor(true, 82, paired = true, name = "Verity Sense"), SetupPermissions.Location.Denied)
+/** The tallest gate: location denied (reason + Open Settings) with a low sensor battery and its warning: the 16e fit check. */
+@Preview @Composable fun GateLocationDeniedLowBatteryPreview() = previewGate(gate.copy(hrLost = false, hrNow = 74), GateSensor(true, 14, paired = true, name = "Verity Sense"), SetupPermissions.Location.Denied)
 @Preview @Composable fun GateLocationRestrictedPreview() = previewGate(gate.copy(hrLost = false, hrNow = 74), GateSensor(true, 14, paired = true, name = "Verity Sense"), SetupPermissions.Location.Restricted)
 @Preview @Composable fun GateWaitingPreview() = previewGate(gate.copy(hrLost = false, hrNow = 74), GateSensor(true, 82, paired = true, name = "Verity Sense"))
 @Preview @Composable fun GateWaitingForHrPreview() = previewGate(gate.copy(gpsLost = false))

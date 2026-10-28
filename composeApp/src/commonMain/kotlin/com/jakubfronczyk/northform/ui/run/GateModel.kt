@@ -28,7 +28,7 @@ data class GateModel(
     val gpsReady: Boolean,
     val gpsTitle: String,
     val gpsSub: String,
-    /** run-flow-ui/07: why no GPS fix can come, under the GPS row in warn; null when location is not in the way. */
+    /** run-flow-ui/07: why no GPS fix can come (shown as the GPS row's sub); null when location is not in the way. */
     val location: LocationReason?,
     val battery: Battery?,
     /** The E1 line under the card, or null. */
@@ -48,8 +48,13 @@ data class GateModel(
 
     data class Battery(val percent: Int, val low: Boolean)
 
-    /** [text] under the GPS row; [openSettings]: Open Settings beside it, only where the runner can change it. */
+    /** [text]: the GPS row's sub while location is blocked; [openSettings]: Open Settings under it, only where the runner can change it. */
     data class LocationReason(val text: String, val openSettings: Boolean)
+
+    /** iOS says no (denied, restricted): no fix can ever come, so the row shows the reason instead of waiting. */
+    val gpsBlocked: Boolean get() = location != null
+    /** The fix count and bars; hidden while [gpsBlocked], where "0 of 3" would promise fixes that cannot come. */
+    val showsFixes: Boolean get() = !gpsBlocked
 
     /** "3 of 3 fixes" — the snapshot gives only ready/not, so the bars are all lit or none. */
     val fixesLit: Int get() = if (gpsReady) RunReducer.gateFixes else 0
@@ -69,6 +74,11 @@ data class GateModel(
             val lowBattery = battery?.low == true
             val startOk = hrReady && gpsReady
             val noun = SummaryModel.noun(snapshot.type)
+            val reason = when (location) {
+                SetupPermissions.Location.Denied -> LocationReason(SetupPermissions.LOCATION_OFF, openSettings = true)
+                SetupPermissions.Location.Restricted -> LocationReason("Location is restricted on this phone. Screen Time or a device profile blocks it.", openSettings = false)
+                SetupPermissions.Location.Allowed, SetupPermissions.Location.NotAsked, null -> null
+            }
             return GateModel(
                 typeLabel = SummaryModel.title(snapshot.type),
                 title = when {
@@ -91,13 +101,17 @@ data class GateModel(
                     else -> HrRow.Waiting
                 },
                 gpsReady = gpsReady,
-                gpsTitle = if (gpsReady) "GPS" else "GPS · finding signal…",
-                gpsSub = if (gpsReady) "Locked in" else "Needs ${RunReducer.gateFixes} fixes within ${RunReducer.gateFixAccuracy.toInt()} m",
-                location = when (location) {
-                    SetupPermissions.Location.Denied -> LocationReason(SetupPermissions.LOCATION_OFF, openSettings = true)
-                    SetupPermissions.Location.Restricted -> LocationReason("Location is restricted on this phone. Screen Time or a device profile blocks it.", openSettings = false)
-                    SetupPermissions.Location.Allowed, SetupPermissions.Location.NotAsked, null -> null
+                gpsTitle = when {
+                    reason != null -> "GPS · location off"
+                    gpsReady -> "GPS"
+                    else -> "GPS · finding signal…"
                 },
+                gpsSub = when {
+                    reason != null -> reason.text
+                    gpsReady -> "Locked in"
+                    else -> "Needs ${RunReducer.gateFixes} fixes within ${RunReducer.gateFixAccuracy.toInt()} m"
+                },
+                location = reason,
                 battery = battery,
                 warning = battery?.takeIf { it.low }?.let { "Sensor battery ${it.percent} % · may not last the $noun" },
                 startLabel = when {

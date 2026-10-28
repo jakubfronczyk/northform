@@ -131,22 +131,31 @@ private fun ReadinessCard(model: GateModel, connectSensor: (() -> Unit)?, pairSe
             }
         }
         DashedLine()
-        CardRow(icon = { if (model.gpsReady) CheckBadge() else Spinner() }, title = model.gpsTitle, sub = model.gpsSub, minHeight = 72.dp) {
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(model.fixLabel, style = Type.secondaryBold, color = Theme.text)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    for (i in 0 until RunReducer.gateFixes) {
-                        Box(Modifier.size(18.dp, 6.dp).background(if (i < model.fixesLit) Theme.ok else Theme.unlit, Shapes.fixSegment))
+        CardRow(
+            icon = {
+                when {
+                    model.gpsBlocked -> NfIcon(NfIcons.location, Theme.warn, size = Dimens.icon)
+                    model.gpsReady -> CheckBadge()
+                    else -> Spinner()
+                }
+            },
+            title = model.gpsTitle, sub = model.gpsSub, minHeight = 72.dp,
+        ) {
+            if (model.showsFixes) {
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(model.fixLabel, style = Type.secondaryBold, color = Theme.text)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        for (i in 0 until RunReducer.gateFixes) {
+                            Box(Modifier.size(18.dp, 6.dp).background(if (i < model.fixesLit) Theme.ok else Theme.unlit, Shapes.fixSegment))
+                        }
                     }
                 }
             }
         }
-        model.location?.let { reason ->
-            // run-flow-ui/07: why no fix can come, in warn; Open Settings (outlined, as on Setup) only when it helps.
-            Row(Modifier.fillMaxWidth().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(reason.text, style = Type.tertiaryStrong, color = Theme.warn, modifier = Modifier.weight(1f))
-                if (reason.openSettings && openLocationSettings != null) InlineButton("Open Settings", openLocationSettings, filled = false)
-            }
+        // run-flow-ui/07: the reason is the row's sub (13 regular, text2, as on SetupPermissions); Open Settings
+        // (outlined, as on Setup) on its own line below, only when the runner can change it.
+        if (model.location?.openSettings == true && openLocationSettings != null) {
+            Box(Modifier.padding(bottom = 14.dp)) { InlineButton("Open Settings", openLocationSettings, filled = false) }
         }
         model.battery?.let { battery ->
             DashedLine()

@@ -134,6 +134,28 @@ class GateModelTest {
         }
     }
 
+    /** run-flow-ui/07 review: with location blocked the GPS row never says it is finding a signal or needs fixes. */
+    @Test
+    fun a_blocked_location_turns_the_gps_row_into_the_reason() {
+        // (location, title, sub, waiting for fixes): the reason replaces "Needs 3 fixes…"; no spinner, no fix bars.
+        val table = listOf(
+            Triple(SetupPermissions.Location.Denied, "GPS · location off", "Location is off for this app. Turn it on in iOS Settings, then come back."),
+            Triple(SetupPermissions.Location.Restricted, "GPS · location off", "Location is restricted on this phone. Screen Time or a device profile blocks it."),
+        )
+        for ((location, title, sub) in table) {
+            val m = GateModel.from(hrOnly, location = location)
+            assertEquals(title, m.gpsTitle, "title when $location")
+            assertEquals(sub, m.gpsSub, "sub when $location")
+            assertTrue(m.gpsBlocked)
+            assertFalse(m.showsFixes, "no fix count while no fix can come")
+        }
+        val fine = GateModel.from(hrOnly, location = SetupPermissions.Location.Allowed)
+        assertEquals("GPS · finding signal…", fine.gpsTitle)
+        assertEquals("Needs 3 fixes within 20 m", fine.gpsSub)
+        assertFalse(fine.gpsBlocked)
+        assertTrue(fine.showsFixes)
+    }
+
     @Test
     fun the_location_reason_holds_nothing_else() {
         // GPS still reads from the snapshot (option A): Start stays held and "Start anyway" stays the runner's call.
