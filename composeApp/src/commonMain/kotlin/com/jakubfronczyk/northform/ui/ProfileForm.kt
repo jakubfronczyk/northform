@@ -6,8 +6,9 @@ import com.jakubfronczyk.northform.core.Sex
 import kotlin.time.Instant
 
 /**
- * The profile editor's fields as typed (profile-settings/03, `SetupProfile` in its edit context), checked by one pure
- * function so the rules are table-tested and the screen only shows them. `Profile`'s own checks stay the last guard.
+ * The profile form's fields as typed (`SetupProfile.dc.html`: Setup's "About you", first-launch-setup/01, and Settings'
+ * editor, profile-settings/03), checked by one pure function so the rules are table-tested and the screen only shows
+ * them. `Profile`'s own checks stay the last guard.
  */
 data class ProfileForm(
     /** DD.MM.YYYY. */
@@ -17,43 +18,63 @@ data class ProfileForm(
     val weight: String,
     /** cm. */
     val height: String,
-    /** Blank: estimated from the age (first-launch-setup, D54). */
+    /** Blank: estimated from the age in Setup ([Blanks.Filled]), a mistake in Settings. */
     val hrMax: String,
-    /** Blank: 60. */
+    /** Blank: [Profile.DEFAULT_REST] in Setup ([Blanks.Filled]), a mistake in Settings. */
     val hrRest: String,
 ) {
     enum class Field { BirthDate, Weight, Height, HrMax, HrRest }
 
+    /** How a blank field reads: the one rule that differs between the form's two contexts. */
+    enum class Blanks {
+        /**
+         * Setup's first step: a blank max saves the estimate from the age (D54), a blank resting saves
+         * [Profile.DEFAULT_REST], and a field not typed yet is not a mistake, so it shows no message.
+         */
+        Filled,
+        /** Settings' editor, which opens on a saved profile: every field is required, so a cleared one says so. */
+        Required,
+    }
+
     /**
-     * One message per invalid field; [profile] only when there are none (Save is enabled exactly then). [maxHint] is the
-     * live estimate under the max field: "Not sure? We estimate 187 from your age…", "—" until the birth date is valid.
+     * [errors]: the message to show under each field (none for a blank field in [Blanks.Filled]); [profile] only when the
+     * form is valid (Save / Continue is enabled exactly then). [hint] and [maxPlaceholder] are Setup's live estimate
+     * ("Not sure? We estimate 187…", "—" until the birth date gives an age); null in [Blanks.Required].
      */
-    data class Checked(val errors: Map<Field, String>, val ageHint: String?, val maxHint: String, val profile: Profile?)
+    data class Checked(val errors: Map<Field, String>, val ageHint: String?, val hint: String?, val maxPlaceholder: String?, val profile: Profile?)
 
     /** @param now and [tzOffset] are the phone's (the age); [zones] are kept as they are (the zone editor owns them). */
-    fun check(now: Instant, tzOffset: Int, zones: HRZones): Checked {
+    fun check(now: Instant, tzOffset: Int, zones: HRZones, blanks: Blanks): Checked {
         val errors = LinkedHashMap<Field, String>()
-        val born = RunFormat.parseBirthDate(birthDate)
+        val filled = blanks == Blanks.Filled
+        // Setup: a field not typed yet keeps the form from being a profile without a message of its own.
+        var incomplete = false
+        // Each value, or null with its field's message recorded (or, blank in Setup, only marked incomplete).
+        fun <T> field(field: Field, text: String, message: String, value: T?): T? = value.also {
+            if (it == null) { if (filled && text.isBlank()) incomplete = true else errors[field] = message }
+        }
+        val born = field(Field.BirthDate, birthDate, "Use DD.MM.YYYY", RunFormat.parseBirthDate(birthDate))
         val age = born?.let { RunFormat.age(it, now, tzOffset) }
-        when {
-            born == null -> errors[Field.BirthDate] = "Use DD.MM.YYYY"
-            age !in AGE -> errors[Field.BirthDate] = "Age must be 13–100"
-        }
-        // Each value, or null with its field's message recorded.
-        fun <T> field(field: Field, message: String, value: T?): T? = value.also { if (it == null) errors[field] = message }
-        val kg = field(Field.Weight, "30–250 kg", decimal(weight)?.takeIf { it in WEIGHT })
-        val cm = field(Field.Height, "100–250 cm", decimal(height)?.takeIf { it in HEIGHT })
+        if (age != null && age !in AGE) errors[Field.BirthDate] = "Age must be 13–100"
+        val kg = field(Field.Weight, weight, "30–250 kg", decimal(weight)?.takeIf { it in WEIGHT })
+        val cm = field(Field.Height, height, "100–250 cm", decimal(height)?.takeIf { it in HEIGHT })
         val estimate = age?.takeIf { it in AGE }?.let(Profile::estimatedHrMax)
-        val max = when {
-            hrMax.isBlank() -> field(Field.HrMax, "Enter your birth date to estimate it", estimate)
-            else -> field(Field.HrMax, "100–230 bpm", hrMax.trim().toIntOrNull()?.takeIf { it in HR_MAX })
-        }
-        val rest = if (hrRest.isBlank()) DEFAULT_REST else field(Field.HrRest, "30–120 bpm", hrRest.trim().toIntOrNull()?.takeIf { it in HR_REST })
+        // A blank max in Setup is the estimate; with none, the birth date is blank or invalid and says so itself.
+        val max = if (filled && hrMax.isBlank()) estimate.also { if (it == null) incomplete = true }
+                  else field(Field.HrMax, hrMax, "100–230 bpm", hrMax.trim().toIntOrNull()?.takeIf { it in HR_MAX })
+        val rest = if (filled && hrRest.isBlank()) Profile.DEFAULT_REST
+                   else field(Field.HrRest, hrRest, "30–120 bpm", hrRest.trim().toIntOrNull()?.takeIf { it in HR_REST })
         if (max != null && rest != null && max - rest < MIN_RESERVE) errors[Field.HrMax] = "At least 20 above resting"
-        val profile = if (errors.isEmpty()) {
+        val profile = if (errors.isEmpty() && !incomplete) {
             Profile(born!!, sex, kg!!, cm!!, hrMax = max!!, hrRest = rest!!, zones = zones)
         } else null
-        return Checked(errors, age?.let { "Age $it" }, "Not sure? We estimate ${estimate ?: "—"} from your age and update it when you go higher.", profile)
+        return Checked(
+            errors = errors,
+            ageHint = age?.let { "Age $it" },
+            hint = if (filled) "Not sure? We estimate ${estimate ?: "—"} from your age and update it when you go higher. Resting defaults to ${Profile.DEFAULT_REST}." else null,
+            maxPlaceholder = if (filled) estimate?.toString() else null,
+            profile = profile,
+        )
     }
 
     companion object {
@@ -64,8 +85,6 @@ data class ProfileForm(
         val HR_REST = 30..120
         /** Max at least this far above rest: a smaller heart-rate reserve makes every zone a few bpm wide. */
         const val MIN_RESERVE = 20
-        /** A blank resting heart rate: the profile's own default. */
-        const val DEFAULT_REST = 60
 
         /** Setup's first step on a fresh install: nothing typed, Male preselected as on the artboard. */
         val blank = ProfileForm("", Sex.Male, "", "", "", "")

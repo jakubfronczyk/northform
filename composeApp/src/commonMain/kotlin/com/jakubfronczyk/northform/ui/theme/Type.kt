@@ -66,12 +66,16 @@ object Type {
     val splitPartial = rowLabel.copy(fontStyle = FontStyle.Italic)
     /** The live "Paused · 0:42" pill. */
     val pausedPill = number(17, FontWeight.Bold)
-    /** A zone's start in % on the zone editor. */
+    /** A zone's number: its start in % on the zone editor, its bpm on Setup's zones step. */
     val zonePercent = number(17, FontWeight.Bold)
+    /** A zone's name in its coloured pill on Setup's zones step. */
+    val zonePill = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold)
+    /** A row's plain title beside a control: the profile's "Birth date". */
+    val rowTitle = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium)
+    /** A typed value or its placeholder in a profile field. */
+    val fieldText = number(16, FontWeight.Normal)
     /** The zone editor's − and + symbols. */
     val stepperSymbol = number(20, FontWeight.Bold)
-    /** The typed value of a profile field. */
-    val fieldValue = number(17, FontWeight.SemiBold)
     /** " bpm" beside the Sensor screen's live heart rate. */
     val liveUnit = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium)
     /** " km" after the distance on Today's last-recording card (a span: the caller colours it). */

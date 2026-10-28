@@ -27,6 +27,12 @@ object Theme {
 
     /** Ink on a primary fill: the Run tile, Start, Connect / Pair, the sensor's filled button, the crash prompt's Save. */
     val onPrimary = Color.White
+    /** A light main button (Setup's Continue and Skip, the Sensor screen's Done): the text colour as its fill. */
+    val light = text
+    /** Ink on a [light] fill. */
+    val onLight = bg
+    /** A field or an inset box inside a card: the profile's text fields, the Pair step's firmware warning (#1B1C1E). */
+    val inset = Color(0xFF1B1C1E)
     /** The red of a destructive word: the crash prompt's Delete run, Settings' Forget sensor. */
     val danger = Color(0xFFFF6961)
     /** The filled confirm of the shared destructive sheet (`DeleteConfirm.dc.html`). */
@@ -70,4 +76,7 @@ object Theme {
         Color(0xFFF59E0B),
         Color(0xFFEF4444),
     )
+
+    /** Ink on a zone's colour (Setup's zone pills): light on Z0's grey, dark on the rest (`SetupZones.dc.html`). */
+    fun onZone(zone: Int) = if (zone == 0) text else bg
 }

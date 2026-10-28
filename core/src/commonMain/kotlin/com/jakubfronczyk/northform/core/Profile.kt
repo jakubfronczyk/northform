@@ -50,7 +50,7 @@ data class Profile(
     val heightCm: Double,
     val hrMax: Int,
     /** 60 bpm until measured or set. */
-    val hrRest: Int = 60,
+    val hrRest: Int = DEFAULT_REST,
     val zones: HRZones = HRZones.standard,
 ) {
     /** The messages mirror Swift's enum descriptions ("hrMax(60)"), which the fixture errors quote. */
@@ -82,6 +82,9 @@ data class Profile(
     // The zone of a bpm is `profile.zoneOf(bpm)` (`core/metrics/Zone.kt`, D23): a `Zone` value, never a bare Int.
 
     companion object {
+        /** A resting heart rate until measured or set (first-launch-setup: what a blank resting field saves). */
+        const val DEFAULT_REST = 60
+
         /**
          * HRmax from age when the runner doesn't know it (D54, SU6; first-launch-setup): Tanaka's 208 − 0.7 × age,
          * rounded half away from zero. A starting point only: SU6 suggests the real one when a run goes higher.
