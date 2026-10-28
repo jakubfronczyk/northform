@@ -70,7 +70,14 @@ fun HistoryScreen(
                     }
                 }
                 model.emptyLine?.let { line ->
-                    item { Text(line, style = Type.statusLabel.copy(fontSize = 16.sp), color = Theme.text, modifier = Modifier.padding(top = 24.dp)) }
+                    // Artboard: centred under a dashed rule; "Nothing here yet" as a title, the filters' line in grey.
+                    val nothingSaved = model.filter == HistoryFilter()
+                    item {
+                        DashedLine()
+                        Box(Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) {
+                            Text(line, style = if (nothingSaved) Type.statusLabel.copy(fontSize = 16.sp) else Type.tertiaryText, color = if (nothingSaved) Theme.text else Theme.text2)
+                        }
+                    }
                 }
                 items(model.rows, key = { it.id.value }) { row ->
                     DashedLine()

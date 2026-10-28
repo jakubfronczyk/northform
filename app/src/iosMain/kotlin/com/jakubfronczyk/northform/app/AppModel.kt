@@ -79,7 +79,7 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
         val read = savedReads.incrementAndFetch()
         scope.launch {
             val next = runCatching { SavedList.Loaded(deps.saved.latest(Int.MAX_VALUE)) }
-                .getOrElse { e -> deps.log("saved list read failed: $e"); SavedList.Failed(_saved.value.recordings, e.message ?: e.toString()) }
+                .getOrElse { e -> deps.log("saved list read failed: $e"); SavedList.Failed(_saved.value.recordings) }
             if (read == savedReads.load()) _saved.value = next
         }
     }
@@ -269,10 +269,12 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
             session.call()
             val state = session.state.value
             if (state is SummarySession.State.Saved || state is SummarySession.State.Deleted) {
-                // Gone from the list at once, so a re-read that fails cannot leave a deleted row to tap.
-                if (state is SummarySession.State.Deleted) _saved.update { it.without(session.recordingId) }
+                // The re-read first: it takes the next read number, so a read from before the Delete that answers late
+                // is dropped. Then the row goes at once, so a re-read that fails cannot leave a deleted row to tap.
                 refreshSaved() // Today is visible again: Save added a recording, Delete removed one
-                _summary.value = null
+                if (state is SummarySession.State.Deleted) _saved.update { it.without(session.recordingId) }
+                // Only this Summary: after Back during the store call, another one may be on screen by now.
+                _summary.compareAndSet(session, null)
                 deps.log("run ${session.recordingId.value.take(8)} $done")
             }
         }

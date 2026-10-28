@@ -67,19 +67,17 @@ fun SummaryScreen(
     /** The platform map (D13), as the run flow injects it; it reads [LocalMapCamera], provided here fitted to the route. */
     map: @Composable (route: Route) -> Unit = { route -> RouteCanvas(route) },
     /**
-     * history-screen/03: a saved recording reopened from Today or History (`SummaryReview`): a Back control, the
-     * "Your run" block read-only, no HRmax card, no Save. The bin and its sheet stay.
+     * history-screen/03: non-null for a saved recording reopened from Today or History (`SummaryReview`): this Back
+     * control, the "Your run" block read-only, no HRmax card, no Save. The bin and its sheet stay.
      */
-    review: Boolean = false,
-    /** Back, in [review]. */
-    onBack: () -> Unit = {},
+    onBack: (() -> Unit)? = null,
 ) {
     when (val s = state) {
         SummarySession.State.Computing -> Box(Modifier.fillMaxSize().background(Theme.bg), contentAlignment = Alignment.Center) {
             Text("Computing…", style = Type.secondaryText, color = Theme.text2)
         }
-        is SummarySession.State.Ready -> SummaryContent(SummaryModel.from(s.summary), edits, onEdit, error = s.error, busy = s.busy, onSave = onSave, onDelete = onDelete, onAcceptHrMax = onAcceptHrMax, map = map, onBack = onBack.takeIf { review })
-        is SummarySession.State.Failed -> FailedContent(s.reason, noun = s.type?.let(SummaryModel::noun) ?: "recording", busy = s.busy, onRetry = onRetry, onDelete = onDelete, onBack = onBack.takeIf { review })
+        is SummarySession.State.Ready -> SummaryContent(SummaryModel.from(s.summary), edits, onEdit, error = s.error, busy = s.busy, onSave = onSave, onDelete = onDelete, onAcceptHrMax = onAcceptHrMax, map = map, onBack = onBack)
+        is SummarySession.State.Failed -> FailedContent(s.reason, noun = s.type?.let(SummaryModel::noun) ?: "recording", busy = s.busy, onRetry = onRetry, onDelete = onDelete, onBack = onBack)
         SummarySession.State.Saved, SummarySession.State.Deleted -> Unit // the root removes the screen
     }
 }

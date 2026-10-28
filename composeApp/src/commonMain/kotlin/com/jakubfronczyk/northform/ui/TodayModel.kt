@@ -33,7 +33,7 @@ data class TodayModel(
     data class Card(val id: RecordingId, val type: RecordingType, val label: String, val distance: String, val detail: String)
 
     companion object {
-        /** How many saved recordings Today reads: the card and two Recent rows. */
+        /** How many of the saved list Today shows: the card and two Recent rows. */
         const val SHOWN = 3
 
         /**

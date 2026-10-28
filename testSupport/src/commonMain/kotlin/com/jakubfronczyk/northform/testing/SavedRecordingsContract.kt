@@ -27,7 +27,7 @@ import kotlin.time.Duration.Companion.seconds
  * with a fresh store per case, like [RecordingStoreContract].
  */
 class SavedRecordingsContract<S>(private val store: S) where S : RecordingStore, S : SavedRows {
-    private val saved = StoredSavedRecordings(store, store)
+    private val saved = StoredSavedRecordings(store, store) { error("a well-formed recording was left out: $it") }
     private val profile = RunHarness.config.profile
 
     /** A stopped recording starting at [startS]: 3 m/s north for 60 s with a 10 s pause, HR 150 when [hr]. */

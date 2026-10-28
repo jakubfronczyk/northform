@@ -57,7 +57,7 @@ class HistoryModelTest {
     @Test
     fun loading_shows_nothing_and_a_failed_read_offers_retry() {
         assertEquals(HistoryModel.Loading, HistoryModel.from(SavedList.Loading, HistoryFilter(), now, tz))
-        assertEquals(HistoryModel.Failed, HistoryModel.from(SavedList.Failed(listOf(tempo), "disk"), HistoryFilter(), now, tz))
+        assertEquals(HistoryModel.Failed, HistoryModel.from(SavedList.Failed(listOf(tempo)), HistoryFilter(), now, tz))
         assertEquals("Couldn't load history", HistoryModel.Failed.line)
     }
 
@@ -72,6 +72,17 @@ class HistoryModelTest {
     fun a_recording_from_an_earlier_year_shows_its_year_and_this_year_s_do_not() {
         val lastYear = saved("old", RecordingType.Run, null, "2024-09-30T05:12:00Z", 5.0, 30 * 60, 140)
         assertEquals(listOf("Tue 30 Sep · 07:12", "Mon 30 Sep 2024 · 07:12"), listed(tempo, lastYear).rows.map { it.date })
+    }
+
+    /** January and February sit at the end of the algorithm's March-based year: this year's still show no year. */
+    @Test
+    fun january_and_february_of_this_year_show_no_year_and_of_last_year_do() {
+        val march = Instant.parse("2025-03-15T09:00:00Z")
+        val jan = saved("jan", RecordingType.Run, null, "2025-01-05T08:00:00Z", 5.0, 30 * 60, 140)
+        val feb = saved("feb", RecordingType.Run, null, "2025-02-28T08:00:00Z", 5.0, 30 * 60, 140)
+        val lastFeb = saved("lastfeb", RecordingType.Run, null, "2024-02-29T08:00:00Z", 5.0, 30 * 60, 140)
+        val m = assertIs<HistoryModel.Listed>(HistoryModel.from(SavedList.Loaded(listOf(feb, jan, lastFeb)), HistoryFilter(), march, tz))
+        assertEquals(listOf("Fri 28 Feb · 10:00", "Sun 5 Jan · 10:00", "Thu 29 Feb 2024 · 10:00"), m.rows.map { it.date })
     }
 
     /** The year is the recording's own: 01:30 UTC on 1 Jan 2025 is still New Year's Eve 2024 in UTC−3. */

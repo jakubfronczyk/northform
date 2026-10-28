@@ -12,7 +12,8 @@ import com.jakubfronczyk.northform.core.metrics.Headline
 data class SavedRecording(val recording: Recording, val headline: Headline, val profile: Profile? = null)
 
 /**
- * The read side of saved recordings (today-screen spec): Today reads `latest(3)`, History the rest. Read-only; the
+ * The read side of saved recordings (today-screen, history-screen specs): the app reads every one into one list that
+ * Today and History share. Read-only; the
  * frozen [RecordingStore] is untouched. Computing, failed or crash-left recordings never appear.
  */
 interface SavedRecordings {

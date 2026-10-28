@@ -18,7 +18,8 @@ import kotlin.coroutines.cancellation.CancellationException
 class StoredSavedRecordings(
     private val rows: SavedRows,
     private val store: RecordingStore,
-    private val log: (String) -> Unit = {},
+    /** Where a left-out recording is reported; required, so no wiring drops one silently. */
+    private val log: (String) -> Unit,
 ) : SavedRecordings {
     override suspend fun latest(n: Int): List<SavedRecording> = rows.savedNewestFirst(n).mapNotNull { row ->
         runCatching {

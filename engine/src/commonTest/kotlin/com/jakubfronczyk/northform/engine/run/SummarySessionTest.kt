@@ -473,4 +473,21 @@ class SummarySessionReviewTest {
 
         assertIs<SummarySession.State.Deleted>(review.state.value)
     }
+
+    /** Story 25: a reopened recording that cannot be computed is Failed, and Delete still removes it. */
+    @Test
+    fun a_reopened_recording_that_cannot_be_computed_is_failed_and_can_be_deleted() = runTest {
+        val store = savedStore()
+        val broken = object : RecordingStore by store {
+            override suspend fun load(id: RecordingId) = store.load(id)?.let { it.copy(recording = it.recording.copy(endUtc = null)) } // no stop: nothing to compute
+        }
+        val review = SummarySession(config.recordingId, broken, store, config.profile, review = true)
+
+        review.load()
+        assertIs<SummarySession.State.Failed>(review.state.value)
+        review.delete()
+
+        assertIs<SummarySession.State.Deleted>(review.state.value)
+        assertNull(store.load(config.recordingId))
+    }
 }

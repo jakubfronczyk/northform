@@ -63,7 +63,7 @@ class AppModelReplayTest {
         alerts = alerts,
         log = log,
         newRecordingId = { "00000000-0000-0000-0000-00000000000a" },
-        saved = (store as? SavedRows)?.let { StoredSavedRecordings(it, store) } ?: SavedRecordings.None,
+        saved = (store as? SavedRows)?.let { StoredSavedRecordings(it, store, log) } ?: SavedRecordings.None,
     )
 
     @Test
@@ -224,7 +224,7 @@ class AppModelReplayTest {
         val store = InMemoryRecordingStore()
         val id = saveReplayRun(AppModel(replayDeps(straightRun(), store, RecordedAlerts()), backgroundScope))
         val raised = AppDeps.sampleProfile.copy(hrMax = AppDeps.sampleProfile.hrMax + 10) // the profile changed since
-        val model = AppModel(AppDeps(source = RunSource.Replay { straightRun() }, store = store, reliability = store, wallClock = virtualWallClock(straightRun().meta.start), alerts = RecordedAlerts(), profile = raised, saved = StoredSavedRecordings(store, store)), backgroundScope)
+        val model = AppModel(AppDeps(source = RunSource.Replay { straightRun() }, store = store, reliability = store, wallClock = virtualWallClock(straightRun().meta.start), alerts = RecordedAlerts(), profile = raised, saved = StoredSavedRecordings(store, store) {}), backgroundScope)
         model.checkUnfinished(); runCurrent()
 
         model.openRecording(id); runCurrent()
@@ -269,7 +269,7 @@ class AppModelReplayTest {
     @Test
     fun a_deleted_recording_leaves_the_list_even_when_the_re_read_fails() = runTest {
         val store = InMemoryRecordingStore()
-        val real = StoredSavedRecordings(store, store)
+        val real = StoredSavedRecordings(store, store) {}
         var fail = false
         val saved = object : SavedRecordings { override suspend fun latest(n: Int) = if (fail) error("disk") else real.latest(n) }
         val model = AppModel(replayDeps(straightRun(), store, RecordedAlerts()).let { d ->
@@ -283,6 +283,53 @@ class AppModelReplayTest {
 
         val failed = assertIs<SavedList.Failed>(model.saved.value)
         assertEquals(emptyList(), failed.recordings)
+    }
+
+    /** history code review: a read that queried before a Delete and answers after it must not put the row back. */
+    @Test
+    fun a_read_from_before_the_delete_never_brings_the_deleted_row_back() = runTest {
+        val store = InMemoryRecordingStore()
+        val real = StoredSavedRecordings(store, store) {}
+        val stale = CompletableDeferred<List<SavedRecording>>()
+        var mode = "real"
+        val saved = object : SavedRecordings {
+            override suspend fun latest(n: Int) = when (mode) { "stale" -> stale.await(); "fail" -> error("disk"); else -> real.latest(n) }
+        }
+        val d = replayDeps(straightRun(), store, RecordedAlerts())
+        val model = AppModel(AppDeps(source = d.source, store = store, reliability = store, wallClock = d.wallClock, alerts = d.alerts, newRecordingId = d.newRecordingId, saved = saved), backgroundScope)
+        val id = saveReplayRun(model)
+        val withRow = model.saved.value.recordings
+        model.openRecording(id); runCurrent()
+        mode = "stale"; model.refreshSaved(); runCurrent() // in flight, it saw the row
+
+        mode = "fail"
+        model.deleteSummary(); runCurrent() // the re-read after the delete fails
+        stale.complete(withRow); runCurrent() // the old read answers last
+
+        assertEquals(emptyList(), model.saved.value.recordings)
+    }
+
+    /** history code review: Back while a Delete is at the store, then another recording opened: the Delete must not close it. */
+    @Test
+    fun a_delete_finishing_after_back_does_not_close_the_next_review() = runTest {
+        val store = InMemoryRecordingStore()
+        val gate = CompletableDeferred<Unit>()
+        val slow = object : RecordingStore by store {
+            override suspend fun delete(id: RecordingId) { gate.await(); store.delete(id) }
+        }
+        val d = replayDeps(straightRun(), store, RecordedAlerts())
+        var next = 0
+        val model = AppModel(AppDeps(source = d.source, store = slow, reliability = store, wallClock = d.wallClock, alerts = d.alerts, newRecordingId = { "00000000-0000-0000-0000-00000000000${next++}" }, saved = StoredSavedRecordings(store, store) {}), backgroundScope)
+        val first = saveReplayRun(model)
+        val second = saveReplayRun(model)
+
+        model.openRecording(first); runCurrent()
+        model.deleteSummary(); runCurrent() // waiting at the store
+        model.closeSummary()
+        model.openRecording(second); runCurrent()
+        gate.complete(Unit); runCurrent()
+
+        assertEquals(second, model.summary.value?.recordingId)
     }
 
     /** code review a.3: a recording a crash left `active` still goes to the crash prompt, and no Summary opens. */

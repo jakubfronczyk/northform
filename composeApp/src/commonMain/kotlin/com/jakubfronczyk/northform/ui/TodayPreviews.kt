@@ -20,16 +20,16 @@ import kotlin.time.Instant
 
 // The Today artboard's states on a fake list (today-screen spec): the 16e check is the visual test.
 
-private val now = Instant.parse("2025-10-01T07:00:00Z")
-private const val TZ = 7200
+internal val previewNow = Instant.parse("2025-10-01T07:00:00Z")
+internal const val PREVIEW_TZ = 7200
 private val connected = GateSensor(connected = true, batteryPercent = 82, paired = true)
 
 private fun saved(id: String, type: RecordingType, tag: RunTag?, start: String, km: Double, total: Int, hr: Int?) = SavedRecording(
-    Recording(id = RecordingId(id), type = type, tag = tag, state = RecordingState.Saved, startUtc = Instant.parse(start), tzOffset = TZ),
+    Recording(id = RecordingId(id), type = type, tag = tag, state = RecordingState.Saved, startUtc = Instant.parse(start), tzOffset = PREVIEW_TZ),
     Headline(km * 1000, total.seconds, (total - 30).seconds, hr),
 )
 
-private val week = listOf(
+internal val previewWeek = listOf(
     saved("tempo", RecordingType.Run, RunTag.Tempo, "2025-09-30T05:12:00Z", 10.21, (52.minutes + 40.seconds).inWholeSeconds.toInt(), 156),
     saved("long", RecordingType.Run, RunTag.Long, "2025-09-28T06:30:00Z", 16.80, (92.minutes + 5.seconds).inWholeSeconds.toInt(), 148),
     saved("walk", RecordingType.Walk, null, "2025-09-27T15:45:00Z", 4.10, (48.minutes + 12.seconds).inWholeSeconds.toInt(), 98),
@@ -37,21 +37,11 @@ private val week = listOf(
 
 @Composable
 private fun preview(saved: List<SavedRecording>, sensor: GateSensor? = connected) = Box(Modifier.fillMaxSize().background(Theme.bg)) {
-    TodayScreen(TodayModel.from(saved, sensor, "Verity Sense", now, TZ), start = {}, openSensor = {})
+    TodayScreen(TodayModel.from(saved, sensor, "Verity Sense", previewNow, PREVIEW_TZ), start = {}, openSensor = {})
 }
 
-@Preview @Composable fun TodayPreview() = preview(week)
-@Preview @Composable fun TodayOneRunPreview() = preview(week.take(1))
+@Preview @Composable fun TodayPreview() = preview(previewWeek)
+@Preview @Composable fun TodayOneRunPreview() = preview(previewWeek.take(1))
 @Preview @Composable fun TodayNoRecordingsPreview() = preview(emptyList())
-@Preview @Composable fun TodaySensorOffPreview() = preview(week, connected.copy(connected = false, batteryPercent = null))
+@Preview @Composable fun TodaySensorOffPreview() = preview(previewWeek, connected.copy(connected = false, batteryPercent = null))
 
-// History (history-screen/01) on the same fake week.
-@Composable
-private fun previewHistory(saved: SavedList, filter: HistoryFilter = HistoryFilter()) =
-    HistoryScreen(HistoryModel.from(saved, filter, now, TZ), onFilter = {}, back = {}, retry = {})
-
-@Preview @Composable fun HistoryPreview() = previewHistory(SavedList.Loaded(week))
-@Preview @Composable fun HistoryNothingSavedPreview() = previewHistory(SavedList.Loaded(emptyList()))
-@Preview @Composable fun HistoryFailedPreview() = previewHistory(SavedList.Failed(week, "disk"))
-@Preview @Composable fun HistoryTempoPreview() = previewHistory(SavedList.Loaded(week), HistoryFilter(tag = RunTag.Tempo))
-@Preview @Composable fun HistoryNoMatchPreview() = previewHistory(SavedList.Loaded(week), HistoryFilter(type = RecordingType.Run, tag = RunTag.Intervals))

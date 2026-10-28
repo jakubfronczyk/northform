@@ -26,6 +26,6 @@ sealed interface SavedList {
 
     data class Loaded(override val recordings: List<SavedRecording>) : SavedList
 
-    /** The last read failed; [recordings] is the list before it. */
-    data class Failed(override val recordings: List<SavedRecording>, val reason: String) : SavedList
+    /** The last read failed (the app logs why); [recordings] is the list before it. */
+    data class Failed(override val recordings: List<SavedRecording>) : SavedList
 }

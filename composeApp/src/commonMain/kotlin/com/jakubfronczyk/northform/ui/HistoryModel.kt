@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.ui
 
+import com.jakubfronczyk.northform.core.Recording
 import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.RunTag
 import kotlin.time.Instant
@@ -15,7 +16,7 @@ data class HistoryFilter(val type: RecordingType? = null, val tag: RunTag? = nul
     /** A tag pill: on, or off when it was the one on. */
     fun toggle(tag: RunTag) = copy(tag = tag.takeIf { it != this.tag })
 
-    fun matches(type: RecordingType, tag: RunTag?) = (this.type == null || this.type == type) && (this.tag == null || this.tag == tag)
+    fun matches(r: Recording) = (type == null || type == r.type) && (tag == null || tag == r.tag)
 }
 
 /**
@@ -45,7 +46,7 @@ sealed interface HistoryModel {
             SavedList.Loading -> Loading
             is SavedList.Failed -> Failed
             is SavedList.Loaded -> {
-                val rows = saved.recordings.filter { filter.matches(it.recording.type, it.recording.tag) }.map { RecordingRow.of(it, now, tzOffset) }
+                val rows = saved.recordings.filter { filter.matches(it.recording) }.map { RecordingRow.of(it, now, tzOffset) }
                 Listed(
                     filter = filter,
                     count = "${rows.size} ${if (rows.size == 1) "recording" else "recordings"}",
