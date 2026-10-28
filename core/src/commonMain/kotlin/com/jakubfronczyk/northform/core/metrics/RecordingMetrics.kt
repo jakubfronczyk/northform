@@ -25,6 +25,15 @@ object RecordingMetrics {
         val sRpe = MetricId("srpe")
         /** bpm at stop − bpm 60 s later. */
         val hrRecovery = MetricId("hr_recovery")
+        // The [Headline] rows (today-screen spec).
+        /** Metres. */
+        val distance = MetricId("distance")
+        /** Seconds, pauses included. */
+        val totalTime = MetricId("total_time")
+        /** Seconds, pauses excluded. */
+        val movingTime = MetricId("moving_time")
+        /** bpm. */
+        val avgHr = MetricId("avg_hr")
     }
 
     const val version = 1

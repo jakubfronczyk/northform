@@ -20,6 +20,8 @@ import com.jakubfronczyk.northform.core.ports.RecordingData
 import com.jakubfronczyk.northform.core.ports.RecordingStore
 import com.jakubfronczyk.northform.core.ports.RecordingStoreError
 import com.jakubfronczyk.northform.core.ports.ReliabilityStore
+import com.jakubfronczyk.northform.core.ports.SavedRow
+import com.jakubfronczyk.northform.core.ports.SavedRows
 import com.jakubfronczyk.northform.core.reliability.ReliabilityRecord
 import com.jakubfronczyk.northform.core.fromWire
 import com.jakubfronczyk.northform.core.wire
@@ -45,7 +47,7 @@ import com.jakubfronczyk.northform.persistence.Recording as RecordingRow
 class SqlRecordingStore(
     driver: SqlDriver,
     private val io: CoroutineContext = Dispatchers.IO,
-) : RecordingStore, ReliabilityStore {
+) : RecordingStore, ReliabilityStore, SavedRows {
     private val db = NorthformDb(driver)
     private val q get() = db.recordingQueries
 
@@ -162,6 +164,11 @@ class SqlRecordingStore(
      * stored profile" read it through `:persistence`, as `exportAll` does. Empty when none were saved.
      */
     suspend fun metrics(id: RecordingId): List<MetricResult> = tx { metricsInTx(id.value) }
+
+    /** today-screen/01: saved recordings with their metric rows, newest start first, in one transaction. */
+    override suspend fun savedNewestFirst(limit: Int): List<SavedRow> = tx {
+        q.savedNewestFirst(limit.toLong()).executeAsList().map { SavedRow(it.toRecording(), metricsInTx(it.id)) }
+    }
 
     /** The inverse of `saveSummary`'s insert: the metric with the profile it was computed with (D24). */
     private fun metricsInTx(id: String): List<MetricResult> = q.selectMetrics(id).executeAsList().map { m ->

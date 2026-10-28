@@ -9,6 +9,7 @@ import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.RunTag
 import com.jakubfronczyk.northform.core.metrics.Elevation
 import com.jakubfronczyk.northform.core.metrics.HeartRate
+import com.jakubfronczyk.northform.core.metrics.Headline
 import com.jakubfronczyk.northform.core.metrics.HrMaxSuggestion
 import com.jakubfronczyk.northform.core.metrics.HrRecovery
 import com.jakubfronczyk.northform.core.metrics.HrSeries
@@ -95,14 +96,17 @@ data class RunSummary(
         val crashes: Int,
     )
 
-    /** The metric rows to store with Save (E15: each carries [profile]); `rpe` adds the sRPE row. */
+    /** What Today and History list this recording by (today-screen spec). */
+    val headline: Headline get() = Headline(distance, totalTime, activeTime, hrAvg)
+
+    /** The metric rows to store with Save (E15: each carries [profile]); `rpe` adds the sRPE row; the [headline] rows close the list. */
     fun metrics(rpe: Int?): List<MetricResult> = RecordingMetrics.compute(
         RecordingMetrics.Input(
             samples = samples, stoppedAt = stoppedAt, cooldownEndedAt = cooldownEndedAt, activeTime = activeTime, rpe = rpe,
             recoveryApplies = recording.type == RecordingType.Run || recording.type == RecordingType.Walk, // D32
         ),
         profile, timeInZone, trimp,
-    )
+    ) + headline.metrics(profile)
 
     companion object {
         /**
@@ -168,3 +172,20 @@ data class RunSummary(
  */
 suspend fun RecordingStore.saveRunSummary(summary: RunSummary, tag: RunTag?, rpe: Int?, notes: String?) =
     saveSummary(summary.recording.id, tag, rpe, notes, summary.metrics(rpe))
+
+/**
+ * The [Headline] from the streams alone, by [RunSummary.compute]'s rules (same distance, times and effort average):
+ * for a recording saved before Save stored its headline rows (today-screen spec). No profile needed.
+ */
+fun Headline.Companion.compute(data: RecordingData): Headline {
+    val recording = data.recording
+    val stoppedAt = requireNotNull(recording.endUtc) { "headline of a recording that was not stopped: ${recording.id.value}" }
+    val totalTime = stoppedAt - recording.startUtc
+    val paused = Pauses.pausedWithin(Pauses.intervals(data.events, stoppedAt), recording.startUtc, stoppedAt)
+    return Headline(
+        distance = RunReducer.replayed(data).distance,
+        totalTime = totalTime,
+        movingTime = totalTime - paused,
+        avgHr = HeartRate.mean(data.hr.filter { it.t <= stoppedAt && HeartRate.isValid(it.bpm) }),
+    )
+}

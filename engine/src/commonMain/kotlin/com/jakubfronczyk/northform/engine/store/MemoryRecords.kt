@@ -13,6 +13,7 @@ import com.jakubfronczyk.northform.core.RunTag
 import com.jakubfronczyk.northform.core.ports.FlushBatch
 import com.jakubfronczyk.northform.core.ports.RecordingData
 import com.jakubfronczyk.northform.core.ports.RecordingStoreError
+import com.jakubfronczyk.northform.core.ports.SavedRow
 import com.jakubfronczyk.northform.core.reliability.ReliabilityRecord
 import kotlin.time.Instant
 
@@ -97,6 +98,13 @@ class MemoryRecords private constructor(
 
     /** The metric rows `saveSummary` stored (the in-memory twin of `SqlRecordingStore.metrics`); empty when none or unknown. */
     fun metrics(id: RecordingId): List<MetricResult> = entries[id]?.metrics ?: emptyList()
+
+    /** The twin of `SqlRecordingStore.savedNewestFirst`: saved recordings with their metric rows, newest start first. */
+    fun savedNewestFirst(limit: Int): List<SavedRow> = entries.values
+        .filter { it.recording.state == RecordingState.Saved }
+        .sortedWith(compareByDescending<Entry> { it.recording.startUtc }.thenByDescending { it.recording.id.value })
+        .take(limit)
+        .map { SavedRow(it.recording, it.metrics) }
 
     /** The in-memory twin of `SqlRecordingStore.saveReliability`: upsert, any state. */
     fun saveReliability(id: RecordingId, record: ReliabilityRecord) {
