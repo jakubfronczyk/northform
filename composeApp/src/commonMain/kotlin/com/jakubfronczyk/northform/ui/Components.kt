@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.ui
 
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -42,13 +43,18 @@ fun BigButton(
     textStyle: TextStyle = Type.sheetTitle,
     enabled: Boolean = true,
     contentPadding: Dp = 0.dp,
+    /** A 20 dp icon before [title] (Start, Resume: the artboards' play), tinted like the text. */
+    icon: ImageVector? = null,
 ) {
     val framed = if (fill != null) modifier.background(fill, BigButtonShape) else modifier.border(1.5.dp, Theme.ring, BigButtonShape)
     Box(
         framed.height(68.dp).clip(BigButtonShape).clickable(enabled = enabled, onClick = onClick).padding(horizontal = contentPadding),
         contentAlignment = Alignment.Center,
     ) {
-        Text(title, style = textStyle, color = textColor)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            icon?.let { NfIcon(it, textColor, size = 20.dp) }
+            Text(title, style = textStyle, color = textColor)
+        }
     }
 }
 

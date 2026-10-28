@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.ui
 
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -62,8 +64,8 @@ fun TodayScreen(
         }
         SensorCard(model.sensor, openSensor)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Tile("Run", fill = Theme.primary, sub = Color.White, Modifier.weight(1f)) { start(RecordingType.Run) }
-            Tile("Walk", fill = null, sub = Theme.text2, Modifier.weight(1f)) { start(RecordingType.Walk) }
+            Tile("Run", NfIcons.runner, fill = Theme.primary, sub = Color.White, Modifier.weight(1f)) { start(RecordingType.Run) }
+            Tile("Walk", NfIcons.walker, fill = null, sub = Theme.text2, Modifier.weight(1f)) { start(RecordingType.Walk) }
         }
         model.last?.let { LastCard(it) { openRecording(it.id) } }
         model.emptyLine?.let { Text(it, style = Type.secondaryText, color = Theme.text2) }
@@ -94,7 +96,7 @@ private fun SensorCard(sensor: TodayModel.Sensor, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.size(36.dp).background(Theme.bg, CircleShape), contentAlignment = Alignment.Center) {
-            Box(Modifier.size(12.dp).border(2.dp, color, RoundedCornerShape(4.dp)))
+            NfIcon(NfIcons.sensor, color, size = 20.dp)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(sensor.name, style = Type.sheetTitle.copy(fontSize = 16.sp), color = Theme.text)
@@ -107,16 +109,20 @@ private fun SensorCard(sensor: TodayModel.Sensor, onClick: () -> Unit) {
     }
 }
 
-/** A start tile: Run filled in the primary colour, Walk outlined. */
+/** A start tile: the runner or walker on top, the name below; Run filled in the primary colour, Walk outlined. */
 @Composable
-private fun Tile(title: String, fill: Color?, sub: Color, modifier: Modifier, onClick: () -> Unit) {
+private fun Tile(title: String, icon: ImageVector, fill: Color?, sub: Color, modifier: Modifier, onClick: () -> Unit) {
     val framed = if (fill != null) modifier.background(fill, CardShape) else modifier.background(Theme.card, CardShape).border(1.5.dp, Theme.outline, CardShape)
     Column(
         framed.height(150.dp).clip(CardShape).clickable(onClick = onClick).padding(16.dp),
-        verticalArrangement = Arrangement.Bottom,
+        verticalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(title, style = Type.number(26, FontWeight.ExtraBold), color = if (fill != null) Color.White else Theme.text)
-        Text("GPS + heart rate", style = Type.tertiaryText, color = sub)
+        val ink = if (fill != null) Color.White else Theme.text
+        NfIcon(icon, ink, size = 34.dp)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = Type.number(26, FontWeight.ExtraBold), color = ink)
+            Text("GPS + heart rate", style = Type.tertiaryText, color = sub)
+        }
     }
 }
 
@@ -155,7 +161,7 @@ internal fun RecentRow(row: RecordingRow, onClick: () -> Unit) {
             Text(km(row.distance, 13), style = Type.number22, color = Theme.text)
             Text(row.detail, style = Type.tertiaryText, color = Theme.text2)
         }
-        Chevron(Theme.text3)
+        Chevron(Theme.text3, size = 16.dp)
     }
 }
 
@@ -166,7 +172,7 @@ private fun km(distance: String, unitSize: Int) = buildAnnotatedString {
 }
 
 @Composable
-private fun Chevron(color: Color = Theme.text2) = Text("›", style = Type.sheetTitle.copy(fontSize = 22.sp), color = color)
+private fun Chevron(color: Color = Theme.text2, size: Dp = 18.dp) = NfIcon(NfIcons.forward, color, size)
 
 /** The card's thumbnail: a generic loop, not this recording's route (the route map is the Summary's). */
 @Composable

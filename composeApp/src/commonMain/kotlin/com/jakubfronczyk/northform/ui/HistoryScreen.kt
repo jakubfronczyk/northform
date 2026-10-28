@@ -51,7 +51,7 @@ fun HistoryScreen(
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 64.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.offset(x = (-10).dp).size(44.dp).clickable(onClick = back), contentAlignment = Alignment.Center) {
-                Text("‹", style = Type.number(30), color = Theme.text)
+                NfIcon(NfIcons.back, Theme.text, size = 22.dp)
             }
             Text("History", style = Type.number(28, FontWeight.ExtraBold), color = Theme.text)
             if (model is HistoryModel.Listed) Filters(model, onFilter)

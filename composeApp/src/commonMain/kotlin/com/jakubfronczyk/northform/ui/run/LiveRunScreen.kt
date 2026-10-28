@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.ui.run
 
+import com.jakubfronczyk.northform.ui.NfIcons
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -247,7 +248,7 @@ private fun PausedControls(holding: Boolean, onHolding: (Boolean) -> Unit, send:
             RoundControl(border = Theme.primary, modifier = Modifier.holdGesture(onHolding)) {
                 Box(Modifier.size(18.dp).background(Theme.text, RoundedCornerShape(4.dp)))
             }
-            BigButton("▶  Resume", { send(UserAction.Resume) }, Modifier.weight(1f), fill = Theme.text, textColor = Theme.bg)
+            BigButton("Resume", { send(UserAction.Resume) }, Modifier.weight(1f), fill = Theme.text, textColor = Theme.bg, icon = NfIcons.play)
         }
         Text(if (holding) "Keep holding…" else "Hold the circle to stop", style = RunType.caption, color = Theme.text2, modifier = Modifier.padding(top = 8.dp))
     }

@@ -1,5 +1,7 @@
 package com.jakubfronczyk.northform.ui.run
 
+import com.jakubfronczyk.northform.ui.NfIcons
+import com.jakubfronczyk.northform.ui.NfIcon
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.CircleShape
@@ -234,7 +236,7 @@ private fun BinButton(enabled: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.size(36.dp).border(1.dp, Theme.line, RoundedCornerShape(10.dp)).clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Text("🗑", style = TextStyle(fontSize = 16.sp), color = if (enabled) Theme.text2 else Theme.dim) }
+    ) { NfIcon(NfIcons.bin, if (enabled) Theme.text2 else Theme.dim, size = 18.dp) }
 }
 
 /** `DeleteConfirm.dc.html` (R27: the second of the two taps): a scrim and a bottom sheet with the run's headline numbers. */
@@ -262,5 +264,5 @@ private fun BackButton(onClick: () -> Unit) {
     Box(
         Modifier.padding(start = 16.dp, top = 64.dp).size(44.dp).background(Theme.bg.copy(alpha = 0.85f), CircleShape).clip(CircleShape).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Text("‹", style = Type.number22, color = Theme.text) }
+    ) { NfIcon(NfIcons.back, Theme.text, size = 22.dp) }
 }
