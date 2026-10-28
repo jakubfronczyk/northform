@@ -4,7 +4,6 @@ import com.jakubfronczyk.northform.core.EventKind
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RecordingType
-import com.jakubfronczyk.northform.core.ports.SavedRecording
 import com.jakubfronczyk.northform.core.ports.FlushBatch
 import com.jakubfronczyk.northform.engine.run.CrashChoice
 import com.jakubfronczyk.northform.engine.run.EndResult
@@ -12,7 +11,7 @@ import com.jakubfronczyk.northform.engine.run.SummaryEdits
 import com.jakubfronczyk.northform.engine.run.SummarySession
 import com.jakubfronczyk.northform.engine.run.CrashPrompt
 import com.jakubfronczyk.northform.engine.run.crashMark
-import com.jakubfronczyk.northform.ui.TodayModel
+import com.jakubfronczyk.northform.ui.SavedList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,9 +39,9 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     /** The Summary of the run that just finished (R27): on screen while non-null, until Save or Delete. */
     val summary: StateFlow<SummarySession?> = _summary.asStateFlow()
 
-    private val _saved = MutableStateFlow<List<SavedRecording>>(emptyList())
-    /** Today's list (today-screen spec): the newest saved recordings, re-read at launch and whenever the Summary closes. */
-    val saved: StateFlow<List<SavedRecording>> = _saved.asStateFlow()
+    private val _saved = MutableStateFlow<SavedList>(SavedList.Loading)
+    /** Every saved recording (history-screen spec: one list, Today takes three), re-read at launch and whenever the Summary closes. */
+    val saved: StateFlow<SavedList> = _saved.asStateFlow()
 
     private val _unfinished = MutableStateFlow<UnfinishedRun?>(null)
     /** A recording a crash left behind (R28): the prompt is up while non-null, until the user chooses. */
@@ -72,15 +71,16 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     }
 
     /**
-     * Re-reads Today's list; a failed read keeps the last one (logged), never an error on Today. Reads can overlap
-     * (launch and a quick Save) and finish in any order: each takes a number first, and only the latest one is shown.
+     * Re-reads the saved list; a failed read keeps the last one and says so (History's Retry; Today never shows it).
+     * Reads can overlap (launch and a quick Save) and finish in any order: each takes a number first, and only the
+     * latest one is shown.
      */
     fun refreshSaved() {
         val read = savedReads.incrementAndFetch()
         scope.launch {
-            runCatching { deps.saved.latest(TodayModel.SHOWN) }
-                .onSuccess { if (read == savedReads.load()) _saved.value = it }
-                .onFailure { deps.log("saved list read failed: $it") }
+            val next = runCatching { SavedList.Loaded(deps.saved.latest(Int.MAX_VALUE)) }
+                .getOrElse { e -> deps.log("saved list read failed: $e"); SavedList.Failed(_saved.value.recordings, e.message ?: e.toString()) }
+            if (read == savedReads.load()) _saved.value = next
         }
     }
 

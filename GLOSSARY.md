@@ -74,6 +74,11 @@ _Avoid_: home, dashboard
 Every saved recording, newest first.
 _Avoid_: log, feed
 
+**Day**:
+The calendar day a recording belongs to: the day it started, in the time zone it was recorded in, even when
+it ends after midnight.
+_Avoid_: date (alone), end day
+
 ### Signals and loss
 
 **Split**:

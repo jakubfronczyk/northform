@@ -92,8 +92,22 @@ object RunFormat {
         return "${(secondsOfDay / 3600).toInt().pad2()}:${(secondsOfDay / 60 % 60).toInt().pad2()}"
     }
 
-    /** "Tue 30 Sep" in a recording's own time zone (the Summary's date line, R27). Civil date from days since the epoch (Howard Hinnant's algorithm); no date library. */
-    fun date(instant: Instant, tzOffset: Int): String {
+    /** "Tue 30 Sep" in a recording's own time zone (the Summary's date line, R27); [withYear] adds " 2024". */
+    fun date(instant: Instant, tzOffset: Int, withYear: Boolean = false): String {
+        val d = civil(instant, tzOffset)
+        return "${WEEKDAYS[d.weekday]} ${d.day} ${MONTHS[d.month - 1]}" + if (withYear) " ${d.year}" else ""
+    }
+
+    /** The calendar year at [instant] in a zone [tzOffset] seconds east of UTC. */
+    fun year(instant: Instant, tzOffset: Int): Long = civil(instant, tzOffset).year
+
+    /** "156 bpm", or null without heart rate: a row or card leaves it out rather than showing a dash. */
+    fun bpm(avgHr: Int?): String? = avgHr?.let { "$it bpm" }
+
+    private class Civil(val year: Long, val month: Int, val day: Int, val weekday: Int)
+
+    /** Civil date from days since the epoch (Howard Hinnant's algorithm); no date library. */
+    private fun civil(instant: Instant, tzOffset: Int): Civil {
         val days = (instant.epochSeconds + tzOffset).floorDiv(86_400L)
         val z = days + 719_468
         val era = z.floorDiv(146_097L)
@@ -103,8 +117,8 @@ object RunFormat {
         val mp = (5 * doy + 2) / 153
         val day = doy - (153 * mp + 2) / 5 + 1
         val month = if (mp < 10) mp + 3 else mp - 9
-        val weekday = (days + 4).mod(7L).toInt() // 1970-01-01 was a Thursday
-        return "${WEEKDAYS[weekday]} $day ${MONTHS[(month - 1).toInt()]}"
+        val year = yoe + era * 400 + if (month <= 2) 1 else 0
+        return Civil(year, month.toInt(), day.toInt(), weekday = (days + 4).mod(7L).toInt()) // 1970-01-01 was a Thursday
     }
 
     private val WEEKDAYS = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")

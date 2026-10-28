@@ -139,7 +139,7 @@ private fun LastCard(card: TodayModel.Card, onClick: () -> Unit) {
 }
 
 @Composable
-private fun RecentRow(row: TodayModel.Row, onClick: () -> Unit) {
+internal fun RecentRow(row: RecordingRow, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 66.dp).clickable(onClick = onClick).padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),

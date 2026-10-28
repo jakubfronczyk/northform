@@ -21,6 +21,7 @@ import com.jakubfronczyk.northform.persistence.SqlRecordingStore
 import com.jakubfronczyk.northform.persistence.nativeDriver
 import com.jakubfronczyk.northform.replay.RecordingTap
 import com.jakubfronczyk.northform.ui.AppRoot
+import com.jakubfronczyk.northform.ui.HistoryModel
 import com.jakubfronczyk.northform.ui.TodayModel
 import com.jakubfronczyk.northform.engine.store.StoredSavedRecordings
 import com.jakubfronczyk.northform.ui.run.SummaryScreen
@@ -119,7 +120,7 @@ object NorthformApp {
                      else RunSource.Replay { BundleFixtures.script("straight-run-3min") },
             store = LoggingStore(sqlStore, DeviceLog::runTrace),
             reliability = sqlStore,
-            saved = StoredSavedRecordings(sqlStore, sqlStore),
+            saved = StoredSavedRecordings(sqlStore, sqlStore, DeviceLog::runTrace),
             wallClock = wallClock,
             alerts = runAlerts,
             clearAlerts = runAlerts::clear,
@@ -191,7 +192,9 @@ object NorthformApp {
         val sensorName by remember { if (live) sensorDetails.paired.map { it?.name } else flowOf(null) }.collectAsState(null)
         AppRoot(
             activeRun = activeRun?.session,
-            today = TodayModel.from(saved, gateSensor, sensorName, deps.wallClock.now(), deps.tzOffset()),
+            today = TodayModel.from(saved.recordings, gateSensor, sensorName, deps.wallClock.now(), deps.tzOffset()),
+            history = HistoryModel.from(saved, deps.wallClock.now(), deps.tzOffset()),
+            retryHistory = model::refreshSaved,
             onStartRun = model::startRun,
             onCloseRun = model::closeRun,
             map = { route -> RouteMap(route, showsUserLocation = live) },

@@ -10,6 +10,7 @@ import kotlinx.coroutines.CompletableDeferred
 import com.jakubfronczyk.northform.core.ports.SavedRecordings
 import com.jakubfronczyk.northform.core.ports.SavedRows
 import com.jakubfronczyk.northform.engine.store.StoredSavedRecordings
+import com.jakubfronczyk.northform.ui.SavedList
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.ports.Alert
 import com.jakubfronczyk.northform.core.ports.AlertPlayer
@@ -109,7 +110,7 @@ class AppModelReplayTest {
         val saved = assertNotNull(store.records.load(run.id)).recording
         assertEquals(RecordingState.Saved, saved.state)
         assertEquals(RunTag.Easy, saved.tag)
-        assertEquals(listOf(run.id), model.saved.value.map { it.recording.id }, "today-screen/01: Today re-reads once the Summary closes")
+        assertEquals(listOf(run.id), model.saved.value.recordings.map { it.recording.id }, "today-screen/01: Today re-reads once the Summary closes")
         assertEquals(5, alerts.played.count { it == Alert.CountdownTick })
         assertTrue(phases.any { "→ gate" in it } && phases.any { "→ active" in it } && phases.any { "→ done" in it }, "lifecycle log: $phases")
     }
@@ -144,16 +145,16 @@ class AppModelReplayTest {
         first.saveSummary(); runCurrent()
 
         val relaunched = AppModel(replayDeps(straightRun(), store, RecordedAlerts()), backgroundScope)
-        assertEquals(emptyList(), relaunched.saved.value.map { it.recording.id })
+        assertEquals(SavedList.Loading, relaunched.saved.value, "history-screen/01: nothing read yet")
         relaunched.checkUnfinished(); runCurrent()
-        assertEquals(listOf(run.id), relaunched.saved.value.map { it.recording.id })
+        assertEquals(listOf(run.id), relaunched.saved.value.recordings.map { it.recording.id })
     }
 
     /** today-screen code review: a slow read that finishes after a newer one never puts the older list back. */
     @Test
     fun an_older_saved_read_finishing_last_does_not_overwrite_a_newer_one() = runTest {
         val slow = CompletableDeferred<List<SavedRecording>>()
-        val newer = listOf(SavedRecording(Recording(id = RecordingId("new"), type = RecordingType.Run, state = RecordingState.Saved, startUtc = straightRun().meta.start, tzOffset = 0), Headline(1000.0, 300.seconds, 300.seconds, null)))
+        val newer = listOf(savedRun("new"))
         var calls = 0
         val saved = object : SavedRecordings {
             override suspend fun latest(n: Int) = if (calls++ == 0) slow.await() else newer
@@ -165,7 +166,44 @@ class AppModelReplayTest {
         model.refreshSaved(); runCurrent() // a later read (after a Save) answers first
         slow.complete(emptyList()); runCurrent()
 
-        assertEquals(listOf(RecordingId("new")), model.saved.value.map { it.recording.id })
+        assertEquals(listOf(RecordingId("new")), model.saved.value.recordings.map { it.recording.id })
+    }
+
+    private fun savedRun(id: String) = SavedRecording(
+        Recording(id = RecordingId(id), type = RecordingType.Run, state = RecordingState.Saved, startUtc = straightRun().meta.start, tzOffset = 0),
+        Headline(1000.0, 300.seconds, 300.seconds, null),
+    )
+
+    private fun TestScope.modelOver(saved: SavedRecordings): AppModel {
+        val store = InMemoryRecordingStore()
+        return AppModel(AppDeps(source = RunSource.Replay { straightRun() }, store = store, reliability = store, wallClock = virtualWallClock(straightRun().meta.start), alerts = RecordedAlerts(), saved = saved), backgroundScope)
+    }
+
+    /** history-screen/01: one list for Today and History, so it holds every saved recording, not Today's three. */
+    @Test
+    fun the_saved_list_holds_every_saved_recording() = runTest {
+        val five = (1..5).map { savedRun("r$it") }
+        val model = modelOver(object : SavedRecordings { override suspend fun latest(n: Int) = five.take(n) })
+
+        model.refreshSaved(); runCurrent()
+
+        assertEquals(SavedList.Loaded(five), model.saved.value)
+    }
+
+    /** history-screen/01: a failed read is flagged for History and keeps the last list for Today. */
+    @Test
+    fun a_failed_read_keeps_the_last_list_and_says_so() = runTest {
+        var fail = false
+        val model = modelOver(object : SavedRecordings {
+            override suspend fun latest(n: Int) = if (fail) error("disk") else listOf(savedRun("a"))
+        })
+        model.refreshSaved(); runCurrent()
+
+        fail = true
+        model.refreshSaved(); runCurrent()
+
+        val failed = assertIs<SavedList.Failed>(model.saved.value)
+        assertEquals(listOf(RecordingId("a")), failed.recordings.map { it.recording.id })
     }
 
     /** code review a.3: a recording a crash left `active` still goes to the crash prompt, and no Summary opens. */

@@ -44,3 +44,11 @@ private fun preview(saved: List<SavedRecording>, sensor: GateSensor? = connected
 @Preview @Composable fun TodayOneRunPreview() = preview(week.take(1))
 @Preview @Composable fun TodayNoRecordingsPreview() = preview(emptyList())
 @Preview @Composable fun TodaySensorOffPreview() = preview(week, connected.copy(connected = false, batteryPercent = null))
+
+// History (history-screen/01) on the same fake week.
+@Composable
+private fun previewHistory(saved: SavedList) = HistoryScreen(HistoryModel.from(saved, now, TZ), back = {}, retry = {})
+
+@Preview @Composable fun HistoryPreview() = previewHistory(SavedList.Loaded(week))
+@Preview @Composable fun HistoryNothingSavedPreview() = previewHistory(SavedList.Loaded(emptyList()))
+@Preview @Composable fun HistoryFailedPreview() = previewHistory(SavedList.Failed(week, "disk"))

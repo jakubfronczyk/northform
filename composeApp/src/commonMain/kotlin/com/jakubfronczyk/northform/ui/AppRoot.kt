@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.Modifier
 import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.engine.run.Route
@@ -26,6 +27,10 @@ fun AppRoot(
     activeRun: RunSessionHandle?,
     /** What Today shows (today-screen spec); the root builds it from the saved list and the sensor link. */
     today: TodayModel,
+    /** What History shows (history-screen spec), from the same saved list as [today]. */
+    history: HistoryModel,
+    /** History's Retry after a failed read. */
+    retryHistory: () -> Unit,
     /** The Run or Walk tile: starts a recording of that type. */
     onStartRun: (RecordingType) -> Unit,
     onCloseRun: () -> Unit,
@@ -41,6 +46,10 @@ fun AppRoot(
     summary: (@Composable () -> Unit)? = null,
 ) {
     var showSensor by remember { mutableStateOf(false) }
+    // History sits under the Summary in the order below, so Back on a reopened Summary falls through to it. Its
+    // scroll position lives here, not in the screen, to survive that trip; a fresh one each time History opens.
+    var showHistory by remember { mutableStateOf(false) }
+    var historyList by remember { mutableStateOf(LazyListState()) }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         when {
             // The Sensor sheet first: the gate's "Pair a sensor" opens it over a run still at the gate, and Close returns there.
@@ -50,8 +59,9 @@ fun AppRoot(
                 pairSensor = { showSensor = true },
             )
             summary != null -> summary()
+            showHistory -> HistoryScreen(history, back = { showHistory = false }, retry = retryHistory, listState = historyList)
             else -> {
-                TodayScreen(today, start = onStartRun, openSensor = { showSensor = true })
+                TodayScreen(today, start = onStartRun, openSensor = { showSensor = true }, openHistory = { historyList = LazyListState(); showHistory = true })
                 crashPrompt?.invoke()
             }
         }
