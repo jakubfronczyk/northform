@@ -88,4 +88,14 @@ object Dimens {
     val countdownRingStroke = 10.dp
     /** One of the countdown's five tick dots. */
     val tickDot = 10.dp
+    /** The cool-down ring's 260 dp box; the circle inside is [cooldownRing]. */
+    val cooldownRingBox = 260.dp
+    /** The cool-down ring's circle: r 112, so 224 dp across the stroke's centre line. */
+    val cooldownRing = 224.dp
+    /** The cool-down ring's stroke. */
+    val cooldownRingStroke = 12.dp
+    /** The cool-down's heart-rate-since-stop chart. */
+    val recoveryChart = 44.dp
+    /** The cool-down's "Sensor lost" triangle. */
+    val iconMini = 14.dp
 }

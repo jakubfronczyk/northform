@@ -30,6 +30,16 @@ object Type {
 
     /** The countdown's "Put your phone in your pocket". */
     val countdownHeadline = text(20, FontWeight.SemiBold)
+    /** The cool-down's "0:38" inside its ring (`Cooldown.dc.html`: 72 px, 800, 78 %, line-height 1). */
+    val cooldownLeft = number(72, FontWeight.ExtraBold, family = Fonts.narrowest).tight()
+    /** The cool-down's "Now" heart rate (40 px, 700, 85 %, line-height 1). */
+    val cooldownNow = number(40, FontWeight.Bold, family = Fonts.condensed).tight()
+    /** A lead paragraph under a screen title: the cool-down's "Stand or walk slowly…" (16 px, line-height 1.4). */
+    val lead = text(16).copy(lineHeight = 22.4.sp)
+    /** A plain text action at the foot of a screen: the cool-down's Skip (17 px, 600). */
+    val textAction = text(17, FontWeight.SemiBold)
+    /** " bpm" after a cool-down value (13 px, 500). */
+    val smallUnit = text(13, FontWeight.Medium)
 
     // Hoisted once: these sit on the 1 Hz live screen.
     /** The countdown's number inside its ring (`Countdown.dc.html`: 190 px, 800, 78 %, line-height 1). */

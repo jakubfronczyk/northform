@@ -42,7 +42,17 @@ private fun previewGate(snapshot: RunSnapshot, sensor: GateSensor? = null) {
 /** No sample yet in this run: all three HR numbers are "—". */
 @Preview @Composable fun NoHrYetPreview() = previewRun(FakeRunSession.running.copy(hrLost = true, hrNow = null, hrAvg = null, hrMax = null, zone = null))
 @Preview @Composable fun GpsLostPreview() = previewRun(FakeRunSession.running.copy(gpsLost = true))
-@Preview @Composable fun CooldownPreview() = previewRun(FakeRunSession.running.copy(phase = RunPhase.Cooldown(Clock.System.now() + 45.seconds)))
+// Cool-down (run-flow-artboards): the artboard's two modes at 0:22 (172 at the stop, 151 now), and the screen opened
+// late through the flow (its trace missed the stop: "Started at" and the drop are "—").
+private val cooldownStop = Clock.System.now() - 22.seconds
+private val cooling = FakeRunSession.running.copy(phase = RunPhase.Cooldown(cooldownStop + 60.seconds), totalTime = 3160.seconds, distance = 10_210.0, hrNow = 151, currentPace = null)
+private val cooldownTrace = CooldownTrace(List(23) { s -> 172 - (21 * s / 22) })
+@Preview @Composable fun CooldownPreview() = CooldownContent(CooldownModel.from(cooling, cooldownStop + 22.seconds, cooldownTrace), skip = {})
+@Preview @Composable fun CooldownSensorLostPreview() = CooldownContent(
+    CooldownModel.from(cooling.copy(hrLost = true, hrNow = null), cooldownStop + 22.seconds, CooldownTrace(cooldownTrace.points.take(15) + List(8) { null })),
+    skip = {},
+)
+@Preview @Composable fun CooldownJoinedLatePreview() = previewRun(cooling)
 // Summary (R27): one preview per artboard state, from the FakeSummary fixture (summary-screen/01).
 private val previewEdits = SummaryEdits(tag = RunTag.Tempo, rpe = 7, notes = null)
 @Preview @Composable fun SummaryComputingPreview() = SummaryScreen(SummarySession.State.Computing, edits = previewEdits, onEdit = {}, onSave = {}, onDelete = {}, review = false, onBack = {})

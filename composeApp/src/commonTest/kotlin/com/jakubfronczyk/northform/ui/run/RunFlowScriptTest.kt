@@ -109,6 +109,42 @@ class RunFlowScriptTest {
         assertEquals(listOf<UserAction>(UserAction.Start), fake.sent.map { it.first }, "✕ sends no action")
     }
 
+    /**
+     * run-flow-artboards: Stop opens the Cool-down, whose trace folds `hrNow` per tick from the snapshots the screen
+     * sees; Skip (the existing `SkipCooldown`) ends it at once and the flow closes itself.
+     */
+    @Test
+    fun stop_then_cool_down_then_skip_then_done() = runTest {
+        val clock = clock()
+        val fake = ScriptedFakeRunSession(clock)
+        fake.tap(UserAction.Start)
+        advanceTimeBy(5_000); fake.advanceTo(clock.now())
+        fake.script { copy(hrLost = false, hrNow = 172, distance = 10_210.0) }
+        advanceTimeBy(60_000); fake.advanceTo(clock.now())
+        fake.tap(UserAction.Stop)
+        assertIs<RunPhase.Cooldown>(fake.snapshots.value.phase)
+
+        // The screen's fold: one sample per second, the sensor reading falling 1 bpm a second.
+        var trace = CooldownTrace()
+        for (s in 0..22) {
+            if (s > 0) { advanceTimeBy(1_000); fake.advanceTo(clock.now()); fake.script { copy(hrNow = 172 - s) } }
+            trace = trace.add(fake.snapshots.value, clock.now())
+        }
+        val shown = CooldownModel.from(fake.snapshots.value, clock.now(), trace)
+        assertEquals("0:38", shown.left)
+        assertEquals("1:00 · 10.21 km", shown.totals)
+        assertEquals("172", shown.startedAt)
+        assertEquals("150", shown.hrNow)
+        assertEquals("−22", shown.drop)
+        assertFalse(RunFlow.closesAt(fake.snapshots.value), "open through the cool-down")
+
+        fake.tap(UserAction.SkipCooldown)
+        assertEquals(RunPhase.Done, fake.snapshots.value.phase)
+        assertTrue(RunFlow.closesAt(fake.snapshots.value), "Skip ends the cool-down and the flow closes itself")
+        assertEquals(trace, trace.add(fake.snapshots.value, clock.now()), "nothing collected after the cool-down")
+        assertEquals(listOf(UserAction.Start, UserAction.Stop, UserAction.SkipCooldown), fake.sent.map { it.first })
+    }
+
     @Test
     fun skip_cooldown_ends_the_run_at_once() = runTest {
         val fake = ScriptedFakeRunSession(clock())
