@@ -6,6 +6,7 @@ import com.jakubfronczyk.northform.engine.run.RunSnapshot
 import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.RunTag
 import com.jakubfronczyk.northform.engine.run.SummaryEdits
+import com.jakubfronczyk.northform.ui.SetupPermissions
 import com.jakubfronczyk.northform.engine.run.SummarySession
 import androidx.compose.ui.tooling.preview.Preview
 import kotlin.time.Clock
@@ -22,9 +23,12 @@ private fun previewRun(snapshot: RunSnapshot) {
 // Gate (R24/E1): one preview per artboard state. The initial snapshot has nothing seen yet.
 private val gate = RunSnapshot(RunPhase.Gate, hrLost = true, gpsLost = true)
 @Composable
-private fun previewGate(snapshot: RunSnapshot, sensor: GateSensor? = null) {
-    RunFlow(FakeRunSession(snapshot), onClose = {}, map = { r -> RouteCanvas(r) }, gateSensor = sensor, connectSensor = {})
+private fun previewGate(snapshot: RunSnapshot, sensor: GateSensor? = null, location: SetupPermissions.Location? = null) {
+    RunFlow(FakeRunSession(snapshot), onClose = {}, map = { r -> RouteCanvas(r) }, gateSensor = sensor, connectSensor = {}, gateLocation = location, openLocationSettings = {})
 }
+// run-flow-ui/07: location off for the app (with Open Settings) and restricted by the phone (without): GPS can never lock.
+@Preview @Composable fun GateLocationDeniedPreview() = previewGate(gate.copy(hrLost = false, hrNow = 74), GateSensor(true, 82, paired = true, name = "Verity Sense"), SetupPermissions.Location.Denied)
+@Preview @Composable fun GateLocationRestrictedPreview() = previewGate(gate.copy(hrLost = false, hrNow = 74), GateSensor(true, 14, paired = true, name = "Verity Sense"), SetupPermissions.Location.Restricted)
 @Preview @Composable fun GateWaitingPreview() = previewGate(gate.copy(hrLost = false, hrNow = 74), GateSensor(true, 82, paired = true, name = "Verity Sense"))
 @Preview @Composable fun GateWaitingForHrPreview() = previewGate(gate.copy(gpsLost = false))
 @Preview @Composable fun GateNothingYetPreview() = previewGate(gate)

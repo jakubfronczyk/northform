@@ -30,6 +30,8 @@ import com.jakubfronczyk.northform.engine.run.RunReducer
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
 import com.jakubfronczyk.northform.ui.BigButton
 import com.jakubfronczyk.northform.ui.DashedLine
+import com.jakubfronczyk.northform.ui.InlineButton
+import com.jakubfronczyk.northform.ui.SetupPermissions
 import com.jakubfronczyk.northform.ui.theme.Theme
 import com.jakubfronczyk.northform.ui.theme.Type
 import com.jakubfronczyk.northform.ui.ValueCell
@@ -53,8 +55,12 @@ fun GateScreen(
     connectSensor: (() -> Unit)? = null,
     /** Opens the Sensor screen, for "Pair a sensor" when nothing is paired; null hides that button. */
     pairSensor: (() -> Unit)? = null,
+    /** run-flow-ui/07: location as iOS reports it; null = unknown, which says nothing. */
+    location: SetupPermissions.Location? = null,
+    /** Open Settings beside a denied location's reason; null hides it. */
+    openLocationSettings: (() -> Unit)? = null,
 ) {
-    val model = GateModel.from(snapshot, sensor)
+    val model = GateModel.from(snapshot, sensor, location)
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().height(290.dp)) {
             map(route)
@@ -80,7 +86,7 @@ fun GateScreen(
                 Text(model.title, style = Type.gateTitle, color = Theme.text)
                 Text(model.subtitle, style = Type.rowLabel, color = Theme.text2)
             }
-            ReadinessCard(model, connectSensor, pairSensor)
+            ReadinessCard(model, connectSensor, pairSensor, openLocationSettings)
             model.warning?.let { WarningLine(it) }
             Spacer(Modifier.weight(1f))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -98,9 +104,9 @@ fun GateScreen(
     }
 }
 
-/** The three rows: heart rate · GPS · sensor battery, dashed lines between them. */
+/** The three rows: heart rate · GPS (with the location reason under it) · sensor battery, dashed lines between them. */
 @Composable
-private fun ReadinessCard(model: GateModel, connectSensor: (() -> Unit)?, pairSensor: (() -> Unit)?) {
+private fun ReadinessCard(model: GateModel, connectSensor: (() -> Unit)?, pairSensor: (() -> Unit)?, openLocationSettings: (() -> Unit)?) {
     Column(Modifier.fillMaxWidth().background(Theme.card, Shapes.card).padding(horizontal = 16.dp, vertical = 4.dp)) {
         when (val hr = model.hr) {
             is GateModel.HrRow.Ready -> CardRow(icon = { CheckBadge() }, title = "Heart rate", sub = hr.source) {
@@ -133,6 +139,13 @@ private fun ReadinessCard(model: GateModel, connectSensor: (() -> Unit)?, pairSe
                         Box(Modifier.size(18.dp, 6.dp).background(if (i < model.fixesLit) Theme.ok else Theme.unlit, Shapes.fixSegment))
                     }
                 }
+            }
+        }
+        model.location?.let { reason ->
+            // run-flow-ui/07: why no fix can come, in warn; Open Settings (outlined, as on Setup) only when it helps.
+            Row(Modifier.fillMaxWidth().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(reason.text, style = Type.tertiaryStrong, color = Theme.warn, modifier = Modifier.weight(1f))
+                if (reason.openSettings && openLocationSettings != null) InlineButton("Open Settings", openLocationSettings, filled = false)
             }
         }
         model.battery?.let { battery ->

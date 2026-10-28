@@ -59,6 +59,10 @@ fun AppRoot(
     gateSensor: GateSensor?,
     /** The gate's "Connect" for a sensor that is not connected. */
     connectSensor: () -> Unit,
+    /** run-flow-ui/07: location as iOS reports it, for the gate's reason under GPS; null = unknown (replay). Required like [gateSensor]. */
+    gateLocation: SetupPermissions.Location?,
+    /** The gate's Open Settings beside a denied location. */
+    openLocationSettings: () -> Unit,
     /** The R28 crash prompt while a recording waits for the user's choice: a sheet over Today that cannot be dismissed (Swift D77 restated). */
     crashPrompt: (@Composable () -> Unit)? = null,
     /** R27: the Summary of the run that just finished; shown over Today while non-null. */
@@ -85,7 +89,7 @@ fun AppRoot(
             showSensor -> sensorScreen { showSensor = false }
             activeRun != null -> RunFlow(
                 activeRun, onClose = onCloseRun, map = map, gateSensor = gateSensor, connectSensor = connectSensor,
-                pairSensor = { showSensor = true },
+                pairSensor = { showSensor = true }, gateLocation = gateLocation, openLocationSettings = openLocationSettings,
             )
             summary != null -> summary()
             showProfileEditor -> profileEditor { showProfileEditor = false }

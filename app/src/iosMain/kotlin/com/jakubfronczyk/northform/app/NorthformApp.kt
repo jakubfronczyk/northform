@@ -177,12 +177,12 @@ object NorthformApp {
     }
 
     /**
-     * adapters/03, for the gate (run-flow-ui/01): `LocationHint.of(it)` says why GPS is ✗ while location is denied or restricted, `null`
-     * when nothing stands in the way. Changes live as the person flips the switch in Settings.
+     * adapters/03, for the gate (run-flow-ui/07): mapped by [forSetup] into the gate's model, which says why GPS is ✗
+     * while location is denied or restricted. Changes live as the person flips the switch in Settings.
      */
     fun locationAuthorizationState(): StateFlow<LocationAuthorization> = locationAuthorization.state
 
-    /** The Settings deep link the gate offers next to a `Denied` hint (`LocationHint.canOpenSettings`). */
+    /** The Settings deep link the gate offers beside a denied location (`GateModel.LocationReason.openSettings`). */
     fun openLocationSettings() = openAppSettings()
 
     /**
@@ -220,6 +220,7 @@ object NorthformApp {
         )
     }
 
+    /** The platform's authorization in the UI's words, for Setup's Location row and the gate's reason (run-flow-ui/07). */
     private fun LocationAuthorization.forSetup() = when (this) {
         LocationAuthorization.NotDetermined -> SetupPermissions.Location.NotAsked
         LocationAuthorization.WhenInUse -> SetupPermissions.Location.Allowed
@@ -259,6 +260,7 @@ object NorthformApp {
         val unfinished by model.unfinished.collectAsState()
         val summary by model.summary.collectAsState()
         val gateSensor by remember { gateSensorStates() }.collectAsState(null)
+        val locationAuth by locationAuthorizationState().collectAsState()
         val saved by model.saved.collectAsState()
         val sensorName by remember { if (live) sensorDetails.paired.map { it?.name } else flowOf(null) }.collectAsState(null)
         val paired by remember { if (live) sensorDetails.paired else flowOf(null) }.collectAsState(null)
@@ -287,6 +289,9 @@ object NorthformApp {
             sensorScreen = { close -> SensorScreen(remember { SensorScreenModel(sensor, sensorDetails) }, onClose = close) },
             gateSensor = gateSensor,
             connectSensor = ::connectPairedSensor,
+            // Replay feeds its own fixes whatever iOS says, so the gate has no location reason there (null = unknown).
+            gateLocation = if (live) locationAuth.forSetup() else null,
+            openLocationSettings = ::openLocationSettings,
             crashPrompt = unfinished?.let { run -> { CrashPromptScreen(run.facts, now = IosWallClock::now, onChoice = model::resolveUnfinished) } },
             summary = summary?.let { session -> { SummaryScreen(session.state.collectAsState().value, edits = session.edits.collectAsState().value, onEdit = model::editSummary, onSave = model::saveSummary, onDelete = model::deleteSummary, onAcceptHrMax = model::acceptHrMax, onRetry = model::retrySummary, map = { route -> RouteMap(route, showsUserLocation = false) }, review = session.review, onBack = model::closeSummary) } },
         )

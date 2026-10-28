@@ -3,6 +3,7 @@ package com.jakubfronczyk.northform.ui.run
 import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
+import com.jakubfronczyk.northform.ui.SetupPermissions
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -116,6 +117,30 @@ class GateModelTest {
         assertEquals("Pair a sensor, or start a GPS only walk.", GateModel.from(walk, GateSensor(connected = false, batteryPercent = null, paired = false)).subtitle)
         assertEquals("Sensor battery 14 % · may not last the walk", GateModel.from(walk, GateSensor(connected = true, batteryPercent = 14, paired = true)).warning)
         assertEquals("Run", GateModel.from(ready).typeLabel)
+    }
+
+    /**
+     * run-flow-ui/07: under the GPS row, why no fix can come when iOS says no; Open Settings only where the runner can
+     * change it (denied), never for a restriction set by Screen Time or a profile. Asked / allowed / unknown: nothing.
+     */
+    @Test
+    fun the_gps_row_says_why_location_is_off() {
+        val denied = GateModel.from(nothingYet, location = SetupPermissions.Location.Denied).location
+        assertEquals(GateModel.LocationReason("Location is off for this app. Turn it on in iOS Settings, then come back.", openSettings = true), denied)
+        val restricted = GateModel.from(nothingYet, location = SetupPermissions.Location.Restricted).location
+        assertEquals(GateModel.LocationReason("Location is restricted on this phone. Screen Time or a device profile blocks it.", openSettings = false), restricted)
+        for (fine in listOf(SetupPermissions.Location.Allowed, SetupPermissions.Location.NotAsked, null)) {
+            assertNull(GateModel.from(nothingYet, location = fine).location, "nothing to say when location is $fine")
+        }
+    }
+
+    @Test
+    fun the_location_reason_holds_nothing_else() {
+        // GPS still reads from the snapshot (option A): Start stays held and "Start anyway" stays the runner's call.
+        val m = GateModel.from(hrOnly, location = SetupPermissions.Location.Denied)
+        assertFalse(m.startEnabled)
+        assertTrue(m.showStartAnyway)
+        assertEquals("Start · waiting for GPS", m.startLabel)
     }
 
     /** visual-polish/03: the heart-rate line names the paired sensor; without a name it says "sensor". */

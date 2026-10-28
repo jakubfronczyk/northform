@@ -67,7 +67,10 @@ data class SetupPermissions(val bluetooth: Row, val location: Row, val locationN
                 Location.Denied -> Row(false, Action.OpenSettings)
                 Location.Restricted -> Row(false, null) // parental controls or a profile: nothing the runner can change
             },
-            locationNote = if (location == Location.Denied) "Location is off for this app. Turn it on in iOS Settings, then come back." else null,
+            locationNote = if (location == Location.Denied) LOCATION_OFF else null,
         )
+
+        /** What Setup and the Gate (run-flow-ui/07) say when the runner turned location off for the app: one copy. */
+        const val LOCATION_OFF = "Location is off for this app. Turn it on in iOS Settings, then come back."
     }
 }

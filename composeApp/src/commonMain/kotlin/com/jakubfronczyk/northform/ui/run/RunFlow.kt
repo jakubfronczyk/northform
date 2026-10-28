@@ -16,6 +16,7 @@ import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.engine.run.RunSessionHandle
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
+import com.jakubfronczyk.northform.ui.SetupPermissions
 import com.jakubfronczyk.northform.ui.theme.Theme
 import kotlinx.coroutines.launch
 
@@ -35,6 +36,10 @@ fun RunFlow(
     connectSensor: (() -> Unit)?,
     /** The gate's "Pair a sensor" when nothing is paired: opens the Sensor screen; null hides it. */
     pairSensor: (() -> Unit)? = null,
+    /** run-flow-ui/07: location as iOS reports it, for the gate's reason under GPS; null = unknown (previews, replay). */
+    gateLocation: SetupPermissions.Location? = null,
+    /** The gate's Open Settings beside "Location is off for this app"; null hides it. */
+    openLocationSettings: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val snapshot by session.snapshots.collectAsState()
@@ -52,7 +57,10 @@ fun RunFlow(
     CompositionLocalProvider(LocalMapCamera provides camera) {
         Box(Modifier.fillMaxSize().background(Theme.bg)) {
             when (val phase = snapshot.phase) {
-                RunPhase.Gate -> GateScreen(snapshot, route, map, start = { send(UserAction.Start) }, close = onClose, sensor = gateSensor, connectSensor = connectSensor, pairSensor = pairSensor)
+                RunPhase.Gate -> GateScreen(
+                    snapshot, route, map, start = { send(UserAction.Start) }, close = onClose, sensor = gateSensor, connectSensor = connectSensor,
+                    pairSensor = pairSensor, location = gateLocation, openLocationSettings = openLocationSettings,
+                )
                 is RunPhase.Countdown -> CountdownScreen(phase.endsAt, snapshot.type, session.wallClock, cancel = onClose)
                 RunPhase.Active, is RunPhase.Paused -> LiveRunScreen(snapshot, route, session.wallClock, send, map)
                 is RunPhase.Cooldown -> CooldownScreen(snapshot, session.wallClock, skip = { send(UserAction.SkipCooldown) })
