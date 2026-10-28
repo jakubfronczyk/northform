@@ -58,8 +58,8 @@ object Dimens {
     val nearbyDisc = 40.dp
     /** A status dot: "Paired", the Sensor screen's live heart-rate dot. */
     val statusDot = 8.dp
-    /** A zone's colour dot on the zone editor. */
-    val zoneDot = 10.dp
+    /** A 10 dp dot: a zone's colour on the zone editor, one of the countdown's five tick dots. */
+    val dot = 10.dp
     /** The zone editor's round ±1 stepper. */
     val stepper = 36.dp
     /** A 10 dp bar (`Shapes.barTall`): the zone editor's preview. */
@@ -78,4 +78,26 @@ object Dimens {
     val zoneColumn = 140.dp
     /** The zones step's BPM column (`… 96px`). */
     val bpmColumn = 96.dp
+
+    // The run flow's rings (`Countdown.dc.html`, `Cooldown.dc.html`): the box the ring sits in, its circle, its stroke.
+    /** The countdown ring's 300 dp box (the svg's size); the circle inside is [countdownRing]. */
+    val countdownRingBox = 300.dp
+    /** The countdown ring's circle: r 130, so 260 dp across the stroke's centre line. */
+    val countdownRing = 260.dp
+    /** The countdown ring's stroke. */
+    val countdownRingStroke = 10.dp
+    /** The cool-down ring's 260 dp box; the circle inside is [cooldownRing]. */
+    val cooldownRingBox = 260.dp
+    /** The cool-down ring's circle: r 112, so 224 dp across the stroke's centre line. */
+    val cooldownRing = 224.dp
+    /** The cool-down ring's stroke. */
+    val cooldownRingStroke = 12.dp
+    /** The cool-down's heart-rate-since-stop chart. */
+    val recoveryChart = 44.dp
+    /** The cool-down's "Sensor lost" triangle. */
+    val iconMini = 14.dp
+    /** Under a run-flow screen's top row: the cool-down's chip row to its title, the countdown's ring to its copy (28). */
+    val headerGap = 28.dp
+    /** Between the cool-down's blocks: the title, the ring, the card (`margin-top: 34px`). */
+    val sectionGap = 34.dp
 }

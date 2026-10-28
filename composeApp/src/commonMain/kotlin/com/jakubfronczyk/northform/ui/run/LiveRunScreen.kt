@@ -295,11 +295,11 @@ private fun HoldButton(holding: Boolean, onHolding: (Boolean) -> Unit, modifier:
     }
 }
 
-/** `LiveRunView.swift:159`. */
+/** `LiveRunView.swift:159`. [background]: the see-through overlay over the map; `Theme.card` on a plain screen (Countdown, Cool-down). */
 @Composable
-fun Chip(text: String, color: Color) {
+fun Chip(text: String, color: Color, background: Color = Theme.overlay) {
     Row(
-        Modifier.background(Theme.overlay, Shapes.capsule).padding(vertical = 8.dp, horizontal = 12.dp),
+        Modifier.background(background, Shapes.capsule).padding(vertical = 8.dp, horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(8.dp).background(color, CircleShape))

@@ -11,6 +11,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.launch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -88,6 +90,67 @@ class RunFlowScriptTest {
         assertTrue(RunFlow.closesAt(session.snapshots.value))
 
         assertEquals(listOf(UserAction.Start, UserAction.Pause, UserAction.Resume, UserAction.Stop), fake.sent.map { it.first })
+    }
+
+    /**
+     * run-flow-artboards: the countdown counts on the run's clock, and its ✕ is the flow's close (`onClose` →
+     * `AppModel.closeRun`), which sends nothing: the session ends with nothing recorded and is discarded (D116).
+     */
+    @Test
+    fun cancel_during_the_countdown_closes_the_flow_and_discards_the_run() = runTest {
+        val fake = ScriptedFakeRunSession(clock())
+        fake.tap(UserAction.Start)
+        advanceTimeBy(2_400); fake.advanceTo(fake.wallClock.now())
+        val phase = assertIs<RunPhase.Countdown>(fake.snapshots.value.phase)
+        val shown = CountdownModel.from(phase.endsAt, fake.wallClock.now(), fake.snapshots.value.type)
+        assertEquals("3", shown.number)
+        assertEquals(2, shown.litDots)
+        assertFalse(RunFlow.closesAt(fake.snapshots.value), "the flow closes on ✕, not by itself")
+
+        // ✕ as the flow wires it: `send` is the flow's tap path to the session, `close` its `onClose` (→ AppModel.closeRun → end()).
+        var closed = false
+        RunFlow.cancelCountdown(send = { action -> launch { fake.tap(action) } }, close = { closed = true })
+        runCurrent()
+        assertTrue(closed, "✕ closes the flow")
+        assertEquals(listOf<UserAction>(UserAction.Start), fake.sent.map { it.first }, "✕ sends no action: only the gate's Start reached the session")
+        assertIs<RunPhase.Countdown>(fake.snapshots.value.phase, "nothing moved the run on")
+        assertEquals(EndResult.Discarded, fake.end(), "✕ before the countdown ends records nothing")
+    }
+
+    /**
+     * run-flow-artboards: Stop opens the Cool-down, whose trace folds `hrNow` per tick from the snapshots the screen
+     * sees; Skip (the existing `SkipCooldown`) ends it at once and the flow closes itself.
+     */
+    @Test
+    fun stop_then_cool_down_then_skip_then_done() = runTest {
+        val clock = clock()
+        val fake = ScriptedFakeRunSession(clock)
+        fake.tap(UserAction.Start)
+        advanceTimeBy(5_000); fake.advanceTo(clock.now())
+        fake.script { copy(hrLost = false, hrNow = 172, distance = 10_210.0) }
+        advanceTimeBy(60_000); fake.advanceTo(clock.now())
+        fake.tap(UserAction.Stop)
+        assertIs<RunPhase.Cooldown>(fake.snapshots.value.phase)
+
+        // The screen's fold: one sample per second, the sensor reading falling 1 bpm a second.
+        var trace = CooldownTrace()
+        for (s in 0..22) {
+            if (s > 0) { advanceTimeBy(1_000); fake.advanceTo(clock.now()); fake.script { copy(hrNow = 172 - s) } }
+            trace = trace.add(fake.snapshots.value, clock.now())
+        }
+        val shown = CooldownModel.from(fake.snapshots.value, clock.now(), trace)
+        assertEquals("0:38", shown.left)
+        assertEquals("1:00 · 10.21 km", shown.totals)
+        assertEquals("172", shown.startedAt)
+        assertEquals("150", shown.hrNow)
+        assertEquals("−22", shown.drop)
+        assertFalse(RunFlow.closesAt(fake.snapshots.value), "open through the cool-down")
+
+        fake.tap(UserAction.SkipCooldown)
+        assertEquals(RunPhase.Done, fake.snapshots.value.phase)
+        assertTrue(RunFlow.closesAt(fake.snapshots.value), "Skip ends the cool-down and the flow closes itself")
+        assertEquals(trace, trace.add(fake.snapshots.value, clock.now()), "nothing collected after the cool-down")
+        assertEquals(listOf(UserAction.Start, UserAction.Stop, UserAction.SkipCooldown), fake.sent.map { it.first })
     }
 
     @Test

@@ -60,7 +60,7 @@ fun ZoneEditorScreen(profile: Profile, backLabel: String, onSave: (Profile) -> U
             editor.rows.forEachIndexed { i, row ->
                 if (i > 0) DashedLine()
                 Row(Modifier.fillMaxWidth().heightIn(min = Dimens.rowTall), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(Modifier.size(Dimens.zoneDot).background(Theme.zoneColors[i + 1], CircleShape))
+                    Box(Modifier.size(Dimens.dot).background(Theme.zoneColors[i + 1], CircleShape))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(row.label, style = Type.secondaryStrong, color = Theme.text)
                         Text("from ${row.bpm} bpm", style = Type.tertiaryText, color = Theme.text2)

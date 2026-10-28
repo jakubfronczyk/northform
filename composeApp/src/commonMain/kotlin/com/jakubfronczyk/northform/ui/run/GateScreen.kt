@@ -30,6 +30,9 @@ import com.jakubfronczyk.northform.engine.run.RunReducer
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
 import com.jakubfronczyk.northform.ui.BigButton
 import com.jakubfronczyk.northform.ui.DashedLine
+import com.jakubfronczyk.northform.ui.InlineButton
+import com.jakubfronczyk.northform.ui.SetupPermissions
+import com.jakubfronczyk.northform.ui.TextAction
 import com.jakubfronczyk.northform.ui.theme.Theme
 import com.jakubfronczyk.northform.ui.theme.Type
 import com.jakubfronczyk.northform.ui.ValueCell
@@ -53,8 +56,12 @@ fun GateScreen(
     connectSensor: (() -> Unit)? = null,
     /** Opens the Sensor screen, for "Pair a sensor" when nothing is paired; null hides that button. */
     pairSensor: (() -> Unit)? = null,
+    /** run-flow-ui/07: location as iOS reports it; null = unknown, which says nothing. */
+    location: SetupPermissions.Location? = null,
+    /** Open Settings beside a denied location's reason; null hides it. */
+    openLocationSettings: (() -> Unit)? = null,
 ) {
-    val model = GateModel.from(snapshot, sensor)
+    val model = GateModel.from(snapshot, sensor, location)
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().height(290.dp)) {
             map(route)
@@ -80,7 +87,7 @@ fun GateScreen(
                 Text(model.title, style = Type.gateTitle, color = Theme.text)
                 Text(model.subtitle, style = Type.rowLabel, color = Theme.text2)
             }
-            ReadinessCard(model, connectSensor, pairSensor)
+            ReadinessCard(model, connectSensor, pairSensor, openLocationSettings)
             model.warning?.let { WarningLine(it) }
             Spacer(Modifier.weight(1f))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -88,19 +95,15 @@ fun GateScreen(
                     model.startLabel, start, fill = if (model.startEnabled) Theme.primary else Theme.track,
                     textColor = if (model.startEnabled) Theme.onPrimary else Theme.dim, enabled = model.startEnabled, icon = NfIcons.play,
                 )
-                if (model.showStartAnyway) {
-                    Box(Modifier.fillMaxWidth().height(Dimens.textButton).clickable(onClick = start), contentAlignment = Alignment.Center) {
-                        Text("Start anyway", style = Type.bodyStrong, color = Theme.text)
-                    }
-                }
+                if (model.showStartAnyway) TextAction("Start anyway", start)
             }
         }
     }
 }
 
-/** The three rows: heart rate · GPS · sensor battery, dashed lines between them. */
+/** The three rows: heart rate · GPS (with the location reason under it) · sensor battery, dashed lines between them. */
 @Composable
-private fun ReadinessCard(model: GateModel, connectSensor: (() -> Unit)?, pairSensor: (() -> Unit)?) {
+private fun ReadinessCard(model: GateModel, connectSensor: (() -> Unit)?, pairSensor: (() -> Unit)?, openLocationSettings: (() -> Unit)?) {
     Column(Modifier.fillMaxWidth().background(Theme.card, Shapes.card).padding(horizontal = 16.dp, vertical = 4.dp)) {
         when (val hr = model.hr) {
             is GateModel.HrRow.Ready -> CardRow(icon = { CheckBadge() }, title = "Heart rate", sub = hr.source) {
@@ -125,15 +128,31 @@ private fun ReadinessCard(model: GateModel, connectSensor: (() -> Unit)?, pairSe
             }
         }
         DashedLine()
-        CardRow(icon = { if (model.gpsReady) CheckBadge() else Spinner() }, title = model.gpsTitle, sub = model.gpsSub, minHeight = 72.dp) {
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(model.fixLabel, style = Type.secondaryBold, color = Theme.text)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    for (i in 0 until RunReducer.gateFixes) {
-                        Box(Modifier.size(18.dp, 6.dp).background(if (i < model.fixesLit) Theme.ok else Theme.unlit, Shapes.fixSegment))
+        CardRow(
+            icon = {
+                when {
+                    model.gpsBlocked -> NfIcon(NfIcons.location, Theme.warn, size = Dimens.icon)
+                    model.gpsReady -> CheckBadge()
+                    else -> Spinner()
+                }
+            },
+            title = model.gpsTitle, sub = model.gpsSub, minHeight = 72.dp,
+        ) {
+            if (model.showsFixes) {
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(model.fixLabel, style = Type.secondaryBold, color = Theme.text)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        for (i in 0 until RunReducer.gateFixes) {
+                            Box(Modifier.size(18.dp, 6.dp).background(if (i < model.fixesLit) Theme.ok else Theme.unlit, Shapes.fixSegment))
+                        }
                     }
                 }
             }
+        }
+        // run-flow-ui/07: the reason is the row's sub (13 regular, text2, as on SetupPermissions); Open Settings
+        // (outlined, as on Setup) on its own line below, only when the runner can change it.
+        if (model.location?.openSettings == true && openLocationSettings != null) {
+            Box(Modifier.padding(bottom = 14.dp)) { InlineButton("Open Settings", openLocationSettings, filled = false) }
         }
         model.battery?.let { battery ->
             DashedLine()

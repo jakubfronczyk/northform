@@ -5,6 +5,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.sp
 
 /**
@@ -21,8 +22,26 @@ object Type {
     private fun number(size: Int, weight: FontWeight = FontWeight.Bold, family: FontFamily = Fonts.normal) =
         text(size, weight, family).copy(fontFeatureSettings = "tnum")
 
+    /** The artboards' `line-height: 1` on a big number: the line is the font size, trimmed, so a ring centres the digits. */
+    private fun TextStyle.tight() = copy(
+        lineHeight = fontSize,
+        lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
+    )
+
+    /** The countdown's "Put your phone in your pocket". */
+    val countdownHeadline = text(20, FontWeight.SemiBold)
+    /** The cool-down's "0:38" inside its ring (`Cooldown.dc.html`: 72 px, 800, 78 %, line-height 1). */
+    val cooldownLeft = number(72, FontWeight.ExtraBold, family = Fonts.narrowest).tight()
+    /** The cool-down's "Now" heart rate (40 px, 700, 85 %, line-height 1). */
+    val cooldownNow = number(40, FontWeight.Bold, family = Fonts.condensed).tight()
+    /** A lead paragraph under a screen title: the cool-down's "Stand or walk slowly…" (16 px, line-height 1.4). */
+    val lead = text(16).copy(lineHeight = 22.4.sp)
+    /** " bpm" after a cool-down value (13 px, 500). */
+    val smallUnit = text(13, FontWeight.Medium)
+    /** The countdown's number inside its ring (`Countdown.dc.html`: 190 px, 800, 78 %, line-height 1). */
+    val countdown = number(190, FontWeight.ExtraBold, family = Fonts.narrowest).tight()
+
     // Hoisted once: these sit on the 1 Hz live screen.
-    val countdown = number(160, FontWeight.Black, family = Fonts.narrowest)
     val number54Black = number(54, FontWeight.Black, family = Fonts.narrowest)
     val number40 = number(40, family = Fonts.narrowest)
     val number24 = number(24, family = Fonts.condensed)
@@ -60,7 +79,7 @@ object Type {
     val cardTitle = text(17, FontWeight.Bold)
     /** A row's bold name: Today's sensor card, the Sensor screen's firmware warning. */
     val bodyBold = text(16, FontWeight.Bold)
-    /** A row's title or a plain action: the Recent and History rows, the Gate rows, Start anyway, Delete run. */
+    /** A row's title or a plain action: the Recent and History rows, the Gate rows, Start anyway, the cool-down's Skip, Delete run. */
     val bodyStrong = text(16, FontWeight.SemiBold)
     /** An inline action or emphasised line: Retry, See all history, the outlined buttons, the Gate's warning. */
     val secondaryStrong = text(15, FontWeight.SemiBold)

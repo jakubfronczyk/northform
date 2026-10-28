@@ -2,6 +2,7 @@ package com.jakubfronczyk.northform.ui.run
 
 import com.jakubfronczyk.northform.engine.run.RunReducer
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
+import com.jakubfronczyk.northform.ui.SetupPermissions
 
 /**
  * What the gate knows about the sensor beyond the snapshot (E1): whether one is connected, its
@@ -14,7 +15,8 @@ data class GateSensor(val connected: Boolean, val batteryPercent: Int?, val pair
 /**
  * The Gate artboard's copy and states as one pure function of the snapshot at `RunPhase.Gate`
  * (R24 readiness per engine/01: `hrLost == false` is HR ✓, `gpsLost == false` is GPS ✓, `hrNow` the
- * live bpm) and the optional [GateSensor] (E1, E13). Option A: the screen holds Start until both are
+ * live bpm), the optional [GateSensor] (E1, E13) and the optional location authorization (run-flow-ui/07, mapped by
+ * the composition root as for Setup; null = unknown). Option A: the screen holds Start until both are
  * ✓; "Start anyway" sends the same `UserAction.Start`. Table-tested in `GateModelTest`.
  */
 data class GateModel(
@@ -26,6 +28,8 @@ data class GateModel(
     val gpsReady: Boolean,
     val gpsTitle: String,
     val gpsSub: String,
+    /** run-flow-ui/07: why no GPS fix can come (shown as the GPS row's sub); null when location is not in the way. */
+    val location: LocationReason?,
     val battery: Battery?,
     /** The E1 line under the card, or null. */
     val warning: String?,
@@ -44,6 +48,14 @@ data class GateModel(
 
     data class Battery(val percent: Int, val low: Boolean)
 
+    /** [text]: the GPS row's sub while location is blocked; [openSettings]: Open Settings under it, only where the runner can change it. */
+    data class LocationReason(val text: String, val openSettings: Boolean)
+
+    /** iOS says no (denied, restricted): no fix can ever come, so the row shows the reason instead of waiting. */
+    val gpsBlocked: Boolean get() = location != null
+    /** The fix count and bars; hidden while [gpsBlocked], where "0 of 3" would promise fixes that cannot come. */
+    val showsFixes: Boolean get() = !gpsBlocked
+
     /** "3 of 3 fixes" — the snapshot gives only ready/not, so the bars are all lit or none. */
     val fixesLit: Int get() = if (gpsReady) RunReducer.gateFixes else 0
     val fixLabel: String get() = "$fixesLit of ${RunReducer.gateFixes} fixes"
@@ -54,7 +66,7 @@ data class GateModel(
         /** E1: warn below 20 %. */
         const val LOW_BATTERY_BELOW = 20
 
-        fun from(snapshot: RunSnapshot, sensor: GateSensor? = null): GateModel {
+        fun from(snapshot: RunSnapshot, sensor: GateSensor? = null, location: SetupPermissions.Location? = null): GateModel {
             val noSensor = sensor?.connected == false
             val hrReady = !noSensor && !snapshot.hrLost
             val gpsReady = !snapshot.gpsLost
@@ -62,6 +74,11 @@ data class GateModel(
             val lowBattery = battery?.low == true
             val startOk = hrReady && gpsReady
             val noun = SummaryModel.noun(snapshot.type)
+            val reason = when (location) {
+                SetupPermissions.Location.Denied -> LocationReason(SetupPermissions.LOCATION_OFF, openSettings = true)
+                SetupPermissions.Location.Restricted -> LocationReason("Location is restricted on this phone. Screen Time or a device profile blocks it.", openSettings = false)
+                SetupPermissions.Location.Allowed, SetupPermissions.Location.NotAsked, null -> null
+            }
             return GateModel(
                 typeLabel = SummaryModel.title(snapshot.type),
                 title = when {
@@ -84,8 +101,17 @@ data class GateModel(
                     else -> HrRow.Waiting
                 },
                 gpsReady = gpsReady,
-                gpsTitle = if (gpsReady) "GPS" else "GPS · finding signal…",
-                gpsSub = if (gpsReady) "Locked in" else "Needs ${RunReducer.gateFixes} fixes within ${RunReducer.gateFixAccuracy.toInt()} m",
+                gpsTitle = when {
+                    reason != null -> "GPS · location off"
+                    gpsReady -> "GPS"
+                    else -> "GPS · finding signal…"
+                },
+                gpsSub = when {
+                    reason != null -> reason.text
+                    gpsReady -> "Locked in"
+                    else -> "Needs ${RunReducer.gateFixes} fixes within ${RunReducer.gateFixAccuracy.toInt()} m"
+                },
+                location = reason,
                 battery = battery,
                 warning = battery?.takeIf { it.low }?.let { "Sensor battery ${it.percent} % · may not last the $noun" },
                 startLabel = when {
