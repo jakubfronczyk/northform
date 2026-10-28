@@ -27,6 +27,11 @@ kotlin {
 // A Kotlin/Native test runs in the simulator (`simctl spawn`), not in this module's directory, and its binary
 // carries no resources. The simulator shares the host filesystem, so hand the test the absolute path of the
 // fixtures; `simctl` passes a `SIMCTL_CHILD_`-prefixed variable to the spawned process without the prefix.
+// :app generates its one fixture into a test-source constant instead; here that would mean multi-MB string
+// literals across ~10 fixture files (and the JVM caps a constant at 64 KB), so the path is passed in.
+// The directory is a declared input, so editing a fixture reruns the test instead of leaving it UP-TO-DATE.
 tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeSimulatorTest>().configureEach {
-    environment("SIMCTL_CHILD_NORTHFORM_REPLAY_RESOURCES", file("src/commonMain/resources").absolutePath)
+    val resources = file("src/commonMain/resources")
+    inputs.dir(resources).withPathSensitivity(PathSensitivity.RELATIVE)
+    environment("SIMCTL_CHILD_NORTHFORM_REPLAY_RESOURCES", resources.absolutePath)
 }
