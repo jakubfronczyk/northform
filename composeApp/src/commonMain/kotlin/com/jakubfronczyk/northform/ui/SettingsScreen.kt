@@ -47,79 +47,69 @@ fun SettingsScreen(
 ) {
     var confirmForget by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
+        // Fits the 16e without scrolling (Jakub's rule): no group labels where a card already names itself, the actions
+        // inline on their rows. Scrolling stays only as the fallback for a smaller phone or larger text.
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Dimens.gutter).padding(top = Dimens.screenTop, bottom = Dimens.screenBottom),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+            verticalArrangement = Arrangement.spacedBy(Dimens.blockGap),
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 BackButton("Back to Today", back)
                 Text("Settings", style = Type.pageTitle, color = Theme.text)
             }
-            Section("Profile") {
-                Column(Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).padding(horizontal = 16.dp)) {
-                    ValueRow("Profile", model.profileValue, model.profileNote, editProfile)
-                    DashedLine()
-                    ValueRow("Heart rate", model.heartRate, note = null, editProfile)
-                }
-                model.profileError?.let { Text(it, style = Type.tertiaryText, color = Theme.warn) }
+            Column(Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).padding(horizontal = Dimens.gutter)) {
+                ValueRow("Profile", model.profileValue, model.profileNote, editProfile)
+                DashedLine()
+                ValueRow("Heart rate", model.heartRate, note = null, editProfile)
             }
-            Section("Heart rate zones") {
-                Column(
-                    Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).clickable(onClick = editZones).padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text("Zones", style = Type.bodyStrong, color = Theme.text)
-                            Text(SettingsModel.ZONES_SUB, style = Type.tertiaryText, color = Theme.text2)
-                        }
-                        NfIcon(NfIcons.forward, Theme.text2, size = Dimens.iconSmall)
+            model.profileError?.let { Text(it, style = Type.tertiaryText, color = Theme.warn) }
+            Column(
+                Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).clickable(onClick = editZones).padding(Dimens.gutter),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("Heart rate zones", style = Type.bodyStrong, color = Theme.text)
+                        Text(SettingsModel.ZONES_SUB, style = Type.tertiaryText, color = Theme.text2)
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Theme.zoneColors.forEachIndexed { zone, color ->
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Box(Modifier.fillMaxWidth().height(8.dp).background(color, Shapes.bar))
-                                Text("Z$zone", style = Type.caption, color = Theme.text3)
-                            }
+                    NfIcon(NfIcons.forward, Theme.text2, size = Dimens.iconSmall)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Theme.zoneColors.forEachIndexed { zone, color ->
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Box(Modifier.fillMaxWidth().height(8.dp).background(color, Shapes.bar))
+                            Text("Z$zone", style = Type.caption, color = Theme.text3)
                         }
                     }
                 }
             }
-            Section("Sensor") {
-                val sensor = model.sensor
-                Column(Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    if (sensor == null) {
-                        Text("No sensor paired", style = Type.secondaryText, color = Theme.text2)
-                    } else {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Box(Modifier.size(Dimens.sensorDisc).background(Theme.bg, CircleShape), contentAlignment = Alignment.Center) {
-                                NfIcon(NfIcons.sensor, Theme.text, size = Dimens.icon)
-                            }
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(sensor.name, style = Type.cardTitle, color = Theme.text)
-                                Text(sensor.detail, style = Type.tertiaryText, color = Theme.text2)
-                            }
-                            sensor.battery?.let { Text(it, style = Type.secondaryStrong, color = Theme.text) }
-                        }
-                        OutlinedButton("Forget sensor", Theme.danger) { confirmForget = true }
-                    }
+            val sensor = model.sensor
+            Row(
+                Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).padding(Dimens.gutter),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Box(Modifier.size(Dimens.sensorDisc).background(Theme.bg, CircleShape), contentAlignment = Alignment.Center) {
+                    NfIcon(NfIcons.sensor, if (sensor == null) Theme.text2 else Theme.text, size = Dimens.icon)
                 }
-            }
-            Section("Units") {
-                Row(Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).heightIn(min = 56.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Units", style = Type.secondaryText, color = Theme.text, modifier = Modifier.weight(1f))
-                    Text(model.units, style = Type.secondaryText, color = Theme.text2)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(sensor?.name ?: "No sensor paired", style = Type.bodyStrong, color = if (sensor == null) Theme.text2 else Theme.text)
+                    sensor?.let { Text(listOfNotNull(it.detail, it.battery).joinToString(" · "), style = Type.tertiaryText, color = Theme.text2) }
                 }
+                if (sensor != null) InlineAction("Forget", Theme.danger) { confirmForget = true }
             }
-            Section("Data") {
-                Column(Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("Backup", style = Type.cardTitle, color = Theme.text)
+            Column(Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).padding(Dimens.gutter), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("Backup", style = Type.bodyStrong, color = Theme.text)
                         Text(model.backupDetail, style = Type.tertiaryText, color = Theme.text2)
                     }
-                    OutlinedButton(model.export.label, Theme.text, enabled = model.export.enabled, onClick = export)
-                    model.export.line?.let { Text(it, style = Type.caption, color = Theme.text3) }
+                    InlineAction(model.export.label, Theme.text, enabled = model.export.enabled, onClick = export)
                 }
+                model.export.line?.let { Text(it, style = Type.caption, color = Theme.text3) }
+            }
+            Row(Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).heightIn(min = Dimens.field).padding(horizontal = Dimens.gutter), verticalAlignment = Alignment.CenterVertically) {
+                Text("Units", style = Type.secondaryText, color = Theme.text, modifier = Modifier.weight(1f))
+                Text(model.units, style = Type.secondaryText, color = Theme.text2)
             }
             Text(model.version, style = Type.caption, color = Theme.text3, modifier = Modifier.align(Alignment.CenterHorizontally))
         }
@@ -133,12 +123,6 @@ fun SettingsScreen(
     }
 }
 
-/** A titled group: the grey label above its card. */
-@Composable
-private fun Section(title: String, content: @Composable () -> Unit) = Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    Text(title, style = Type.tertiaryText, color = Theme.text2)
-    content()
-}
 
 /** "Profile · 30 · 78 kg · 182 cm / born 14.03.1996 · male ›": label left, value and note right. */
 @Composable
@@ -153,11 +137,12 @@ private fun ValueRow(label: String, value: String, note: String?, onClick: () ->
     }
 }
 
-/** The artboard's 48 dp outlined button (Forget sensor, Export backup). */
+/** A compact outlined action on its card's row (Forget, Export backup): one line, so the screen fits without scrolling. */
 @Composable
-private fun OutlinedButton(text: String, color: Color, enabled: Boolean = true, onClick: () -> Unit) {
+private fun InlineAction(text: String, color: Color, enabled: Boolean = true, onClick: () -> Unit) {
     Box(
-        Modifier.fillMaxWidth().height(Dimens.secondaryButton).clip(Shapes.button).border(Dimens.stroke, Theme.outline, Shapes.button).clickable(enabled = enabled, onClick = onClick),
+        Modifier.height(Dimens.inlineButton).clip(Shapes.inlineButton).border(Dimens.stroke, Theme.outline, Shapes.inlineButton)
+            .clickable(enabled = enabled, onClick = onClick).padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center,
-    ) { Text(text, style = Type.secondaryStrong, color = if (enabled) color else Theme.dim) }
+    ) { Text(text, style = Type.secondaryStrong, color = if (enabled) color else Theme.dim, maxLines = 1) }
 }

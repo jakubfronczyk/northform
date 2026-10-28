@@ -73,7 +73,7 @@ class SettingsModelTest {
     fun units_backup_copy_and_version_are_fixed() {
         val m = model()
         assertEquals("Metric (km, kg, 24 h)", m.units)
-        assertEquals("All runs and raw streams in one file, saved to the Files app.", m.backupDetail)
+        assertEquals("All runs and raw streams, saved to Files.", m.backupDetail)
         assertEquals("Version 1.0 (14)", m.version)
         assertFalse(m.backupDetail.contains("profile"), "backup v1 carries no current profile (D26)")
     }
