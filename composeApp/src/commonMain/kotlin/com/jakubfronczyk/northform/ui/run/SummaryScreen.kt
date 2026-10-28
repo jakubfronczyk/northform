@@ -67,24 +67,26 @@ fun SummaryScreen(
     /** The platform map (D13), as the run flow injects it; it reads [LocalMapCamera], provided here fitted to the route. */
     map: @Composable (route: Route) -> Unit = { route -> RouteCanvas(route) },
     /**
-     * history-screen/03: non-null for a saved recording reopened from Today or History (`SummaryReview`): this Back
-     * control, the "Your run" block read-only, no HRmax card, no Save. The bin and its sheet stay.
+     * history-screen/03: a saved recording reopened from Today or History (`SummaryReview`): a Back control, the "Your
+     * run" block read-only, no HRmax card, no Save. The bin and its sheet stay. The mode is a value, from the session.
      */
-    onBack: (() -> Unit)? = null,
+    review: Boolean,
+    /** Back on a reopened Summary; drawn only in [review]. */
+    onBack: () -> Unit,
 ) {
     when (val s = state) {
         SummarySession.State.Computing -> Box(Modifier.fillMaxSize().background(Theme.bg), contentAlignment = Alignment.Center) {
             Text("Computing…", style = Type.secondaryText, color = Theme.text2)
         }
-        is SummarySession.State.Ready -> SummaryContent(SummaryModel.from(s.summary), edits, onEdit, error = s.error, busy = s.busy, onSave = onSave, onDelete = onDelete, onAcceptHrMax = onAcceptHrMax, map = map, onBack = onBack)
-        is SummarySession.State.Failed -> FailedContent(s.reason, noun = s.type?.let(SummaryModel::noun) ?: "recording", busy = s.busy, onRetry = onRetry, onDelete = onDelete, onBack = onBack)
+        is SummarySession.State.Ready -> SummaryContent(SummaryModel.from(s.summary), edits, onEdit, error = s.error, busy = s.busy, onSave = onSave, onDelete = onDelete, onAcceptHrMax = onAcceptHrMax, map = map, review = review, onBack = onBack)
+        is SummarySession.State.Failed -> FailedContent(s.reason, noun = s.type?.let(SummaryModel::noun) ?: "recording", busy = s.busy, onRetry = onRetry, onDelete = onDelete, review = review, onBack = onBack)
         SummarySession.State.Saved, SummarySession.State.Deleted -> Unit // the root removes the screen
     }
 }
 
 /** "Couldn't compute this run": Retry, or Delete through the same confirm sheet (summary-screen/05). Never a silent Today. */
 @Composable
-private fun FailedContent(reason: String, noun: String, busy: Boolean, onRetry: () -> Unit, onDelete: () -> Unit, onBack: (() -> Unit)?) {
+private fun FailedContent(reason: String, noun: String, busy: Boolean, onRetry: () -> Unit, onDelete: () -> Unit, review: Boolean, onBack: () -> Unit) {
     var confirmDelete by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         Column(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(top = 64.dp, bottom = 50.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -97,14 +99,13 @@ private fun FailedContent(reason: String, noun: String, busy: Boolean, onRetry: 
             Spacer(Modifier.height(12.dp))
             BigButton("Delete $noun", { confirmDelete = true }, fill = null, enabled = !busy)
         }
-        onBack?.let { BackButton(it) }
+        if (review) BackButton(onBack)
         if (confirmDelete) DeleteConfirmSheet(what = noun, detail = "Nothing could be computed from it. This can't be undone.", onKeep = { confirmDelete = false }, onDelete = { confirmDelete = false; onDelete() })
     }
 }
 
 @Composable
-private fun SummaryContent(m: SummaryModel, edits: SummaryEdits, onEdit: (SummaryEdits) -> Unit, error: String?, busy: Boolean, onSave: () -> Unit, onDelete: () -> Unit, onAcceptHrMax: () -> Unit, map: @Composable (route: Route) -> Unit, onBack: (() -> Unit)?) {
-    val review = onBack != null
+private fun SummaryContent(m: SummaryModel, edits: SummaryEdits, onEdit: (SummaryEdits) -> Unit, error: String?, busy: Boolean, onSave: () -> Unit, onDelete: () -> Unit, onAcceptHrMax: () -> Unit, map: @Composable (route: Route) -> Unit, review: Boolean, onBack: () -> Unit) {
     var confirmDelete by remember { mutableStateOf(false) }
 
     // One fitted camera for this Summary: the whole route once, then the user's pans and zooms (summary-screen/04).
@@ -153,7 +154,7 @@ private fun SummaryContent(m: SummaryModel, edits: SummaryEdits, onEdit: (Summar
             if (!review) BigButton("Save ${m.typeLabel.lowercase()}", enabled = !busy, onClick = onSave)
             }
         }
-        onBack?.let { BackButton(it) }
+        if (review) BackButton(onBack)
         // `DeleteConfirm.dc.html`: "Tempo · 10.21 km · 30 Sep. This can't be undone."
         if (confirmDelete) DeleteConfirmSheet(what = m.typeLabel.lowercase(), detail = "${edits.tag?.name ?: m.typeLabel} · ${m.distance} km · ${m.dateLine.substringBefore(" ·")}. This can't be undone.", onKeep = { confirmDelete = false }, onDelete = { confirmDelete = false; onDelete() })
     }

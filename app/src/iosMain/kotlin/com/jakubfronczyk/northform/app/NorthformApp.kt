@@ -204,7 +204,7 @@ object NorthformApp {
             gateSensor = gateSensor,
             connectSensor = ::connectPairedSensor,
             crashPrompt = unfinished?.let { run -> { CrashPromptScreen(run.facts, now = IosWallClock::now, onChoice = model::resolveUnfinished) } },
-            summary = summary?.let { session -> { SummaryScreen(session.state.collectAsState().value, edits = session.edits.collectAsState().value, onEdit = model::editSummary, onSave = model::saveSummary, onDelete = model::deleteSummary, onAcceptHrMax = model::acceptHrMax, onRetry = model::retrySummary, map = { route -> RouteMap(route, showsUserLocation = false) }, onBack = if (session.review) model::closeSummary else null) } },
+            summary = summary?.let { session -> { SummaryScreen(session.state.collectAsState().value, edits = session.edits.collectAsState().value, onEdit = model::editSummary, onSave = model::saveSummary, onDelete = model::deleteSummary, onAcceptHrMax = model::acceptHrMax, onRetry = model::retrySummary, map = { route -> RouteMap(route, showsUserLocation = false) }, review = session.review, onBack = model::closeSummary) } },
         )
     }
 }

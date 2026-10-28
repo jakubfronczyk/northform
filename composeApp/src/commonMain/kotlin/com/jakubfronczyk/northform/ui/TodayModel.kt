@@ -8,8 +8,8 @@ import com.jakubfronczyk.northform.ui.run.SummaryModel
 import kotlin.time.Instant
 
 /**
- * Everything the Today artboard shows, as plain values (today-screen spec): one pure function of `latest(3)` and the
- * sensor link, so the screen only lays out and the rules are table-tested without Compose ([SummaryModel]'s pattern).
+ * Everything the Today artboard shows, as plain values (today-screen spec): one pure function of the app's saved list
+ * (its first three) and the sensor link, so the screen only lays out and the rules are table-tested without Compose ([SummaryModel]'s pattern).
  * Numbers are formatted as the Summary formats them.
  */
 data class TodayModel(
