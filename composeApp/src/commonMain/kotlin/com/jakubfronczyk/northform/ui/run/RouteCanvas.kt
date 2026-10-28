@@ -17,7 +17,7 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.jakubfronczyk.northform.engine.run.Route
-import com.jakubfronczyk.northform.ui.Theme
+import com.jakubfronczyk.northform.ui.theme.Theme
 
 /**
  * The route drawn by Compose, no MapKit: the fallback behind D13's "fail ⇒ Compose-drawn route" and
@@ -43,7 +43,7 @@ fun RouteCanvas(route: Route, modifier: Modifier = Modifier) {
         }
     }
     Canvas(
-        modifier.fillMaxSize().background(RunPalette.mapPanel).pointerInput(Unit) {
+        modifier.fillMaxSize().background(Theme.panel).pointerInput(Unit) {
             // Compose's drag primitive; `size` is the pointer-input node's size in pixels.
             detectDragGestures { change, drag ->
                 change.consume()
@@ -64,7 +64,7 @@ fun RouteCanvas(route: Route, modifier: Modifier = Modifier) {
         drawCircle(Theme.bg, 7.dp.toPx(), Offset(start.x, start.y))
         drawCircle(Theme.text, 7.dp.toPx(), Offset(start.x, start.y), style = Stroke(3.dp.toPx()))
         val end = RouteProjection.toPx(metres.last().last(), size.width, size.height, pan)
-        drawCircle(Theme.accent.copy(alpha = 0.22f), 20.dp.toPx(), Offset(end.x, end.y))
+        drawCircle(Theme.accentHalo, 20.dp.toPx(), Offset(end.x, end.y))
         drawCircle(Theme.accent, 9.dp.toPx(), Offset(end.x, end.y))
         drawCircle(Theme.bg, 9.dp.toPx(), Offset(end.x, end.y), style = Stroke(3.dp.toPx()))
     }

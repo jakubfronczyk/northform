@@ -29,3 +29,14 @@ kotlin {
         }
     }
 }
+
+// The theme guard (`tools/check-style.sh`): styling spelled out outside `ui/theme/` fails the module's tests and
+// `check`, locally and in CI. No JVM target here, so it hangs on the simulator test task.
+val checkStyle by tasks.registering(Exec::class) {
+    group = "verification"
+    description = "Fails when a UI file outside ui/theme/ spells out a colour, text style, radius or semantic size."
+    workingDir = rootDir
+    commandLine("tools/check-style.sh")
+}
+tasks.named("iosSimulatorArm64Test") { dependsOn(checkStyle) }
+tasks.named("check") { dependsOn(checkStyle) }

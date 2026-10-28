@@ -32,3 +32,7 @@ open: project
 # D16 seam rule: Swift may reference only the three allowed Kotlin symbols and no platform decision APIs.
 check-seam:
     tools/check-seam.sh
+
+# One theme: no colour, text style, corner radius or semantic size spelled out in the UI outside ui/theme/.
+check-style:
+    tools/check-style.sh

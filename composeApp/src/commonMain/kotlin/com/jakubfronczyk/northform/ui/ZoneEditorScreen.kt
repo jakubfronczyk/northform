@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,10 +31,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jakubfronczyk.northform.core.Profile
+import com.jakubfronczyk.northform.ui.theme.Dimens
+import com.jakubfronczyk.northform.ui.theme.Shapes
+import com.jakubfronczyk.northform.ui.theme.Theme
+import com.jakubfronczyk.northform.ui.theme.Type
 
 /**
  * The zone editor (`ZoneEditor.dc.html`, profile-settings/04): each zone's start in % of heart-rate reserve with ±1
@@ -45,41 +46,41 @@ import com.jakubfronczyk.northform.core.Profile
 fun ZoneEditorScreen(profile: Profile, onSave: (Profile) -> Unit, back: () -> Unit) {
     var editor by remember(profile) { mutableStateOf(ZoneEditor.of(profile)) }
     Column(
-        Modifier.fillMaxSize().background(Theme.bg).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 64.dp, bottom = 50.dp),
+        Modifier.fillMaxSize().background(Theme.bg).verticalScroll(rememberScrollState()).padding(horizontal = Dimens.gutter).padding(top = Dimens.screenTop, bottom = Dimens.screenBottom),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.offset(x = (-10).dp).size(44.dp).clickable(onClick = back), contentAlignment = Alignment.Center) {
+            Box(Modifier.offset(x = (-10).dp).size(Dimens.iconButton).clickable(onClick = back), contentAlignment = Alignment.Center) {
                 NfIcon(NfIcons.back, Theme.text, size = 22.dp, label = "Back to Settings")
             }
             Box(Modifier.weight(1f))
-            Text("Reset to default", style = Type.statusLabel.copy(fontSize = 15.sp), color = Theme.accent, modifier = Modifier.clickable { editor = editor.reset() }.padding(8.dp))
+            Text("Reset to default", style = Type.secondaryStrong, color = Theme.accent, modifier = Modifier.clickable { editor = editor.reset() }.padding(8.dp))
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Zones", style = Type.number(28, FontWeight.ExtraBold), color = Theme.text)
+            Text("Zones", style = Type.pageTitle, color = Theme.text)
             Text("Where each zone starts, as % of heart rate reserve.", style = Type.secondaryText, color = Theme.text2)
         }
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Theme.card).padding(horizontal = 16.dp)) {
+        Column(Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).padding(horizontal = 16.dp)) {
             editor.rows.forEachIndexed { i, row ->
                 if (i > 0) DashedLine()
-                Row(Modifier.fillMaxWidth().heightIn(min = 68.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.fillMaxWidth().heightIn(min = Dimens.rowTall), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Box(Modifier.size(10.dp).background(Theme.zoneColors[i + 1], CircleShape))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(row.label, style = Type.statusLabel.copy(fontSize = 15.sp), color = Theme.text)
+                        Text(row.label, style = Type.secondaryStrong, color = Theme.text)
                         Text("from ${row.bpm} bpm", style = Type.tertiaryText, color = Theme.text2)
                     }
                     Stepper("−", "Lower Z${i + 1} start", row.canLower) { editor = editor.lower(i) }
-                    Text("${row.percent} %", style = Type.number(17, FontWeight.Bold), color = Theme.text)
+                    Text("${row.percent} %", style = Type.zonePercent, color = Theme.text)
                     Stepper("+", "Raise Z${i + 1} start", row.canRaise) { editor = editor.raise(i) }
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(Modifier.fillMaxWidth().height(10.dp).clip(Shapes.barTall), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             editor.bar.forEachIndexed { zone, weight -> Box(Modifier.weight(weight.toFloat()).fillMaxHeight().background(Theme.zoneColors[zone])) }
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(editor.preview, style = Type.tertiaryText, color = Theme.text2)
-            Text("Karvonen · stored as % so bpm follow your max", style = Type.tertiaryText.copy(fontSize = 12.sp), color = Theme.text3)
+            Text("Karvonen · stored as % so bpm follow your max", style = Type.caption, color = Theme.text3)
         }
         BigButton("Save", { onSave(profile.copy(zones = editor.zones)) })
     }
@@ -89,8 +90,8 @@ fun ZoneEditorScreen(profile: Profile, onSave: (Profile) -> Unit, back: () -> Un
 @Composable
 private fun Stepper(symbol: String, label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.size(36.dp).clip(CircleShape).border(1.5.dp, if (enabled) Theme.outline else Theme.track, CircleShape)
+        Modifier.size(36.dp).clip(CircleShape).border(Dimens.stroke, if (enabled) Theme.outline else Theme.track, CircleShape)
             .clickable(enabled = enabled, onClick = onClick).clearAndSetSemantics { contentDescription = label; role = Role.Button },
         contentAlignment = Alignment.Center,
-    ) { Text(symbol, style = Type.number(20, FontWeight.Bold), color = if (enabled) Theme.text else Theme.dim) }
+    ) { Text(symbol, style = Type.stepperSymbol, color = if (enabled) Theme.text else Theme.dim) }
 }

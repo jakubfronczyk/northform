@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,11 +35,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.metrics.Zone
 import com.jakubfronczyk.northform.core.ports.WallClock
@@ -49,18 +45,14 @@ import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
 import com.jakubfronczyk.northform.ui.BigButton
 import com.jakubfronczyk.northform.ui.RunFormat
-import com.jakubfronczyk.northform.ui.Theme
-import com.jakubfronczyk.northform.ui.Type
+import com.jakubfronczyk.northform.ui.theme.Theme
+import com.jakubfronczyk.northform.ui.theme.Type
 import com.jakubfronczyk.northform.ui.VDivider
 import com.jakubfronczyk.northform.ui.ValueCell
 import kotlinx.coroutines.delay
 import kotlin.time.Instant
-
-/** Design tokens the LiveDark/Gate artboards use beyond `Theme` (map placeholder, unlit zone segment). */
-internal object RunPalette {
-    val mapPanel = Color(0xFF1D1F21)
-    val unlit = Color(0xFF3A3B3E)
-}
+import com.jakubfronczyk.northform.ui.theme.Dimens
+import com.jakubfronczyk.northform.ui.theme.Shapes
 
 /** The hold-to-stop duration (R27, `LiveRunView.swift:106`). */
 internal const val HOLD_TO_STOP_MS = 1500
@@ -88,15 +80,15 @@ fun LiveRunScreen(
             map(route)
             // D41: the map carries no status while all is well; a chip appears only when GPS is lost (HR loss lives in its cell).
             if (model.gpsLost) {
-                Box(Modifier.fillMaxWidth().padding(16.dp).padding(top = 48.dp), contentAlignment = Alignment.TopEnd) { Chip("GPS lost", Theme.warn) }
+                Box(Modifier.fillMaxWidth().padding(Dimens.gutter).padding(top = Dimens.screenTop - Dimens.gutter), contentAlignment = Alignment.TopEnd) { Chip("GPS lost", Theme.warn) }
             }
-            RecenterButton(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 22.dp + 16.dp))
+            RecenterButton(Modifier.align(Alignment.BottomEnd).padding(end = Dimens.gutter, bottom = Dimens.sheetOverlap + Dimens.gutter))
         }
         Column(
             Modifier.fillMaxWidth()
-                .offset(y = (-22).dp)
-                .background(Theme.bg, RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 50.dp - 22.dp),
+                .offset(y = -Dimens.sheetOverlap)
+                .background(Theme.bg, Shapes.sheet)
+                .padding(start = Dimens.gutter, end = Dimens.gutter, top = 18.dp, bottom = Dimens.screenBottom - Dimens.sheetOverlap),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             (snapshot.phase as? RunPhase.Paused)?.let { PausedPill(it.since, wallClock) }
@@ -117,12 +109,12 @@ private fun RecenterButton(modifier: Modifier = Modifier) {
     val camera = LocalMapCamera.current
     if (camera.following) return
     Row(
-        modifier.background(Theme.bg.copy(alpha = 0.85f), RoundedCornerShape(50))
-            .clip(RoundedCornerShape(50)).clickable(onClick = camera::recenter)
+        modifier.background(Theme.overlay, Shapes.capsule)
+            .clip(Shapes.capsule).clickable(onClick = camera::recenter)
             .padding(vertical = 10.dp, horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(10.dp).border(1.5.dp, Theme.text, CircleShape))
+        Box(Modifier.size(10.dp).border(Dimens.stroke, Theme.text, CircleShape))
         Spacer(Modifier.width(8.dp))
         Text("Re-center", style = Type.statusLabel, color = Theme.text)
     }
@@ -140,8 +132,8 @@ private fun PausedPill(since: Instant, wallClock: WallClock) {
     }
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Text(
-            "Paused · ${RunFormat.time(LiveRunModel.pausedFor(since, now))}", style = RunType.pausedPill, color = Theme.bg,
-            modifier = Modifier.background(Theme.text, RoundedCornerShape(18.dp)).padding(horizontal = 18.dp, vertical = 8.dp),
+            "Paused · ${RunFormat.time(LiveRunModel.pausedFor(since, now))}", style = Type.pausedPill, color = Theme.bg,
+            modifier = Modifier.background(Theme.text, Shapes.pausedPill).padding(horizontal = 18.dp, vertical = 8.dp),
         )
     }
 }
@@ -155,7 +147,7 @@ private fun BigGrid(model: LiveRunModel) {
             BigCell(label = { CellLabel("Pace") }, value = model.pace, unit = "/km", color = if (model.paceDimmed) Theme.dim else Theme.text, sub = "", modifier = Modifier.weight(1f))
             when (val hr = model.hr) {
                 LiveRunModel.Hr.Lost -> BigCell(
-                    label = { Text("Sensor lost", style = Type.rowLabel.copy(fontWeight = FontWeight.SemiBold), color = Theme.warn) },
+                    label = { Text("Sensor lost", style = Type.statusLabel, color = Theme.warn) },
                     value = NO_VALUE, unit = null, color = Theme.warn, sub = "reconnecting…", subColor = Theme.text2, modifier = Modifier.weight(1f),
                 )
                 is LiveRunModel.Hr.Reading -> BigCell(
@@ -189,7 +181,7 @@ private fun BigCell(
 ) = ValueCell(
     value, modifier, unit = unit, valueStyle = Type.number54Black, color = color, unitStyle = Type.unitLabel, unitLift = 10.dp, maxLines = 1,
     label = { Row(Modifier.height(24.dp), verticalAlignment = Alignment.CenterVertically, content = label) },
-    footer = { Text(sub, style = RunType.sub, color = subColor, modifier = Modifier.height(16.dp)) },
+    footer = { Text(sub, style = Type.tertiaryStrong, color = subColor, modifier = Modifier.height(16.dp)) },
 )
 
 /** Six segments, the current zone lit in its colour and taller; none lit while the sensor is lost. */
@@ -198,7 +190,7 @@ private fun ZoneBar(lit: Int?) {
     Row(Modifier.fillMaxWidth().height(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.Bottom) {
         for (z in 0..5) {
             val on = z == lit
-            Box(Modifier.weight(1f).height(if (on) 8.dp else 4.dp).background(if (on) Theme.zoneColors[z] else RunPalette.unlit, RoundedCornerShape(4.dp)))
+            Box(Modifier.weight(1f).height(if (on) 8.dp else 4.dp).background(if (on) Theme.zoneColors[z] else Theme.unlit, Shapes.bar))
         }
     }
 }
@@ -234,7 +226,7 @@ private fun RunningControls(holding: Boolean, onHolding: (Boolean) -> Unit, send
             HoldButton(holding, onHolding, modifier = Modifier.weight(1f))
         }
         Text(
-            if (holding) "Release to cancel" else "", style = RunType.caption, color = Theme.text2,
+            if (holding) "Release to cancel" else "", style = Type.caption, color = Theme.text2,
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp), textAlign = TextAlign.End,
         )
     }
@@ -246,11 +238,11 @@ private fun PausedControls(holding: Boolean, onHolding: (Boolean) -> Unit, send:
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             RoundControl(border = Theme.primary, modifier = Modifier.holdGesture(onHolding)) {
-                Box(Modifier.size(18.dp).background(Theme.text, RoundedCornerShape(4.dp)))
+                Box(Modifier.size(18.dp).background(Theme.text, Shapes.stopSquare))
             }
             BigButton("Resume", { send(UserAction.Resume) }, Modifier.weight(1f), fill = Theme.text, textColor = Theme.bg, icon = NfIcons.play)
         }
-        Text(if (holding) "Keep holding…" else "Hold the circle to stop", style = RunType.caption, color = Theme.text2, modifier = Modifier.padding(top = 8.dp))
+        Text(if (holding) "Keep holding…" else "Hold the circle to stop", style = Type.caption, color = Theme.text2, modifier = Modifier.padding(top = 8.dp))
     }
 }
 
@@ -277,7 +269,7 @@ private fun Modifier.holdGesture(onHolding: (Boolean) -> Unit): Modifier = point
 @Composable
 private fun RoundControl(border: Color, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
     Box(
-        modifier.size(68.dp).border(1.5.dp, border, CircleShape).let { if (onClick != null) it.clip(CircleShape).clickable(onClick = onClick) else it },
+        modifier.size(Dimens.bigButton).border(Dimens.stroke, border, CircleShape).let { if (onClick != null) it.clip(CircleShape).clickable(onClick = onClick) else it },
         contentAlignment = Alignment.Center,
     ) { content() }
 }
@@ -286,7 +278,7 @@ private fun RoundControl(border: Color, modifier: Modifier = Modifier, onClick: 
 @Composable
 private fun PauseBars() {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        repeat(2) { Box(Modifier.size(width = 6.dp, height = 22.dp).background(Theme.text, RoundedCornerShape(2.dp))) }
+        repeat(2) { Box(Modifier.size(width = 6.dp, height = 22.dp).background(Theme.text, Shapes.pauseBar)) }
     }
 }
 
@@ -295,7 +287,7 @@ private fun PauseBars() {
 private fun HoldButton(holding: Boolean, onHolding: (Boolean) -> Unit, modifier: Modifier = Modifier) {
     val fill by animateFloatAsState(if (holding) 1f else 0f, tween(if (holding) HOLD_TO_STOP_MS else 150), label = "hold")
     Box(
-        modifier.height(68.dp).clip(RoundedCornerShape(16.dp)).background(if (holding) Theme.track else Theme.primary).holdGesture(onHolding),
+        modifier.height(Dimens.bigButton).clip(Shapes.bigButton).background(if (holding) Theme.track else Theme.primary).holdGesture(onHolding),
         contentAlignment = Alignment.Center,
     ) {
         if (holding) Box(Modifier.fillMaxHeight().fillMaxWidth(fill).align(Alignment.CenterStart).background(Theme.primary))
@@ -307,7 +299,7 @@ private fun HoldButton(holding: Boolean, onHolding: (Boolean) -> Unit, modifier:
 @Composable
 fun Chip(text: String, color: Color) {
     Row(
-        Modifier.background(Theme.bg.copy(alpha = 0.85f), RoundedCornerShape(50)).padding(vertical = 8.dp, horizontal = 12.dp),
+        Modifier.background(Theme.overlay, Shapes.capsule).padding(vertical = 8.dp, horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(8.dp).background(color, CircleShape))
@@ -325,13 +317,6 @@ fun ZonePill(zone: Zone) {
         "${zone.label} ${zone.name}",
         style = Type.pillLabel,
         color = if (zone.number == 0) Theme.text else Theme.bg,
-        modifier = Modifier.background(color, RoundedCornerShape(50)).padding(vertical = 4.dp, horizontal = 10.dp),
+        modifier = Modifier.background(color, Shapes.capsule).padding(vertical = 4.dp, horizontal = 10.dp),
     )
-}
-
-/** Text styles the run artboards use beyond `Type` (kept in this lane's package; tabular digits like `Type.number`). */
-internal object RunType {
-    val pausedPill = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Bold, fontFeatureSettings = "tnum")
-    val caption = TextStyle(fontSize = 12.sp)
-    val sub = Type.tertiaryText.copy(fontWeight = FontWeight.SemiBold)
 }

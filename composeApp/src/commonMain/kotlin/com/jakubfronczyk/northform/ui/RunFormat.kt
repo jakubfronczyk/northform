@@ -1,68 +1,9 @@
 package com.jakubfronczyk.northform.ui
 
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
-import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.roundedHalfAwayFromZero
 import kotlin.time.Duration
 import kotlin.time.Instant
-
-/** Colour tokens from the style guide (`Features/Style/Theme.swift:4-26`). */
-object Theme {
-    val bg = Color(0xFF161718)
-    val card = Color(0xFF232426)
-    val track = Color(0xFF2E2F32)
-    val line = Color(0xFF34363A)
-    val text = Color(0xFFF4F4F2)
-    val text2 = Color(0xFFA9AAA6)
-    val text3 = Color(0xFF8E8F8B)
-    val dim = Color(0xFF8A8B88)
-    val ring = Color(0xFF6A6B6E)
-    /** The outline of an unselected pill and the Walk tile (`#707175` on the Today and History artboards). */
-    val outline = Color(0xFF707175)
-    val accent = Color(0xFFFF6B2C)
-    val primary = Color(0xFFC2461C)
-    val warn = Color(0xFFE9C46A)
-    val ok = Color(0xFF5FD08A)
-
-    /** A recording type's colour (the gate chip, Today's dots and thumbnail): a run in the accent, a walk in grey. */
-    fun of(type: RecordingType) = if (type == RecordingType.Run) accent else text2
-
-    /** Zone colours by number, Z0 first. The names live on `core` `Zone.name` (D29): one table. */
-    val zoneColors = listOf(
-        Color(0xFF6B6C70),
-        Color(0xFF9CA3AF),
-        Color(0xFF3B82F6),
-        Color(0xFF22C55E),
-        Color(0xFFF59E0B),
-        Color(0xFFEF4444),
-    )
-}
-
-/** Text styles by role (`Theme.swift:39-56`). Numbers use tabular digits so a changing value doesn't jitter. */
-object Type {
-    fun number(size: Int, weight: FontWeight = FontWeight.Bold) =
-        TextStyle(fontSize = size.sp, fontWeight = weight, fontFeatureSettings = "tnum")
-
-    // Hoisted once: these sit on the 1 Hz live screen.
-    val countdown = number(160, FontWeight.Black)
-    val number54Black = number(54, FontWeight.Black)
-    val number40 = number(40)
-    val number24 = number(24)
-    val number22 = number(22)
-    val pillLabel = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold)
-
-    val screenTitle = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Black)
-    val homeTitle = TextStyle(fontSize = 34.sp, fontWeight = FontWeight.Black)
-    val sheetTitle = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold)
-    val rowLabel = TextStyle(fontSize = 14.sp)
-    val secondaryText = TextStyle(fontSize = 15.sp)
-    val tertiaryText = TextStyle(fontSize = 13.sp)
-    val statusLabel = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-    val unitLabel = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium)
-}
+import com.jakubfronczyk.northform.ui.theme.Theme
 
 /** Formatting for run numbers (`Theme.swift:59-78`, metric, D53). Pure string work, no locale. */
 object RunFormat {

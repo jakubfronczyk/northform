@@ -8,7 +8,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.UIKitView
 import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.RoutePoint
-import com.jakubfronczyk.northform.ui.Theme
+import com.jakubfronczyk.northform.ui.theme.Theme
 import com.jakubfronczyk.northform.ui.run.LocalMapCamera
 import com.jakubfronczyk.northform.ui.run.Pan
 import kotlinx.cinterop.ExperimentalForeignApi
