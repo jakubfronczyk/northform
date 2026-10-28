@@ -116,14 +116,9 @@ data class RunSummary(
         fun compute(data: RecordingData, profile: Profile): RunSummary {
             val recording = data.recording
             val startedAt = recording.startUtc
-            val stoppedAt = requireNotNull(recording.endUtc) { "summary of a recording that was not stopped: ${recording.id.value}" }
-            val pauses: List<Pause> = Pauses.intervals(data.events, stoppedAt)
-            val totalTime = stoppedAt - startedAt
-            val pausedTime = Pauses.pausedWithin(pauses, startedAt, stoppedAt)
+            val (stoppedAt, pauses, totalTime, pausedTime, replayed, effort) = Basis.of(data)
             val activeTime = totalTime - pausedTime
-            // D111: the same tracker the live run counted with, replayed over the stored fixes; the route comes with it.
-            val (distance, route) = RunReducer.replayed(data)
-            val effort = data.hr.filter { it.t <= stoppedAt && HeartRate.isValid(it.bpm) }
+            val (distance, route) = replayed
             val cooldownEndedAt = data.events.firstOrNull { it.kind == EventKind.CooldownEnd }?.t
             // One altitude pass for the run and its rows: steps depend only on earlier fixes, so the
             // steps up to the stop are the steps of the fixes up to the stop.
@@ -178,14 +173,34 @@ suspend fun RecordingStore.saveRunSummary(summary: RunSummary, tag: RunTag?, rpe
  * for a recording saved before Save stored its headline rows (today-screen spec). No profile needed.
  */
 fun Headline.Companion.compute(data: RecordingData): Headline {
-    val recording = data.recording
-    val stoppedAt = requireNotNull(recording.endUtc) { "headline of a recording that was not stopped: ${recording.id.value}" }
-    val totalTime = stoppedAt - recording.startUtc
-    val paused = Pauses.pausedWithin(Pauses.intervals(data.events, stoppedAt), recording.startUtc, stoppedAt)
-    return Headline(
-        distance = RunReducer.replayed(data).distance,
-        totalTime = totalTime,
-        movingTime = totalTime - paused,
-        avgHr = HeartRate.mean(data.hr.filter { it.t <= stoppedAt && HeartRate.isValid(it.bpm) }),
-    )
+    val b = Basis.of(data)
+    return Headline(b.replayed.distance, b.totalTime, b.totalTime - b.pausedTime, HeartRate.mean(b.effort))
+}
+
+/** What [RunSummary.compute] and [Headline.Companion.compute] both read off a stopped recording: one rule for both. */
+private data class Basis(
+    val stoppedAt: Instant,
+    val pauses: List<Pause>,
+    /** Stop − start, pauses included (D28). */
+    val totalTime: Duration,
+    val pausedTime: Duration,
+    /** D111: the same tracker the live run counted with, replayed over the stored fixes; the route comes with it. */
+    val replayed: Replayed,
+    /** Valid heart-rate samples up to the stop: the cool-down never enters the effort. */
+    val effort: List<HrSample>,
+) {
+    companion object {
+        fun of(data: RecordingData): Basis {
+            val recording = data.recording
+            val stoppedAt = requireNotNull(recording.endUtc) { "summary of a recording that was not stopped: ${recording.id.value}" }
+            val pauses = Pauses.intervals(data.events, stoppedAt)
+            return Basis(
+                stoppedAt, pauses,
+                totalTime = stoppedAt - recording.startUtc,
+                pausedTime = Pauses.pausedWithin(pauses, recording.startUtc, stoppedAt),
+                replayed = RunReducer.replayed(data),
+                effort = data.hr.filter { it.t <= stoppedAt && HeartRate.isValid(it.bpm) },
+            )
+        }
+    }
 }

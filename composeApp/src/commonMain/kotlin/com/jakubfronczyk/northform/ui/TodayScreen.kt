@@ -67,14 +67,16 @@ fun TodayScreen(
         }
         model.last?.let { LastCard(it) { openRecording(it.id) } }
         model.emptyLine?.let { Text(it, style = Type.secondaryText, color = Theme.text2) }
-        if (model.recent.isNotEmpty()) {
+        if (model.showsHistory) {
             Column {
-                Text("Recent", style = Type.sheetTitle.copy(fontSize = 17.sp), color = Theme.text, modifier = Modifier.padding(bottom = 6.dp))
+                if (model.recent.isNotEmpty()) {
+                    Text("Recent", style = Type.sheetTitle.copy(fontSize = 17.sp), color = Theme.text, modifier = Modifier.padding(bottom = 6.dp))
+                }
                 for (row in model.recent) {
                     DashedLine()
                     RecentRow(row) { openRecording(row.id) }
                 }
-                DashedLine()
+                if (model.recent.isNotEmpty()) DashedLine()
                 Box(Modifier.fillMaxWidth().height(48.dp).clickable(onClick = openHistory), contentAlignment = Alignment.Center) {
                     Text("See all history  ›", style = Type.statusLabel.copy(fontSize = 15.sp), color = Theme.accent)
                 }
@@ -125,7 +127,7 @@ private fun LastCard(card: TodayModel.Card, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Box(Modifier.size(76.dp).background(Color(0xFF1D1F21), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
-            RouteGlyph(if (card.type == RecordingType.Run) Theme.accent else Theme.text2)
+            RouteGlyph(Theme.of(card.type))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(card.label, style = Type.tertiaryText, color = Theme.text2)
@@ -144,7 +146,7 @@ private fun RecentRow(row: TodayModel.Row, onClick: () -> Unit) {
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(Modifier.size(8.dp).background(if (row.type == RecordingType.Run) Theme.accent else Theme.text2, CircleShape))
+                Box(Modifier.size(8.dp).background(Theme.of(row.type), CircleShape))
                 Text(row.title, style = Type.statusLabel.copy(fontSize = 16.sp), color = Theme.text)
             }
             Text(row.date, style = Type.tertiaryText, color = Theme.text2)

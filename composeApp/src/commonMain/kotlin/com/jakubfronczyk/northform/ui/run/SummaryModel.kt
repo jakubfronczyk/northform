@@ -82,7 +82,7 @@ data class SummaryModel(
             val profile = summary.profile
             val bpmRange = bpmRange(summary)
             return SummaryModel(
-                typeLabel = noun(recording.type).replaceFirstChar { it.uppercase() },
+                typeLabel = title(recording.type),
                 dateLine = "${RunFormat.date(recording.startUtc, recording.tzOffset)} · ${RunFormat.localTime(recording.startUtc, recording.tzOffset)}",
                 distance = RunFormat.distance(summary.distance),
                 totalTime = RunFormat.time(summary.totalTime),
@@ -150,6 +150,9 @@ data class SummaryModel(
 
         /** "run" / "walk": the word the screen builds its labels from (GLOSSARY: never "run" for a walk). */
         fun noun(type: RecordingType) = when (type) { RecordingType.Run -> "run"; RecordingType.Walk -> "walk" }
+
+        /** "Run" / "Walk": the type chip, a Recent row's title. */
+        fun title(type: RecordingType) = noun(type).replaceFirstChar { it.uppercase() }
 
         private fun plural(n: Int, one: String, many: String = "${one}s") = "$n ${if (n == 1) one else many}"
     }

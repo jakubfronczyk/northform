@@ -82,6 +82,19 @@ class TodayModelTest {
     }
 
     @Test
+    fun a_walk_card_above_a_walk_row_keeps_both_nouns() {
+        val m = model(walk, walk.copy(recording = walk.recording.copy(id = RecordingId("earlier"))))
+        assertEquals("Last walk · Sat 27 Sep", m.last!!.label)
+        assertEquals(listOf("Walk"), m.recent.map { it.title })
+    }
+
+    @Test
+    fun see_all_history_shows_with_any_saved_recording_and_not_on_an_empty_today() {
+        assertEquals(false, model().showsHistory)
+        assertEquals(true, model(tempo).showsHistory)
+    }
+
+    @Test
     fun a_recent_walk_without_heart_rate_shows_only_its_time() =
         assertEquals("48:12", model(tempo, walkNoHr).recent.single().detail)
 

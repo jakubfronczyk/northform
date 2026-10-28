@@ -40,9 +40,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSOperationQueue
-import platform.Foundation.NSTimeZone
-import platform.Foundation.localTimeZone
-import platform.Foundation.secondsFromGMT
 import platform.UIKit.UIApplicationDidEnterBackgroundNotification
 import platform.UIKit.UIViewController
 import kotlin.coroutines.resume
@@ -79,6 +76,8 @@ object NorthformApp {
         private set
     lateinit var model: AppModel
         private set
+    /** The wiring [model] runs on; Today reads its clock and zone from here too (one source for both). */
+    private lateinit var deps: AppDeps
     private var live = false
 
     /**
@@ -115,7 +114,7 @@ object NorthformApp {
         live = !AppDeps.isSimulator
         val runAlerts = RunAlertPlayer(alerts, DeviceLog::runTrace)
         val sqlStore = SqlRecordingStore(nativeDriver())
-        val deps = AppDeps(
+        deps = AppDeps(
             source = if (live) RunSource.Live(sensor, location, KeepAlive(DeviceLog.location::notice).asRunKeepAlive(), ::requestRunPermissions)
                      else RunSource.Replay { BundleFixtures.script("straight-run-3min") },
             store = LoggingStore(sqlStore, DeviceLog::runTrace),
@@ -192,7 +191,7 @@ object NorthformApp {
         val sensorName by remember { if (live) sensorDetails.paired.map { it?.name } else flowOf(null) }.collectAsState(null)
         AppRoot(
             activeRun = activeRun?.session,
-            today = TodayModel.from(saved, gateSensor, sensorName, IosWallClock.now(), NSTimeZone.localTimeZone.secondsFromGMT.toInt()),
+            today = TodayModel.from(saved, gateSensor, sensorName, deps.wallClock.now(), deps.tzOffset()),
             onStartRun = model::startRun,
             onCloseRun = model::closeRun,
             map = { route -> RouteMap(route, showsUserLocation = live) },

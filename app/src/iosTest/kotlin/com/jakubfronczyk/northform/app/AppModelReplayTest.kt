@@ -2,6 +2,11 @@ package com.jakubfronczyk.northform.app
 
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RecordingType
+import com.jakubfronczyk.northform.core.Recording
+import com.jakubfronczyk.northform.core.RecordingId
+import com.jakubfronczyk.northform.core.metrics.Headline
+import com.jakubfronczyk.northform.core.ports.SavedRecording
+import kotlinx.coroutines.CompletableDeferred
 import com.jakubfronczyk.northform.core.ports.SavedRecordings
 import com.jakubfronczyk.northform.core.ports.SavedRows
 import com.jakubfronczyk.northform.engine.store.StoredSavedRecordings
@@ -142,6 +147,25 @@ class AppModelReplayTest {
         assertEquals(emptyList(), relaunched.saved.value.map { it.recording.id })
         relaunched.checkUnfinished(); runCurrent()
         assertEquals(listOf(run.id), relaunched.saved.value.map { it.recording.id })
+    }
+
+    /** today-screen code review: a slow read that finishes after a newer one never puts the older list back. */
+    @Test
+    fun an_older_saved_read_finishing_last_does_not_overwrite_a_newer_one() = runTest {
+        val slow = CompletableDeferred<List<SavedRecording>>()
+        val newer = listOf(SavedRecording(Recording(id = RecordingId("new"), type = RecordingType.Run, state = RecordingState.Saved, startUtc = straightRun().meta.start, tzOffset = 0), Headline(1000.0, 300.seconds, 300.seconds, null)))
+        var calls = 0
+        val saved = object : SavedRecordings {
+            override suspend fun latest(n: Int) = if (calls++ == 0) slow.await() else newer
+        }
+        val store = InMemoryRecordingStore()
+        val model = AppModel(AppDeps(source = RunSource.Replay { straightRun() }, store = store, reliability = store, wallClock = virtualWallClock(straightRun().meta.start), alerts = RecordedAlerts(), saved = saved), backgroundScope)
+
+        model.refreshSaved(); runCurrent() // the launch read, still waiting
+        model.refreshSaved(); runCurrent() // a later read (after a Save) answers first
+        slow.complete(emptyList()); runCurrent()
+
+        assertEquals(listOf(RecordingId("new")), model.saved.value.map { it.recording.id })
     }
 
     /** code review a.3: a recording a crash left `active` still goes to the crash prompt, and no Summary opens. */

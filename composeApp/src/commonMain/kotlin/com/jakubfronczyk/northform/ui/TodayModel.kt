@@ -24,6 +24,9 @@ data class TodayModel(
     /** "No recordings yet" when nothing is saved, else null. */
     val emptyLine: String?,
 ) {
+    /** "See all history ›": the way into History whenever anything is saved, Recent or not. */
+    val showsHistory: Boolean get() = last != null
+
     /** The sensor card: the gate's link state (E1); [connected] picks green or amber. */
     data class Sensor(val name: String, val connected: Boolean, val status: String)
 
@@ -73,7 +76,7 @@ data class TodayModel(
 
         private fun row(s: SavedRecording): Row {
             val r = s.recording
-            val title = listOfNotNull(SummaryModel.noun(r.type).replaceFirstChar { it.uppercase() }, r.tag?.name).joinToString(" · ")
+            val title = listOfNotNull(SummaryModel.title(r.type), r.tag?.name).joinToString(" · ")
             val h = s.headline
             return Row(
                 r.id, r.type, title,

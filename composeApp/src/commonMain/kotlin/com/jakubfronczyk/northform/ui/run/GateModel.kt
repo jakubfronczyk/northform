@@ -62,7 +62,7 @@ data class GateModel(
             val startOk = hrReady && gpsReady
             val noun = SummaryModel.noun(snapshot.type)
             return GateModel(
-                typeLabel = noun.replaceFirstChar { it.uppercase() },
+                typeLabel = SummaryModel.title(snapshot.type),
                 title = when {
                     noSensor -> "No heart rate yet"
                     startOk -> "Ready to $noun"

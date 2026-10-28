@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.AtomicInt
+import kotlin.concurrent.atomics.incrementAndFetch
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 /**
@@ -55,6 +57,8 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     private val opening = AtomicBoolean(false)
     /** An R28 answer is being settled (Save/Delete store calls, or Continue opening): another tap does nothing until it is. */
     private val answering = AtomicBoolean(false)
+    /** The number of the latest [refreshSaved] read: an older one that answers late is dropped. */
+    private val savedReads = AtomicInt(0)
     /** Runs whose screen closed after start: kept until their last write is done (D112). Immutable snapshots, swapped atomically. */
     private val finishing = MutableStateFlow<Map<RecordingId, ActiveRun>>(emptyMap())
 
@@ -67,11 +71,15 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
         openRun { ActiveRun.open(deps, scope, type) }
     }
 
-    /** Re-reads Today's list; a failed read keeps the last one (logged), never an error on Today. */
+    /**
+     * Re-reads Today's list; a failed read keeps the last one (logged), never an error on Today. Reads can overlap
+     * (launch and a quick Save) and finish in any order: each takes a number first, and only the latest one is shown.
+     */
     fun refreshSaved() {
+        val read = savedReads.incrementAndFetch()
         scope.launch {
             runCatching { deps.saved.latest(TodayModel.SHOWN) }
-                .onSuccess { _saved.value = it }
+                .onSuccess { if (read == savedReads.load()) _saved.value = it }
                 .onFailure { deps.log("saved list read failed: $it") }
         }
     }
