@@ -59,7 +59,7 @@ data class SettingsModel(
             },
             units = "Metric (km, kg, 24 h)",
             // Backup v1 carries the runs and their streams, not the current profile (D26): the copy says what it holds.
-            backupDetail = "All runs and raw streams in one file, saved to the Files app.",
+            backupDetail = "All runs and raw streams, saved to Files.",
             export = when (export) {
                 ExportState.Idle -> Export("Export backup", enabled = true, line = null)
                 ExportState.Busy -> Export("Exporting…", enabled = false, line = null)
