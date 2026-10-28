@@ -29,8 +29,8 @@ import com.jakubfronczyk.northform.engine.run.RunSessionHandle
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
 import com.jakubfronczyk.northform.ui.BigButton
 import com.jakubfronczyk.northform.ui.RunFormat
-import com.jakubfronczyk.northform.ui.Theme
-import com.jakubfronczyk.northform.ui.Type
+import com.jakubfronczyk.northform.ui.theme.Theme
+import com.jakubfronczyk.northform.ui.theme.Type
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.ceil

@@ -31,6 +31,8 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.jakubfronczyk.northform.ui.theme.Theme
+import com.jakubfronczyk.northform.ui.theme.Type
 
 private val BigButtonShape = RoundedCornerShape(16.dp)
 

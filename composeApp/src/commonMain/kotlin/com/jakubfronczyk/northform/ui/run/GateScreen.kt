@@ -33,8 +33,8 @@ import com.jakubfronczyk.northform.engine.run.RunReducer
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
 import com.jakubfronczyk.northform.ui.BigButton
 import com.jakubfronczyk.northform.ui.DashedLine
-import com.jakubfronczyk.northform.ui.Theme
-import com.jakubfronczyk.northform.ui.Type
+import com.jakubfronczyk.northform.ui.theme.Theme
+import com.jakubfronczyk.northform.ui.theme.Type
 import com.jakubfronczyk.northform.ui.ValueCell
 
 /**

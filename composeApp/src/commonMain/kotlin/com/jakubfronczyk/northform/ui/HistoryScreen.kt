@@ -32,6 +32,8 @@ import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.RunTag
 import com.jakubfronczyk.northform.ui.run.SummaryModel
+import com.jakubfronczyk.northform.ui.theme.Theme
+import com.jakubfronczyk.northform.ui.theme.Type
 
 /**
  * The History artboard (`Home.dc.html`, history-screen spec): Back, the title, the count and every saved recording

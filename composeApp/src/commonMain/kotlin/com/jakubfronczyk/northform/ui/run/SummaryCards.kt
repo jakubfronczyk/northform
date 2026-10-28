@@ -25,8 +25,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
-import com.jakubfronczyk.northform.ui.Theme
-import com.jakubfronczyk.northform.ui.Type
+import com.jakubfronczyk.northform.ui.theme.Theme
+import com.jakubfronczyk.northform.ui.theme.Type
 import com.jakubfronczyk.northform.ui.ValueCell
 
 // The Summary's "Heart rate" card and "Splits" table (summary-screen/03), drawn from [SummaryModel] only.

@@ -17,7 +17,7 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.jakubfronczyk.northform.engine.run.Route
-import com.jakubfronczyk.northform.ui.Theme
+import com.jakubfronczyk.northform.ui.theme.Theme
 
 /**
  * The route drawn by Compose, no MapKit: the fallback behind D13's "fail ⇒ Compose-drawn route" and

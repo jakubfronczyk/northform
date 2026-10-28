@@ -41,6 +41,8 @@ import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.Sex
 import com.jakubfronczyk.northform.ui.ProfileForm.Field
 import kotlin.time.Instant
+import com.jakubfronczyk.northform.ui.theme.Theme
+import com.jakubfronczyk.northform.ui.theme.Type
 
 private val FieldShape = RoundedCornerShape(14.dp)
 private val PillShape = RoundedCornerShape(22.dp)

@@ -36,6 +36,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jakubfronczyk.northform.core.Profile
+import com.jakubfronczyk.northform.ui.theme.Theme
+import com.jakubfronczyk.northform.ui.theme.Type
 
 /**
  * The zone editor (`ZoneEditor.dc.html`, profile-settings/04): each zone's start in % of heart-rate reserve with ±1

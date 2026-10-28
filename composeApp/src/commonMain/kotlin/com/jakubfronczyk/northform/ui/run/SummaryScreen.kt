@@ -44,8 +44,8 @@ import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.SummaryEdits
 import com.jakubfronczyk.northform.engine.run.SummarySession
 import com.jakubfronczyk.northform.ui.BigButton
-import com.jakubfronczyk.northform.ui.Theme
-import com.jakubfronczyk.northform.ui.Type
+import com.jakubfronczyk.northform.ui.theme.Theme
+import com.jakubfronczyk.northform.ui.theme.Type
 import com.jakubfronczyk.northform.ui.ValueCell
 
 /**

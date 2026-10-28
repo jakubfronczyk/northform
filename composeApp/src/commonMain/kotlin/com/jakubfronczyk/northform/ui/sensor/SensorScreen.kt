@@ -46,8 +46,8 @@ import androidx.compose.ui.unit.sp
 import com.jakubfronczyk.northform.core.DiscoveredSensor
 import com.jakubfronczyk.northform.ui.BigButton
 import com.jakubfronczyk.northform.ui.DashedLine
-import com.jakubfronczyk.northform.ui.Theme
-import com.jakubfronczyk.northform.ui.Type
+import com.jakubfronczyk.northform.ui.theme.Theme
+import com.jakubfronczyk.northform.ui.theme.Type
 import com.jakubfronczyk.northform.ui.VDivider
 import com.jakubfronczyk.northform.ui.ValueCell
 import com.jakubfronczyk.northform.ui.sensor.SensorScreenModel.Mode

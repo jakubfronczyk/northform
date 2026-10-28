@@ -37,8 +37,8 @@ import com.jakubfronczyk.northform.engine.run.CrashFacts
 import com.jakubfronczyk.northform.engine.run.CrashPrompt
 import com.jakubfronczyk.northform.ui.BigButton
 import com.jakubfronczyk.northform.ui.RunFormat
-import com.jakubfronczyk.northform.ui.Theme
-import com.jakubfronczyk.northform.ui.Type
+import com.jakubfronczyk.northform.ui.theme.Theme
+import com.jakubfronczyk.northform.ui.theme.Type
 import com.jakubfronczyk.northform.ui.VDivider
 import com.jakubfronczyk.northform.ui.ValueCell
 import kotlinx.coroutines.delay

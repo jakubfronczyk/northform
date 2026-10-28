@@ -17,6 +17,7 @@ import com.jakubfronczyk.northform.ui.run.GateSensor
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
+import com.jakubfronczyk.northform.ui.theme.Theme
 
 // The Today artboard's states on a fake list (today-screen spec): the 16e check is the visual test.
 
