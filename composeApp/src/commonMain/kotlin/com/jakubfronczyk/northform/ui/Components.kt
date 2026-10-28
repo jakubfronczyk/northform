@@ -56,7 +56,7 @@ fun BigButton(
     modifier: Modifier = Modifier.fillMaxWidth(),
     fill: Color? = Theme.primary,
     textColor: Color = Theme.text,
-    textStyle: TextStyle = Type.sheetTitle,
+    textStyle: TextStyle = Type.buttonLabel,
     enabled: Boolean = true,
     contentPadding: Dp = 0.dp,
     /** A 20 dp icon before [title] (Start, Resume: the artboards' play), tinted like the text. */
