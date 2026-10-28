@@ -32,6 +32,7 @@ import com.jakubfronczyk.northform.ui.BigButton
 import com.jakubfronczyk.northform.ui.DashedLine
 import com.jakubfronczyk.northform.ui.InlineButton
 import com.jakubfronczyk.northform.ui.SetupPermissions
+import com.jakubfronczyk.northform.ui.TextAction
 import com.jakubfronczyk.northform.ui.theme.Theme
 import com.jakubfronczyk.northform.ui.theme.Type
 import com.jakubfronczyk.northform.ui.ValueCell
@@ -94,11 +95,7 @@ fun GateScreen(
                     model.startLabel, start, fill = if (model.startEnabled) Theme.primary else Theme.track,
                     textColor = if (model.startEnabled) Theme.onPrimary else Theme.dim, enabled = model.startEnabled, icon = NfIcons.play,
                 )
-                if (model.showStartAnyway) {
-                    Box(Modifier.fillMaxWidth().height(Dimens.textButton).clickable(onClick = start), contentAlignment = Alignment.Center) {
-                        Text("Start anyway", style = Type.bodyStrong, color = Theme.text)
-                    }
-                }
+                if (model.showStartAnyway) TextAction("Start anyway", start)
             }
         }
     }

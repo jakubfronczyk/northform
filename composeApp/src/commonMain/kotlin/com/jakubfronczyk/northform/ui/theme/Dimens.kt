@@ -58,8 +58,8 @@ object Dimens {
     val nearbyDisc = 40.dp
     /** A status dot: "Paired", the Sensor screen's live heart-rate dot. */
     val statusDot = 8.dp
-    /** A zone's colour dot on the zone editor. */
-    val zoneDot = 10.dp
+    /** A 10 dp dot: a zone's colour on the zone editor, one of the countdown's five tick dots. */
+    val dot = 10.dp
     /** The zone editor's round ±1 stepper. */
     val stepper = 36.dp
     /** A 10 dp bar (`Shapes.barTall`): the zone editor's preview. */
@@ -86,8 +86,6 @@ object Dimens {
     val countdownRing = 260.dp
     /** The countdown ring's stroke. */
     val countdownRingStroke = 10.dp
-    /** One of the countdown's five tick dots. */
-    val tickDot = 10.dp
     /** The cool-down ring's 260 dp box; the circle inside is [cooldownRing]. */
     val cooldownRingBox = 260.dp
     /** The cool-down ring's circle: r 112, so 224 dp across the stroke's centre line. */
@@ -98,4 +96,8 @@ object Dimens {
     val recoveryChart = 44.dp
     /** The cool-down's "Sensor lost" triangle. */
     val iconMini = 14.dp
+    /** Under a run-flow screen's top row: the cool-down's chip row to its title, the countdown's ring to its copy (28). */
+    val headerGap = 28.dp
+    /** Between the cool-down's blocks: the title, the ring, the card (`margin-top: 34px`). */
+    val sectionGap = 34.dp
 }

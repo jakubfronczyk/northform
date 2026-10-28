@@ -66,7 +66,7 @@ fun CountdownScreen(endsAt: Instant, type: RecordingType, wallClock: WallClock, 
         Column(
             Modifier.fillMaxWidth().weight(1f).padding(top = 12.dp).clearAndSetSemantics { contentDescription = model.accessibility },
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterVertically),
+            verticalArrangement = Arrangement.spacedBy(Dimens.headerGap, Alignment.CenterVertically),
         ) {
             Box(Modifier.size(Dimens.countdownRingBox), contentAlignment = Alignment.Center) {
                 ProgressRing(model.ring, Dimens.countdownRing, Dimens.countdownRingStroke)
@@ -76,7 +76,7 @@ fun CountdownScreen(endsAt: Instant, type: RecordingType, wallClock: WallClock, 
                 Text(model.headline, style = Type.countdownHeadline, color = Theme.text)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     repeat(model.dots) { i ->
-                        Box(Modifier.size(Dimens.tickDot).background(if (i < model.litDots) Theme.accent else Theme.unlit, CircleShape))
+                        Box(Modifier.size(Dimens.dot).background(if (i < model.litDots) Theme.accent else Theme.unlit, CircleShape))
                     }
                 }
                 Text(model.hint, style = Type.tertiaryText, color = Theme.text2)

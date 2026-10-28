@@ -36,14 +36,12 @@ object Type {
     val cooldownNow = number(40, FontWeight.Bold, family = Fonts.condensed).tight()
     /** A lead paragraph under a screen title: the cool-down's "Stand or walk slowly…" (16 px, line-height 1.4). */
     val lead = text(16).copy(lineHeight = 22.4.sp)
-    /** A plain text action at the foot of a screen: the cool-down's Skip (17 px, 600). */
-    val textAction = text(17, FontWeight.SemiBold)
     /** " bpm" after a cool-down value (13 px, 500). */
     val smallUnit = text(13, FontWeight.Medium)
-
-    // Hoisted once: these sit on the 1 Hz live screen.
     /** The countdown's number inside its ring (`Countdown.dc.html`: 190 px, 800, 78 %, line-height 1). */
     val countdown = number(190, FontWeight.ExtraBold, family = Fonts.narrowest).tight()
+
+    // Hoisted once: these sit on the 1 Hz live screen.
     val number54Black = number(54, FontWeight.Black, family = Fonts.narrowest)
     val number40 = number(40, family = Fonts.narrowest)
     val number24 = number(24, family = Fonts.condensed)
@@ -81,7 +79,7 @@ object Type {
     val cardTitle = text(17, FontWeight.Bold)
     /** A row's bold name: Today's sensor card, the Sensor screen's firmware warning. */
     val bodyBold = text(16, FontWeight.Bold)
-    /** A row's title or a plain action: the Recent and History rows, the Gate rows, Start anyway, Delete run. */
+    /** A row's title or a plain action: the Recent and History rows, the Gate rows, Start anyway, the cool-down's Skip, Delete run. */
     val bodyStrong = text(16, FontWeight.SemiBold)
     /** An inline action or emphasised line: Retry, See all history, the outlined buttons, the Gate's warning. */
     val secondaryStrong = text(15, FontWeight.SemiBold)

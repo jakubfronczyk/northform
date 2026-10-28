@@ -141,6 +141,17 @@ fun InlineButton(text: String, onClick: () -> Unit, filled: Boolean = true) {
     ) { Text(text, style = Type.secondaryBold, color = if (filled) Theme.onPrimary else Theme.text, maxLines = 1) }
 }
 
+/**
+ * A text-only action across the width, `Dimens.textButton` tall: the Gate's "Start anyway" and the cool-down's Skip.
+ * [color]: the text by default; Skip's artboard draws it grey (`Theme.text2`).
+ */
+@Composable
+fun TextAction(text: String, onClick: () -> Unit, color: Color = Theme.text) {
+    Box(Modifier.fillMaxWidth().height(Dimens.textButton).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+        Text(text, style = Type.bodyStrong, color = color)
+    }
+}
+
 /** The turning three-quarter ring beside "Scanning…" (`SetupPair.dc.html`), in the accent. */
 @Composable
 fun Spinner() {
@@ -182,11 +193,12 @@ fun ConfirmSheet(title: String, detail: String, confirm: String, keep: String, o
 /**
  * A screen whose content fits the phone when it can (Jakub's rule: no scrolling if it can be squeezed in) with its main
  * [button] pinned at the bottom. The content scrolls only when it truly can't fit (the keyboard up, a smaller phone).
+ * [spacing] between the content's blocks: Setup's 18 by default; 0 where a screen sets its own gaps (the cool-down).
  */
 @Composable
-fun PinnedScreen(button: @Composable () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+fun PinnedScreen(button: @Composable () -> Unit, spacing: Dp = Dimens.blockGap, content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxSize().background(Theme.bg).padding(horizontal = Dimens.gutter).padding(top = Dimens.screenTop, bottom = Dimens.screenBottom)) {
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(Dimens.blockGap), content = content)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(spacing), content = content)
         Spacer(Modifier.height(Dimens.buttonGap))
         button()
     }

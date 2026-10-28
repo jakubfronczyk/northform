@@ -18,7 +18,10 @@ data class CountdownModel(
     val seconds: Int,
     /** The ring's lit share, [seconds] / [dots]: full at 5, draining a fifth per second (the artboard's `dash`). */
     val ring: Float,
-    /** Dots lit, one per second gone: [dots] − [seconds]. */
+    /**
+     * Dots lit, one per second gone: [dots] − [seconds], the artboard's own rule (`i <= 5 − n`). So 0 at 5 and 4 at 1:
+     * the fifth would light at 0, which is never shown (the run is Active by then).
+     */
     val litDots: Int,
     /** One dot per second of `RunReducer.countdown` (5). */
     val dots: Int,

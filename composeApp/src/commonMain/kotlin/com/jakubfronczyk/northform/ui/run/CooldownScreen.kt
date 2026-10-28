@@ -2,15 +2,12 @@ package com.jakubfronczyk.northform.ui.run
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -38,7 +35,11 @@ import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
 import com.jakubfronczyk.northform.ui.NfIcon
 import com.jakubfronczyk.northform.ui.NfIcons
-import com.jakubfronczyk.northform.ui.ValueCell
+import com.jakubfronczyk.northform.ui.PinnedScreen
+import com.jakubfronczyk.northform.ui.TextAction
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Dp
 import com.jakubfronczyk.northform.ui.theme.Dimens
 import com.jakubfronczyk.northform.ui.theme.Shapes
 import com.jakubfronczyk.northform.ui.theme.Theme
@@ -70,49 +71,41 @@ fun CooldownScreen(snapshot: RunSnapshot, wallClock: WallClock, skip: () -> Unit
 /**
  * The artboard's layout over a [CooldownModel]: the "Run stopped" chip and the frozen totals, the title, the 60 s ring
  * with the time left, the card with Now · Started at · Drop so far over the chart and its caption (or the sensor-lost
- * line), and Skip at the foot. Everything fits the 16e; nothing scrolls.
+ * line), and Skip pinned at the foot ([PinnedScreen]: it fits the 16e; only a larger text size scrolls, never clips Skip).
+ * Skip is the shared [TextAction] (44 dp, 16 semibold, like the Gate's Start anyway) rather than the artboard's 48 dp /
+ * 17 px: one text action across the flow; it keeps the artboard's grey.
  */
 @Composable
-fun CooldownContent(model: CooldownModel, skip: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(horizontal = Dimens.gutter).padding(top = Dimens.screenTop, bottom = Dimens.screenBottom)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Chip(model.chipLabel, model.chipColor, background = Theme.card)
-            Text(model.totals, style = Type.rowLabel, color = Theme.text2)
-        }
-        Column(Modifier.padding(top = 28.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(model.title, style = Type.heroTitle, color = Theme.text)
-            Text(model.subtitle, style = Type.lead, color = Theme.text2)
-        }
-        Box(Modifier.padding(top = 34.dp).size(Dimens.cooldownRingBox).align(Alignment.CenterHorizontally), contentAlignment = Alignment.Center) {
-            ProgressRing(model.ring, Dimens.cooldownRing, Dimens.cooldownRingStroke)
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(model.left, style = Type.cooldownLeft, color = Theme.text)
-                Text("left", style = Type.liveUnit, color = Theme.text2)
-            }
-        }
-        RecoveryCard(model, Modifier.padding(top = 34.dp))
-        Spacer(Modifier.weight(1f))
-        Box(
-            Modifier.align(Alignment.CenterHorizontally).height(Dimens.secondaryButton).clickable(onClick = skip).padding(horizontal = 24.dp),
-            contentAlignment = Alignment.Center,
-        ) { Text("Skip", style = Type.textAction, color = Theme.text2) }
+fun CooldownContent(model: CooldownModel, skip: () -> Unit) = PinnedScreen(button = { TextAction("Skip", skip, color = Theme.text2) }, spacing = 0.dp) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Chip(model.chipLabel, model.chipColor, background = Theme.card)
+        Text(model.totals, style = Type.rowLabel, color = Theme.text2)
     }
+    Column(Modifier.padding(top = Dimens.headerGap), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(model.title, style = Type.heroTitle, color = Theme.text)
+        Text(model.subtitle, style = Type.lead, color = Theme.text2)
+    }
+    Box(Modifier.padding(top = Dimens.sectionGap).size(Dimens.cooldownRingBox).align(Alignment.CenterHorizontally), contentAlignment = Alignment.Center) {
+        ProgressRing(model.ring, Dimens.cooldownRing, Dimens.cooldownRingStroke)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(model.left, style = Type.cooldownLeft, color = Theme.text)
+            Text("left", style = Type.liveUnit, color = Theme.text2)
+        }
+    }
+    RecoveryCard(model, Modifier.padding(top = Dimens.sectionGap))
 }
 
 /** Now · Started at · Drop so far, dashed rules between them, over the since-stop chart and its caption. */
 @Composable
 private fun RecoveryCard(model: CooldownModel, modifier: Modifier) {
     val nowColor = if (model.lost) Theme.warn else Theme.text
-    Column(modifier.fillMaxWidth().background(Theme.card, Shapes.card).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(modifier.fillMaxWidth().background(Theme.card, Shapes.card).padding(Dimens.gutter), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-            ValueCell(
-                model.hrNow, Modifier.weight(1f), unit = "bpm", valueStyle = Type.cooldownNow, color = nowColor, unitStyle = Type.smallUnit, unitLift = 0.dp,
-                label = { Text("Now", style = Type.tertiaryText, color = if (model.lost) Theme.warn else Theme.text2) },
-            )
+            BpmCell("Now", model.hrNow, Type.cooldownNow, Modifier.weight(1f), valueColor = nowColor, labelColor = if (model.lost) Theme.warn else Theme.text2)
             DashedRule()
-            ValueCell(model.startedAt, Modifier.weight(1f).padding(start = 12.dp), labelText = "Started at", unit = "bpm", unitStyle = Type.smallUnit, unitLift = 0.dp, spacing = 12.dp)
+            BpmCell("Started at", model.startedAt, Type.number24, Modifier.weight(1f).padding(start = 12.dp), gap = 12.dp)
             DashedRule()
-            ValueCell(model.drop, Modifier.weight(1f).padding(start = 12.dp), labelText = "Drop so far", unit = "bpm", unitStyle = Type.smallUnit, unitLift = 0.dp, spacing = 12.dp)
+            BpmCell("Drop so far", model.drop, Type.number24, Modifier.weight(1f).padding(start = 12.dp), gap = 12.dp)
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             RecoveryChart(model.chart, lost = model.lost)
@@ -123,6 +116,24 @@ private fun RecoveryCard(model: CooldownModel, modifier: Modifier) {
                     Text(it, style = Type.tertiaryStrong, color = Theme.warn)
                 }
             }
+        }
+    }
+}
+
+/**
+ * A label over a value with " bpm" beside it, the two sitting on one baseline (the artboard's inline span), so a "—"
+ * and its unit line up like a number and its unit do. [gap]: label to value (the artboard's 2, or 2 + margin-top 10).
+ */
+@Composable
+private fun BpmCell(
+    label: String, value: String, style: TextStyle, modifier: Modifier,
+    valueColor: Color = Theme.text, labelColor: Color = Theme.text2, gap: Dp = 2.dp,
+) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(gap)) {
+        Text(label, style = Type.tertiaryText, color = labelColor)
+        Row {
+            Text(value, style = style, color = valueColor, modifier = Modifier.alignByBaseline())
+            Text(" bpm", style = Type.smallUnit, color = Theme.text2, modifier = Modifier.alignByBaseline())
         }
     }
 }
