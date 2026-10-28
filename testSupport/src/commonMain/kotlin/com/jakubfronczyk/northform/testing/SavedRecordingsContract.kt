@@ -76,6 +76,21 @@ class SavedRecordingsContract<S>(private val store: S) where S : RecordingStore,
         assertEquals(Headline(run.distance, 60.seconds, 50.seconds, 150), r.headline)
     }
 
+    /** history-screen/03 (D24): the profile the metrics were stored with, so a reopened Summary is computed as it was. */
+    suspend fun each_saved_recording_carries_the_profile_its_metrics_were_stored_with() {
+        val stored = profile.copy(hrMax = 201)
+        val data = data("run", 0)
+        store.seedComputing(data)
+        store.saveRunSummary(RunSummary.compute(assertNotNull(store.load(data.recording.id)), stored), tag = null, rpe = null, notes = null)
+        val bare = data("bare", 1000)
+        store.seedComputing(bare)
+        store.saveSummary(bare.recording.id, tag = null, rpe = null, notes = null, metrics = emptyList())
+
+        val (b, r) = saved.latest(2)
+        assertEquals(stored, r.profile)
+        assertNull(b.profile, "no metric rows, no stored profile")
+    }
+
     /** Saved before Save stored the headline: computed from the streams on read, the same numbers. */
     suspend fun a_recording_without_the_headline_rows_is_computed_from_its_streams() {
         val data = data("old", 0)

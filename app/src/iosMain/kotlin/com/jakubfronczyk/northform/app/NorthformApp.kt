@@ -195,6 +195,7 @@ object NorthformApp {
             today = TodayModel.from(saved.recordings, gateSensor, sensorName, deps.wallClock.now(), deps.tzOffset()),
             history = { filter -> HistoryModel.from(saved, filter, deps.wallClock.now(), deps.tzOffset()) },
             retryHistory = model::refreshSaved,
+            openRecording = model::openRecording,
             onStartRun = model::startRun,
             onCloseRun = model::closeRun,
             map = { route -> RouteMap(route, showsUserLocation = live) },
@@ -203,7 +204,7 @@ object NorthformApp {
             gateSensor = gateSensor,
             connectSensor = ::connectPairedSensor,
             crashPrompt = unfinished?.let { run -> { CrashPromptScreen(run.facts, now = IosWallClock::now, onChoice = model::resolveUnfinished) } },
-            summary = summary?.let { session -> { SummaryScreen(session.state.collectAsState().value, edits = session.edits.collectAsState().value, onEdit = model::editSummary, onSave = model::saveSummary, onDelete = model::deleteSummary, onAcceptHrMax = model::acceptHrMax, onRetry = model::retrySummary, map = { route -> RouteMap(route, showsUserLocation = false) }) } },
+            summary = summary?.let { session -> { SummaryScreen(session.state.collectAsState().value, edits = session.edits.collectAsState().value, onEdit = model::editSummary, onSave = model::saveSummary, onDelete = model::deleteSummary, onAcceptHrMax = model::acceptHrMax, onRetry = model::retrySummary, map = { route -> RouteMap(route, showsUserLocation = false) }, review = session.review, onBack = model::closeSummary) } },
         )
     }
 }

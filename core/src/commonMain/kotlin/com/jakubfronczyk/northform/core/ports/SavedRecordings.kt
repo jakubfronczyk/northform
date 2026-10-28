@@ -1,11 +1,15 @@
 package com.jakubfronczyk.northform.core.ports
 
 import com.jakubfronczyk.northform.core.MetricResult
+import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.Recording
 import com.jakubfronczyk.northform.core.metrics.Headline
 
-/** A saved recording as Today and History list it: type, tag and start from [recording], the numbers from [headline]. */
-data class SavedRecording(val recording: Recording, val headline: Headline)
+/**
+ * A saved recording as Today and History list it: type, tag and start from [recording], the numbers from [headline].
+ * [profile] is the one its metrics were stored with (D24), for reopening it as it was computed; null with no metric rows.
+ */
+data class SavedRecording(val recording: Recording, val headline: Headline, val profile: Profile? = null)
 
 /**
  * The read side of saved recordings (today-screen spec): Today reads `latest(3)`, History the rest. Read-only; the

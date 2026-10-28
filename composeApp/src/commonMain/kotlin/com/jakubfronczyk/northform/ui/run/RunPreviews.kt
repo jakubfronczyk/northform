@@ -49,4 +49,7 @@ private val previewEdits = SummaryEdits(tag = RunTag.Tempo, rpe = 7, notes = nul
 @Preview @Composable fun SummarySkippedCooldownPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.skippedCooldown), edits = previewEdits, onEdit = {}, onSave = {}, onDelete = {})
 @Preview @Composable fun SummaryNewHrMaxPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.newHrMax), edits = previewEdits, onEdit = {}, onSave = {}, onDelete = {})
 @Preview @Composable fun SummaryFailedPreview() = SummaryScreen(SummarySession.State.Failed("database locked"), edits = previewEdits, onEdit = {}, onSave = {}, onDelete = {})
+// history-screen/03: reopened from History (`SummaryReview`): read-only, no Save, Back.
+@Preview @Composable fun SummaryReviewRunPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.newHrMax), edits = SummaryEdits(RunTag.Tempo, 7, "windy on the bridge"), onEdit = {}, onSave = {}, onDelete = {}, review = true)
+@Preview @Composable fun SummaryReviewWalkPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.walk), edits = SummaryEdits(null, 3, null), onEdit = {}, onSave = {}, onDelete = {}, review = true)
 @Preview @Composable fun SummarySavingPreview() = SummaryScreen(SummarySession.State.Ready(FakeSummary.run, busy = true), edits = previewEdits, onEdit = {}, onSave = {}, onDelete = {})

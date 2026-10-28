@@ -25,7 +25,7 @@ class StoredSavedRecordings(
             val headline = Headline.of(row.metrics)
                 ?: store.load(row.recording.id)?.let(Headline::compute)
                 ?: return@mapNotNull null // deleted between the two reads
-            SavedRecording(row.recording, headline)
+            SavedRecording(row.recording, headline, profile = row.metrics.firstOrNull()?.profile) // Save stores every row with one profile
         }.onFailure { e ->
             if (e is CancellationException) throw e // the read was cancelled, not the recording damaged
             log("saved ${row.recording.id.value} left out: $e")

@@ -2,8 +2,8 @@ package com.jakubfronczyk.northform.app
 
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RecordingType
-import com.jakubfronczyk.northform.core.Recording
 import com.jakubfronczyk.northform.core.RecordingId
+import com.jakubfronczyk.northform.core.Recording
 import com.jakubfronczyk.northform.core.metrics.Headline
 import com.jakubfronczyk.northform.core.ports.SavedRecording
 import kotlinx.coroutines.CompletableDeferred
@@ -204,6 +204,85 @@ class AppModelReplayTest {
 
         val failed = assertIs<SavedList.Failed>(model.saved.value)
         assertEquals(listOf(RecordingId("a")), failed.recordings.map { it.recording.id })
+    }
+
+    /** A replay run started, stopped, cooled down and saved with tag Easy, RPE 4; returns its id. */
+    private suspend fun TestScope.saveReplayRun(model: AppModel): RecordingId {
+        model.startRun(); runCurrent()
+        val run = assertNotNull(model.activeRun.value)
+        run.session.tap(UserAction.Start)
+        advanceTimeBy(66.seconds); run.session.tap(UserAction.Stop); runCurrent()
+        advanceTimeBy(61.seconds); runCurrent()
+        model.closeRun(); advanceTimeBy(1.seconds); runCurrent()
+        model.editSummary(SummaryEdits(tag = RunTag.Easy, rpe = 4, notes = "flat")); model.saveSummary(); runCurrent()
+        return run.id
+    }
+
+    /** history-screen/03: a saved recording reopens read-only, computed with the profile it was saved with (D24). */
+    @Test
+    fun a_saved_recording_reopens_in_review_with_its_stored_profile_and_edits() = runTest {
+        val store = InMemoryRecordingStore()
+        val id = saveReplayRun(AppModel(replayDeps(straightRun(), store, RecordedAlerts()), backgroundScope))
+        val raised = AppDeps.sampleProfile.copy(hrMax = AppDeps.sampleProfile.hrMax + 10) // the profile changed since
+        val model = AppModel(AppDeps(source = RunSource.Replay { straightRun() }, store = store, reliability = store, wallClock = virtualWallClock(straightRun().meta.start), alerts = RecordedAlerts(), profile = raised, saved = StoredSavedRecordings(store, store)), backgroundScope)
+        model.checkUnfinished(); runCurrent()
+
+        model.openRecording(id); runCurrent()
+
+        val session = assertNotNull(model.summary.value)
+        assertTrue(session.review)
+        val ready = assertIs<SummarySession.State.Ready>(session.state.value)
+        assertEquals(AppDeps.sampleProfile, ready.summary.profile, "the stored profile, not today's")
+        assertEquals(SummaryEdits(RunTag.Easy, 4, "flat"), session.edits.value)
+    }
+
+    @Test
+    fun back_closes_the_review_and_changes_nothing_stored() = runTest {
+        val store = InMemoryRecordingStore()
+        val model = AppModel(replayDeps(straightRun(), store, RecordedAlerts()), backgroundScope)
+        val id = saveReplayRun(model)
+        val before = store.records.load(id)
+
+        model.openRecording(id); runCurrent()
+        model.closeSummary()
+
+        assertNull(model.summary.value)
+        assertEquals(before, store.records.load(id))
+        assertEquals(listOf(id), model.saved.value.recordings.map { it.recording.id })
+    }
+
+    @Test
+    fun delete_in_review_closes_it_and_the_recording_leaves_the_list() = runTest {
+        val store = InMemoryRecordingStore()
+        val model = AppModel(replayDeps(straightRun(), store, RecordedAlerts()), backgroundScope)
+        val id = saveReplayRun(model)
+
+        model.openRecording(id); runCurrent()
+        model.deleteSummary(); runCurrent()
+
+        assertNull(model.summary.value)
+        assertNull(store.records.load(id))
+        assertEquals(emptyList(), model.saved.value.recordings)
+    }
+
+    /** history-screen/03: the deleted row goes at once, so a re-read that fails cannot leave it on the list to tap. */
+    @Test
+    fun a_deleted_recording_leaves_the_list_even_when_the_re_read_fails() = runTest {
+        val store = InMemoryRecordingStore()
+        val real = StoredSavedRecordings(store, store)
+        var fail = false
+        val saved = object : SavedRecordings { override suspend fun latest(n: Int) = if (fail) error("disk") else real.latest(n) }
+        val model = AppModel(replayDeps(straightRun(), store, RecordedAlerts()).let { d ->
+            AppDeps(source = d.source, store = store, reliability = store, wallClock = d.wallClock, alerts = d.alerts, newRecordingId = d.newRecordingId, saved = saved)
+        }, backgroundScope)
+        val id = saveReplayRun(model)
+        model.openRecording(id); runCurrent()
+
+        fail = true
+        model.deleteSummary(); runCurrent()
+
+        val failed = assertIs<SavedList.Failed>(model.saved.value)
+        assertEquals(emptyList(), failed.recordings)
     }
 
     /** code review a.3: a recording a crash left `active` still goes to the crash prompt, and no Summary opens. */

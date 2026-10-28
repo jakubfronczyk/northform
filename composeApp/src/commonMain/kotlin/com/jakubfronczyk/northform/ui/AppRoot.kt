@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.Modifier
+import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.RunSessionHandle
@@ -31,6 +32,8 @@ fun AppRoot(
     history: (HistoryFilter) -> HistoryModel,
     /** History's Retry after a failed read. */
     retryHistory: () -> Unit,
+    /** A saved recording tapped on Today or History: reopened as a review Summary in the [summary] slot. */
+    openRecording: (RecordingId) -> Unit,
     /** The Run or Walk tile: starts a recording of that type. */
     onStartRun: (RecordingType) -> Unit,
     onCloseRun: () -> Unit,
@@ -60,9 +63,9 @@ fun AppRoot(
                 pairSensor = { showSensor = true },
             )
             summary != null -> summary()
-            showHistory -> HistoryScreen(history(historyFilter), onFilter = { historyFilter = it }, back = { showHistory = false }, retry = retryHistory, listState = historyList)
+            showHistory -> HistoryScreen(history(historyFilter), onFilter = { historyFilter = it }, back = { showHistory = false }, retry = retryHistory, openRecording = openRecording, listState = historyList)
             else -> {
-                TodayScreen(today, start = onStartRun, openSensor = { showSensor = true }, openHistory = { historyList = LazyListState(); historyFilter = HistoryFilter(); showHistory = true })
+                TodayScreen(today, start = onStartRun, openSensor = { showSensor = true }, openRecording = openRecording, openHistory = { historyList = LazyListState(); historyFilter = HistoryFilter(); showHistory = true })
                 crashPrompt?.invoke()
             }
         }

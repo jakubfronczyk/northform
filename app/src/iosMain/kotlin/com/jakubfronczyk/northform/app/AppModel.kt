@@ -231,6 +231,23 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
         deps.log("run ${id.value.take(8)} summary: ${session.state.value::class.simpleName}")
     }
 
+    /**
+     * history-screen/03: a saved recording tapped on Today or History, reopened read-only, computed with the profile its
+     * metrics were stored with (D24; the current one when it has none). One Summary at a time, never over a run.
+     */
+    fun openRecording(id: RecordingId) {
+        if (_summary.value != null || _activeRun.value != null) return
+        val saved = _saved.value.recordings.firstOrNull { it.recording.id == id } ?: return
+        val session = SummarySession(id, deps.store, deps.reliability, saved.profile ?: deps.profile, review = true)
+        _summary.value = session
+        scope.launch { session.load() }
+    }
+
+    /** Back on a reopened Summary: there is nothing to settle, so it closes and the root shows what was under it. */
+    fun closeSummary() {
+        if (_summary.value?.review == true) _summary.value = null
+    }
+
     /** A change on the Summary's "Your run" card. */
     fun editSummary(edits: SummaryEdits) { _summary.value?.edit(edits) }
 
@@ -252,7 +269,9 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
             session.call()
             val state = session.state.value
             if (state is SummarySession.State.Saved || state is SummarySession.State.Deleted) {
-                refreshSaved() // Today is visible again: Save added a recording, Delete may have removed one
+                // Gone from the list at once, so a re-read that fails cannot leave a deleted row to tap.
+                if (state is SummarySession.State.Deleted) _saved.update { it.without(session.recordingId) }
+                refreshSaved() // Today is visible again: Save added a recording, Delete removed one
                 _summary.value = null
                 deps.log("run ${session.recordingId.value.take(8)} $done")
             }

@@ -11,4 +11,5 @@ class InMemorySavedRecordingsContractTest {
     @Test fun newest_first_only_saved_and_the_limit_is_honoured() = contract { newest_first_only_saved_and_the_limit_is_honoured() }
     @Test fun the_stored_headline_and_the_tag_read_back_and_a_walk_has_none() = contract { the_stored_headline_and_the_tag_read_back_and_a_walk_has_none() }
     @Test fun a_recording_without_the_headline_rows_is_computed_from_its_streams() = contract { a_recording_without_the_headline_rows_is_computed_from_its_streams() }
+    @Test fun each_saved_recording_carries_the_profile_its_metrics_were_stored_with() = contract { each_saved_recording_carries_the_profile_its_metrics_were_stored_with() }
 }

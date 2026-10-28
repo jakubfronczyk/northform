@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.ui
 
+import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.ports.SavedRecording
 
 /**
@@ -10,6 +11,13 @@ import com.jakubfronczyk.northform.core.ports.SavedRecording
 sealed interface SavedList {
     /** The last list read: empty before the first. */
     val recordings: List<SavedRecording>
+
+    /** This list with [id] taken off, in the same state (a Delete, before the re-read answers). */
+    fun without(id: RecordingId): SavedList = when (this) {
+        Loading -> this
+        is Loaded -> Loaded(recordings.filter { it.recording.id != id })
+        is Failed -> copy(recordings = recordings.filter { it.recording.id != id })
+    }
 
     /** Nothing read yet. */
     data object Loading : SavedList {
