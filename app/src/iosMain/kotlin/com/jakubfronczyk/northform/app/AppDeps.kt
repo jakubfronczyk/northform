@@ -7,7 +7,9 @@ import com.jakubfronczyk.northform.core.ports.HeartRateSensor
 import com.jakubfronczyk.northform.core.ports.LocationProvider
 import com.jakubfronczyk.northform.core.ports.RecordingStore
 import com.jakubfronczyk.northform.core.ports.ReliabilityStore
+import com.jakubfronczyk.northform.core.ports.ProfileStore
 import com.jakubfronczyk.northform.core.ports.SavedRecordings
+import com.jakubfronczyk.northform.engine.store.InMemoryProfileStore
 import com.jakubfronczyk.northform.core.ports.WallClock
 import com.jakubfronczyk.northform.engine.run.LiveActivityEvent
 import com.jakubfronczyk.northform.replay.RecordingTap
@@ -104,7 +106,10 @@ class AppDeps(
     val backgroundTasks: BackgroundTasks = BackgroundTasks.None,
     /** The lock screen (D11): `LiveActivityBridge::publish` on the phone, a recorder in tests, nothing in the simulator. */
     val liveActivity: (LiveActivityEvent) -> Unit = {},
+    /** The profile until the runner saves one (profile-settings spec; first-launch Setup will replace this fallback). */
     val profile: Profile = sampleProfile,
+    /** Where the runner's profile is kept: the SQL store on the phone. */
+    val profileStore: ProfileStore = InMemoryProfileStore(),
     val newRecordingId: () -> String = { NSUUID().UUIDString },
     val tzOffset: () -> Int = { NSTimeZone.localTimeZone.secondsFromGMT.toInt() },
 ) {

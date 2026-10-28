@@ -104,4 +104,15 @@ class MigrationTest {
             assertEquals(record, store.reliability(id))
         }
     }
+
+    /** profile-settings/01: v3 → v4 (3.sqm) adds the stored profile; recordings stay, and there is no profile yet. */
+    @Test
+    fun a_v3_database_migrates_to_v4_with_its_recordings_and_no_profile() = runTest {
+        migrated(SchemaV3, seed = {
+            execute(null, "INSERT INTO recording(id, user_id, type, state, start_utc, tz_offset_s) VALUES ('v1-rec', 1, 'run', 'saved', ${t0.toNanos()}, 0)", 0)
+        }) { store ->
+            assertEquals(RecordingState.Saved, assertNotNull(store.load(id)).recording.state)
+            assertNull(store.profile(), "nothing stored: the app falls back to the sample until the runner saves one")
+        }
+    }
 }

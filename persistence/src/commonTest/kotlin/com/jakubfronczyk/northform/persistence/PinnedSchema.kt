@@ -25,6 +25,6 @@ abstract class PinnedSchema(override val version: Long, val tables: List<String>
 
     companion object {
         /** Every shipped version before the current one, oldest first. */
-        val all: List<PinnedSchema> get() = listOf(SchemaV1, SchemaV2)
+        val all: List<PinnedSchema> get() = listOf(SchemaV1, SchemaV2, SchemaV3)
     }
 }

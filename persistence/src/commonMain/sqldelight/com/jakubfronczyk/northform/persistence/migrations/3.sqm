@@ -1,0 +1,13 @@
+-- v3 → v4 (profile-settings/01): the runner's current profile. A new table, nothing existing changes; an existing
+-- install starts with no profile (the app falls back to the sample until one is saved). Must end at exactly what
+-- `Profile.sq` creates fresh. Never edit once shipped.
+CREATE TABLE profile (
+    id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    birth_date INTEGER NOT NULL,
+    sex TEXT NOT NULL,
+    weight_kg REAL NOT NULL,
+    height_cm REAL NOT NULL,
+    hr_max INTEGER NOT NULL,
+    hr_rest INTEGER NOT NULL,
+    zones TEXT NOT NULL
+);

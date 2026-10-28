@@ -3,7 +3,8 @@ package com.jakubfronczyk.northform.app
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.RecordingId
-import com.jakubfronczyk.northform.core.Profile
+import com.jakubfronczyk.northform.core.ports.ProfileStore
+import com.jakubfronczyk.northform.engine.store.InMemoryProfileStore
 import com.jakubfronczyk.northform.core.Recording
 import com.jakubfronczyk.northform.core.metrics.Headline
 import com.jakubfronczyk.northform.core.ports.SavedRecording
@@ -187,12 +188,12 @@ class AppModelReplayTest {
         store: InMemoryRecordingStore,
         saved: SavedRecordings = StoredSavedRecordings(store, store) {},
         port: RecordingStore = store,
-        profile: Profile = AppDeps.sampleProfile,
+        profiles: ProfileStore = InMemoryProfileStore(),
         newRecordingId: () -> String = { "00000000-0000-0000-0000-00000000000a" },
     ) = AppModel(
         AppDeps(
             source = RunSource.Replay { straightRun() }, store = port, reliability = store, wallClock = virtualWallClock(straightRun().meta.start),
-            alerts = RecordedAlerts(), profile = profile, newRecordingId = newRecordingId, saved = saved,
+            alerts = RecordedAlerts(), profileStore = profiles, newRecordingId = newRecordingId, saved = saved,
         ),
         backgroundScope,
     )
@@ -246,13 +247,48 @@ class AppModelReplayTest {
         return run.id
     }
 
+    /** profile-settings/01: the stored profile, read at launch, is what a new run computes with. */
+    @Test
+    fun a_new_run_computes_with_the_stored_profile() = runTest {
+        val store = InMemoryRecordingStore()
+        val mine = AppDeps.sampleProfile.copy(hrMax = 199, hrRest = 48)
+        val model = appOver(store, profiles = InMemoryProfileStore(mine))
+        model.checkUnfinished(); runCurrent()
+        assertEquals(mine, model.profile.value)
+
+        val id = saveReplayRun(model)
+
+        assertTrue(store.records.metrics(id).all { it.profile == mine }, "the run's metrics carry the stored profile")
+    }
+
+    /** profile-settings/01 (SU6): "Update" on the new-max card saves the new HRmax for the next runs. */
+    @Test
+    fun accepting_a_new_max_saves_it_to_the_profile() = runTest {
+        val store = InMemoryRecordingStore()
+        val profiles = InMemoryProfileStore(AppDeps.sampleProfile.copy(hrMax = 130)) // the replay climbs past 130 from about 70 s
+        val model = appOver(store, profiles = profiles)
+        model.checkUnfinished(); runCurrent()
+        model.startRun(); runCurrent()
+        val run = assertNotNull(model.activeRun.value)
+        run.session.tap(UserAction.Start)
+        advanceTimeBy(126.seconds); run.session.tap(UserAction.Stop); runCurrent()
+        advanceTimeBy(61.seconds); runCurrent()
+        model.closeRun(); advanceTimeBy(1.seconds); runCurrent()
+        val suggested = assertNotNull(assertIs<SummarySession.State.Ready>(assertNotNull(model.summary.value).state.value).summary.hrMaxSuggestion)
+
+        model.acceptHrMax(); runCurrent()
+
+        assertEquals(suggested, assertNotNull(profiles.profile()).hrMax)
+        assertEquals(suggested, model.profile.value.hrMax)
+    }
+
     /** history-screen/03: a saved recording reopens read-only, computed with the profile it was saved with (D24). */
     @Test
     fun a_saved_recording_reopens_in_review_with_its_stored_profile_and_edits() = runTest {
         val store = InMemoryRecordingStore()
         val id = saveReplayRun(AppModel(replayDeps(straightRun(), store, RecordedAlerts()), backgroundScope))
         val raised = AppDeps.sampleProfile.copy(hrMax = AppDeps.sampleProfile.hrMax + 10) // the profile changed since
-        val model = appOver(store, profile = raised)
+        val model = appOver(store, profiles = InMemoryProfileStore(raised))
         model.checkUnfinished(); runCurrent()
 
         model.openRecording(id); runCurrent()

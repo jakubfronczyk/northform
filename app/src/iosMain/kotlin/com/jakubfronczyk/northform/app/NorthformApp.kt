@@ -120,6 +120,7 @@ object NorthformApp {
                      else RunSource.Replay { BundleFixtures.script("straight-run-3min") },
             store = LoggingStore(sqlStore, DeviceLog::runTrace),
             reliability = sqlStore,
+            profileStore = sqlStore,
             saved = StoredSavedRecordings(sqlStore, sqlStore, DeviceLog::runTrace),
             wallClock = wallClock,
             alerts = runAlerts,

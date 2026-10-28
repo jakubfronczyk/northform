@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.app
 
+import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.ports.RecordingData
 import com.jakubfronczyk.northform.engine.run.CrashFacts
@@ -18,12 +19,13 @@ class UnfinishedRun(val data: RecordingData, val rebuilt: RunState, val facts: C
 
     companion object {
         /** D9 step 4: `store.unfinished()`, then everything the prompt and a Continue need, read once. */
-        suspend fun find(deps: AppDeps): UnfinishedRun? {
+        /** [profile]: the current one; a resumed run computes with it (D33). */
+        suspend fun find(deps: AppDeps, profile: Profile): UnfinishedRun? {
             val recording = deps.store.unfinished() ?: return null
             val data = deps.store.load(recording.id) ?: return null
             // D24: the profile stored with the recording's metrics, else the current one. The port hands back no
             // metrics (`RecordingData` has none), so until a D# adds them the current profile is the one reachable branch.
-            val config = RunConfig(recording.id, recording.type, deps.profile, recording.tzOffset)
+            val config = RunConfig(recording.id, recording.type, profile, recording.tzOffset)
             val rebuilt = RunReducer.rebuild(config, data)
             val savedUntil = data.lastPersistedAt ?: recording.startUtc
             val snapshot = rebuilt.snapshot

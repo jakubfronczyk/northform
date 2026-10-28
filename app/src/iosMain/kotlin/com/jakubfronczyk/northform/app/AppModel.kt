@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.app
 
+import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.EventKind
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingState
@@ -40,6 +41,10 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     /** The Summary of the run that just finished (R27): on screen while non-null, until Save or Delete. */
     val summary: StateFlow<SummarySession?> = _summary.asStateFlow()
 
+    private val _profile = MutableStateFlow(deps.profile)
+    /** The runner's current profile (profile-settings spec): the stored one once read at launch, the fallback until then. */
+    val profile: StateFlow<Profile> = _profile.asStateFlow()
+
     private val _saved = MutableStateFlow<SavedList>(SavedList.Loading)
     /** Every saved recording (history-screen spec: one list, Today takes three), re-read at launch and whenever the Summary closes. */
     val saved: StateFlow<SavedList> = _saved.asStateFlow()
@@ -68,7 +73,7 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
      */
     fun startRun(type: RecordingType = RecordingType.Run) {
         if (_unfinished.value != null) return
-        openRun { ActiveRun.open(deps, scope, type) }
+        openRun { ActiveRun.open(deps, scope, type, _profile.value) }
     }
 
     /**
@@ -115,10 +120,14 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     fun checkUnfinished() {
         refreshSaved()
         scope.launch {
+            // The profile first: a Summary or a resumed run found below computes with it.
+            runCatching { deps.profileStore.profile() }
+                .onSuccess { stored -> stored?.let { _profile.value = it } }
+                .onFailure { deps.log("profile read failed: $it") }
             runCatching {
                 // summary-screen/05 (GLOSSARY "Computing"): every write was done, so the user is owed the Summary, not the prompt.
                 val computing = deps.store.unfinished()?.takeIf { it.state == RecordingState.Computing }
-                if (computing != null) openSummary(computing.id) else _unfinished.value = UnfinishedRun.find(deps)
+                if (computing != null) openSummary(computing.id) else _unfinished.value = UnfinishedRun.find(deps, _profile.value)
             }.onFailure { deps.log("unfinished check failed: $it") }
         }
     }
@@ -237,7 +246,7 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
 
     /** The run is in `computing`: load it, write its reliability row, compute, and put the Summary on screen. */
     private suspend fun openSummary(id: RecordingId) {
-        val session = SummarySession(id, deps.store, deps.reliability, deps.profile)
+        val session = SummarySession(id, deps.store, deps.reliability, _profile.value)
         _summary.value = session
         session.load()
         deps.log("run ${id.value.take(8)} summary: ${session.state.value::class.simpleName}")
@@ -250,7 +259,7 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     fun openRecording(id: RecordingId) {
         if (_summary.value != null || _activeRun.value != null) return
         val saved = _saved.value.recordings.firstOrNull { it.recording.id == id } ?: return
-        val session = SummarySession(id, deps.store, deps.reliability, saved.profile ?: deps.profile, review = true)
+        val session = SummarySession(id, deps.store, deps.reliability, saved.profile ?: _profile.value, review = true)
         _summary.value = session
         scope.launch { session.load() }
     }
@@ -269,8 +278,26 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     /** Retry on a Summary that could not be computed. */
     fun retrySummary() { val session = _summary.value ?: return; scope.launch { session.retry() } }
 
-    /** SU6: Update on the HRmax card; this Summary only (the profile store is the Settings feature's). */
-    fun acceptHrMax() { _summary.value?.acceptHrMax() }
+    /**
+     * SU6: Update on the HRmax card. This Summary is recomputed with it, and the profile saved with the new HRmax at once
+     * (profile-settings spec): the heart rate was observed even if the run is deleted later. Nothing in review.
+     */
+    fun acceptHrMax() {
+        val session = _summary.value ?: return
+        val suggested = (session.state.value as? SummarySession.State.Ready)?.summary?.hrMaxSuggestion ?: return
+        if (session.review) return
+        session.acceptHrMax()
+        saveProfile(_profile.value.copy(hrMax = suggested))
+    }
+
+    /** Stores [profile] as the runner's own; every run, Summary and suggestion from now on uses it. A failure is logged. */
+    fun saveProfile(profile: Profile) {
+        scope.launch {
+            runCatching { deps.profileStore.saveProfile(profile) }
+                .onSuccess { _profile.value = profile }
+                .onFailure { deps.log("profile save failed: $it") }
+        }
+    }
 
     /** Delete on the Summary, after the screen's confirm sheet (R27). */
     fun deleteSummary() = settleSummary("deleted") { delete() }
