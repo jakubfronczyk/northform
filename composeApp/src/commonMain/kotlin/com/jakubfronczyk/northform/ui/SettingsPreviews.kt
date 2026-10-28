@@ -15,7 +15,7 @@ private val verity = PairedSensorInfo(SensorId("A1B2C3D4"), "Polar Sense A1B2C3D
 
 @Composable
 private fun preview(sensor: PairedSensorInfo? = verity, export: ExportState = ExportState.Idle) = SettingsScreen(
-    SettingsModel.from(profile, previewNow, PREVIEW_TZ, sensor, battery = 82, firmware = "2.2.1", export, version = "Version 1.0 (14)"),
+    SettingsModel.from(profile, previewNow, PREVIEW_TZ, sensor, connected = true, battery = 82, firmware = "2.2.1", export, version = "Version 1.0 (14)"),
     back = {}, editProfile = {}, editZones = {}, export = {}, forgetSensor = {},
 )
 

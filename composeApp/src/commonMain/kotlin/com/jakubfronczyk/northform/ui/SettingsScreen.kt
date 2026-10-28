@@ -83,20 +83,7 @@ fun SettingsScreen(
                     }
                 }
             }
-            val sensor = model.sensor
-            Row(
-                Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).padding(Dimens.gutter),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Box(Modifier.size(Dimens.sensorDisc).background(Theme.bg, CircleShape), contentAlignment = Alignment.Center) {
-                    NfIcon(NfIcons.sensor, if (sensor == null) Theme.text2 else Theme.text, size = Dimens.icon)
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(sensor?.name ?: "No sensor paired", style = Type.bodyStrong, color = if (sensor == null) Theme.text2 else Theme.text)
-                    sensor?.let { Text(listOfNotNull(it.detail, it.battery).joinToString(" · "), style = Type.tertiaryText, color = Theme.text2) }
-                }
-                if (sensor != null) InlineAction("Forget", Theme.danger) { confirmForget = true }
-            }
+            SensorCard(model.sensor) { confirmForget = true }
             Column(Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).padding(Dimens.gutter), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -134,6 +121,42 @@ private fun ValueRow(label: String, value: String, note: String?, onClick: () ->
             note?.let { Text(it, style = Type.caption, color = Theme.text3) }
         }
         NfIcon(NfIcons.forward, Theme.text2, size = 16.dp)
+    }
+}
+
+/**
+ * The paired sensor as the artboard's card: icon, name, ID · firmware, battery with its icon, whether it is connected
+ * now, and a full-width Forget. With none paired, one quiet line.
+ */
+@Composable
+private fun SensorCard(sensor: SettingsModel.Sensor?, forget: () -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).padding(Dimens.gutter), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(Modifier.size(Dimens.sensorDisc).background(Theme.bg, CircleShape), contentAlignment = Alignment.Center) {
+                NfIcon(NfIcons.sensor, if (sensor?.status?.ok == true) Theme.ok else Theme.text2, size = Dimens.icon)
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(sensor?.name ?: "No sensor paired", style = Type.cardTitle, color = if (sensor == null) Theme.text2 else Theme.text)
+                Text(sensor?.detail ?: "Pair one from the sensor card on Today.", style = Type.tertiaryText, color = Theme.text2)
+            }
+            sensor?.battery?.let { battery ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    NfIcon(NfIcons.battery(low = false), Theme.text2, size = Dimens.iconSmall)
+                    Text(battery, style = Type.secondaryStrong, color = Theme.text)
+                }
+            }
+        }
+        if (sensor != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val color = if (sensor.status.ok) Theme.ok else Theme.warn
+                Box(Modifier.size(Dimens.dot).background(color, CircleShape))
+                Text(sensor.status.text, style = Type.tertiaryStrong, color = color)
+            }
+            Box(
+                Modifier.fillMaxWidth().height(Dimens.secondaryButton).clip(Shapes.button).border(Dimens.stroke, Theme.outline, Shapes.button).clickable(onClick = forget),
+                contentAlignment = Alignment.Center,
+            ) { Text("Forget sensor", style = Type.secondaryStrong, color = Theme.danger) }
+        }
     }
 }
 

@@ -36,7 +36,10 @@ data class SettingsModel(
     val version: String,
 ) {
     /** "Polar Verity Sense", "ID A1B2C3D4 · firmware 2.2.1", "82 %" (null while not connected). */
-    data class Sensor(val name: String, val detail: String, val battery: String?)
+    data class Sensor(val name: String, val detail: String, val battery: String?, val status: Status)
+
+    /** "Connected" in green, "Not connected" in amber, as Today's sensor card. */
+    data class Status(val text: String, val ok: Boolean)
 
     /** The Export backup button and the line under it. A failed export can be tried again. */
     data class Export(val label: String, val enabled: Boolean, val line: String?)
@@ -47,7 +50,7 @@ data class SettingsModel(
         /** @param now and [tzOffset] are the phone's: they decide the age. [battery] and [firmware] come from the live link. */
         fun from(
             profile: Profile, now: Instant, tzOffset: Int,
-            sensor: PairedSensorInfo?, battery: Int?, firmware: String?,
+            sensor: PairedSensorInfo?, connected: Boolean, battery: Int?, firmware: String?,
             export: ExportState, version: String, profileSaveError: String? = null,
         ) = SettingsModel(
             profileValue = "${RunFormat.age(profile.birthDate, now, tzOffset)} · ${RunFormat.number(profile.weightKg)} kg · ${RunFormat.number(profile.heightCm)} cm",
@@ -55,7 +58,8 @@ data class SettingsModel(
             heartRate = "max ${profile.hrMax} · rest ${profile.hrRest}",
             profileError = profileSaveError?.let { "Couldn't save your profile: $it" },
             sensor = sensor?.let { s ->
-                Sensor(s.displayName, listOfNotNull("ID ${s.code}", firmware?.let { "firmware $it" }).joinToString(" · "), battery?.let { "$it %" })
+                Sensor(s.displayName, listOfNotNull("ID ${s.code}", firmware?.let { "firmware $it" }).joinToString(" · "), battery?.let { "$it %" },
+                    if (connected) Status("Connected", ok = true) else Status("Not connected", ok = false))
             },
             units = "Metric (km, kg, 24 h)",
             // Backup v1 carries the runs and their streams, not the current profile (D26): the copy says what it holds.
