@@ -37,7 +37,7 @@ internal val previewWeek = listOf(
 
 @Composable
 private fun preview(saved: List<SavedRecording>, sensor: GateSensor? = connected) = Box(Modifier.fillMaxSize().background(Theme.bg)) {
-    TodayScreen(TodayModel.from(saved, sensor, "Verity Sense", previewNow, PREVIEW_TZ), start = {}, openSensor = {}, openRecording = {}, openHistory = {})
+    TodayScreen(TodayModel.from(saved, sensor, "Verity Sense", previewNow, PREVIEW_TZ), start = {}, openSensor = {}, openRecording = {}, openHistory = {}, openSettings = {})
 }
 
 @Preview @Composable fun TodayPreview() = preview(previewWeek)

@@ -53,14 +53,21 @@ fun TodayScreen(
     openSensor: () -> Unit,
     openRecording: (RecordingId) -> Unit,
     openHistory: () -> Unit,
+    /** The gear, top right (profile-settings spec). */
+    openSettings: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 64.dp, bottom = 50.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(model.date, style = Type.rowLabel, color = Theme.text2)
-            Text("Today", style = Type.homeTitle, color = Theme.text)
+        Row(verticalAlignment = Alignment.Bottom) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(model.date, style = Type.rowLabel, color = Theme.text2)
+                Text("Today", style = Type.homeTitle, color = Theme.text)
+            }
+            Box(Modifier.size(44.dp).clip(CircleShape).border(1.5.dp, Theme.ring, CircleShape).clickable(onClick = openSettings), contentAlignment = Alignment.Center) {
+                NfIcon(NfIcons.gear, Theme.text, size = 20.dp, label = "Settings")
+            }
         }
         SensorCard(model.sensor, openSensor)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

@@ -1,0 +1,22 @@
+-- Schema v4 (profile-settings/01): the runner's current profile, one row (`id = 1`). Columns as the metric rows'
+-- profile snapshot (Recording.sq), so the two read the same way. Created for an existing database by
+-- `migrations/3.sqm`; this file is the same table for a fresh install. Primary data, not a cache: a later migration
+-- must ALTER or copy it, never drop it.
+
+CREATE TABLE profile (
+    id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    birth_date INTEGER NOT NULL,       -- epoch ns
+    sex TEXT NOT NULL,                 -- Sex.wire
+    weight_kg REAL NOT NULL,
+    height_cm REAL NOT NULL,
+    hr_max INTEGER NOT NULL,
+    hr_rest INTEGER NOT NULL,
+    zones TEXT NOT NULL                -- the five lower bounds, comma-separated
+);
+
+selectProfile:
+SELECT * FROM profile WHERE id = 1;
+
+upsertProfile:
+INSERT OR REPLACE INTO profile(id, birth_date, sex, weight_kg, height_cm, hr_max, hr_rest, zones)
+VALUES (1, ?, ?, ?, ?, ?, ?, ?);

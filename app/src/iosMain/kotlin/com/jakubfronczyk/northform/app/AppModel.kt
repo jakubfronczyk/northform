@@ -1,5 +1,13 @@
 package com.jakubfronczyk.northform.app
 
+import kotlinx.coroutines.flow.getAndUpdate
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.async
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import com.jakubfronczyk.northform.ui.ExportState
+import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.EventKind
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingState
@@ -40,6 +48,41 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     /** The Summary of the run that just finished (R27): on screen while non-null, until Save or Delete. */
     val summary: StateFlow<SummarySession?> = _summary.asStateFlow()
 
+    private val _profile = MutableStateFlow(deps.fallbackProfile)
+    /** The runner's current profile (profile-settings spec): the stored one once read, the fallback until one is saved. */
+    val profile: StateFlow<Profile> = _profile.asStateFlow()
+
+    /** An edit has been made this launch: the launch read must not replace it with the older stored profile. */
+    private val profileEdited = AtomicBoolean(false)
+
+    /**
+     * The launch read of the stored profile, once. Everything that computes with the profile awaits it first, so a run
+     * started as the app opens still uses the stored one: its metrics keep that profile for good (D24).
+     */
+    private val profileRead: Deferred<Unit> = scope.async(start = CoroutineStart.LAZY) {
+        try {
+            deps.profileStore.profile()?.let { stored -> if (!profileEdited.load()) _profile.value = stored }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            deps.log("profile read failed: $e")
+        }
+    }
+
+    /** The current profile, once the launch read is done. */
+    private suspend fun currentProfile(): Profile = profileRead.await().let { _profile.value }
+
+    /** Profile writes one at a time, each storing the newest edit, so the store ends on the last one whatever the order. */
+    private val profileWrites = Mutex()
+
+    private val _profileSaveError = MutableStateFlow<String?>(null)
+    /** Why the last profile save failed, for Settings; null once one succeeds. */
+    val profileSaveError: StateFlow<String?> = _profileSaveError.asStateFlow()
+
+    private val _export = MutableStateFlow<ExportState>(ExportState.Idle)
+    /** Settings' Export backup (profile-settings/02). */
+    val export: StateFlow<ExportState> = _export.asStateFlow()
+
     private val _saved = MutableStateFlow<SavedList>(SavedList.Loading)
     /** Every saved recording (history-screen spec: one list, Today takes three), re-read at launch and whenever the Summary closes. */
     val saved: StateFlow<SavedList> = _saved.asStateFlow()
@@ -68,7 +111,7 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
      */
     fun startRun(type: RecordingType = RecordingType.Run) {
         if (_unfinished.value != null) return
-        openRun { ActiveRun.open(deps, scope, type) }
+        openRun { ActiveRun.open(deps, scope, type, currentProfile()) }
     }
 
     /**
@@ -115,10 +158,11 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     fun checkUnfinished() {
         refreshSaved()
         scope.launch {
+            currentProfile() // read first: a Summary or a resumed run found below computes with it
             runCatching {
                 // summary-screen/05 (GLOSSARY "Computing"): every write was done, so the user is owed the Summary, not the prompt.
                 val computing = deps.store.unfinished()?.takeIf { it.state == RecordingState.Computing }
-                if (computing != null) openSummary(computing.id) else _unfinished.value = UnfinishedRun.find(deps)
+                if (computing != null) openSummary(computing.id) else _unfinished.value = UnfinishedRun.find(deps, currentProfile())
             }.onFailure { deps.log("unfinished check failed: $it") }
         }
     }
@@ -237,7 +281,7 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
 
     /** The run is in `computing`: load it, write its reliability row, compute, and put the Summary on screen. */
     private suspend fun openSummary(id: RecordingId) {
-        val session = SummarySession(id, deps.store, deps.reliability, deps.profile)
+        val session = SummarySession(id, deps.store, deps.reliability, currentProfile())
         _summary.value = session
         session.load()
         deps.log("run ${id.value.take(8)} summary: ${session.state.value::class.simpleName}")
@@ -250,7 +294,7 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     fun openRecording(id: RecordingId) {
         if (_summary.value != null || _activeRun.value != null) return
         val saved = _saved.value.recordings.firstOrNull { it.recording.id == id } ?: return
-        val session = SummarySession(id, deps.store, deps.reliability, saved.profile ?: deps.profile, review = true)
+        val session = SummarySession(id, deps.store, deps.reliability, saved.profile ?: _profile.value, review = true)
         _summary.value = session
         scope.launch { session.load() }
     }
@@ -269,8 +313,57 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     /** Retry on a Summary that could not be computed. */
     fun retrySummary() { val session = _summary.value ?: return; scope.launch { session.retry() } }
 
-    /** SU6: Update on the HRmax card; this Summary only (the profile store is the Settings feature's). */
-    fun acceptHrMax() { _summary.value?.acceptHrMax() }
+    /**
+     * SU6: Update on the HRmax card. This Summary is recomputed with it, and the profile saved with the new HRmax at once
+     * (profile-settings spec): the heart rate was observed even if the run is deleted later. Nothing in review.
+     */
+    fun acceptHrMax() {
+        val session = _summary.value ?: return
+        val suggested = (session.state.value as? SummarySession.State.Ready)?.summary?.hrMaxSuggestion ?: return
+        if (session.review) return
+        session.acceptHrMax()
+        saveProfile(_profile.value.copy(hrMax = suggested))
+    }
+
+    /**
+     * Export backup: Busy while the file is written, then Saved with its name or Failed with why (and can be tapped
+     * again). Busy is claimed by compare-and-set, so a second tap meanwhile writes nothing.
+     */
+    fun exportBackup() {
+        if (_export.getAndUpdate { now -> if (now == ExportState.Busy) now else ExportState.Busy } == ExportState.Busy) return
+        scope.launch {
+            _export.value = try {
+                ExportState.Saved(deps.exportBackup())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                deps.log("export failed: $e")
+                ExportState.Failed(e.message ?: e.toString())
+            }
+        }
+    }
+
+    /**
+     * Stores [profile] as the runner's own; every run, Summary and suggestion from now on uses it. Shown at once; the
+     * write follows, and a failure is kept in [profileSaveError] for Settings (the edit stays on screen this launch).
+     */
+    fun saveProfile(profile: Profile) {
+        profileEdited.store(true)
+        _profile.value = profile
+        scope.launch {
+            profileWrites.withLock {
+                try {
+                    deps.profileStore.saveProfile(_profile.value) // the newest edit, not necessarily this call's
+                    _profileSaveError.value = null
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    deps.log("profile save failed: $e")
+                    _profileSaveError.value = e.message ?: e.toString()
+                }
+            }
+        }
+    }
 
     /** Delete on the Summary, after the screen's confirm sheet (R27). */
     fun deleteSummary() = settleSummary("deleted") { delete() }

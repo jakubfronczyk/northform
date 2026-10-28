@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.app
 
+import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.engine.run.EndResult
@@ -66,9 +67,12 @@ class ActiveRun private constructor(
     }
 
     companion object {
-        /** A new recording of [type] (today-screen/04: the Run or Walk tile): a fresh gate, a new id, the debug tap. */
-        suspend fun open(deps: AppDeps, scope: CoroutineScope, type: RecordingType = RecordingType.Run): ActiveRun {
-            val config = RunConfig(RecordingId(deps.newRecordingId()), type, deps.profile, deps.tzOffset())
+        /**
+         * A new recording of [type] (today-screen/04: the Run or Walk tile): a fresh gate, a new id, the debug tap. [profile] is
+         * the runner's current one, captured here: an edit during the run changes nothing live (profile-settings spec).
+         */
+        suspend fun open(deps: AppDeps, scope: CoroutineScope, type: RecordingType = RecordingType.Run, profile: Profile = deps.fallbackProfile): ActiveRun {
+            val config = RunConfig(RecordingId(deps.newRecordingId()), type, profile, deps.tzOffset())
             val start = deps.wallClock.now()
             val tap = deps.makeTap(
                 ReplayMeta(config.type, start, config.profile.hrMax, config.profile.hrRest, config.profile.sex),

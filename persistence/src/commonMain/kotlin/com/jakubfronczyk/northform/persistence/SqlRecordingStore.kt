@@ -19,6 +19,7 @@ import com.jakubfronczyk.northform.core.ports.FlushBatch
 import com.jakubfronczyk.northform.core.ports.RecordingData
 import com.jakubfronczyk.northform.core.ports.RecordingStore
 import com.jakubfronczyk.northform.core.ports.RecordingStoreError
+import com.jakubfronczyk.northform.core.ports.ProfileStore
 import com.jakubfronczyk.northform.core.ports.ReliabilityStore
 import com.jakubfronczyk.northform.core.ports.SavedRow
 import com.jakubfronczyk.northform.core.ports.SavedRows
@@ -47,7 +48,7 @@ import com.jakubfronczyk.northform.persistence.Recording as RecordingRow
 class SqlRecordingStore(
     driver: SqlDriver,
     private val io: CoroutineContext = Dispatchers.IO,
-) : RecordingStore, ReliabilityStore, SavedRows {
+) : RecordingStore, ReliabilityStore, SavedRows, ProfileStore {
     private val db = NorthformDb(driver)
     private val q get() = db.recordingQueries
 
@@ -170,17 +171,34 @@ class SqlRecordingStore(
         q.savedNewestFirst(limit.toLong()).executeAsList().map { SavedRow(it.toRecording(), metricsInTx(it.id)) }
     }
 
+    /** profile-settings/01: the runner's current profile, or null before one is saved. */
+    override suspend fun profile(): Profile? = tx {
+        db.profileQueries.selectProfile().executeAsOneOrNull()?.let { p ->
+            profileOf(p.birth_date, p.sex, p.weight_kg, p.height_cm, p.hr_max, p.hr_rest, p.zones)
+        }
+    }
+
+    override suspend fun saveProfile(profile: Profile): Unit = tx {
+        db.profileQueries.upsertProfile(
+            profile.birthDate.toNanos(), profile.sex.wire, profile.weightKg, profile.heightCm,
+            profile.hrMax.toLong(), profile.hrRest.toLong(), profile.zones.lowerBounds.joinToString(","),
+        )
+    }
+
     /** The inverse of `saveSummary`'s insert: the metric with the profile it was computed with (D24). */
     private fun metricsInTx(id: String): List<MetricResult> = q.selectMetrics(id).executeAsList().map { m ->
         MetricResult(
             metricId = MetricId(m.metric_id), version = m.version.toInt(), value = m.value_, // `value` is a SQL keyword: SQLDelight suffixes the property
-            profile = Profile(
-                birthDate = instantOfNanos(m.profile_birth_date), sex = wire(Sex.entries, m.profile_sex) { it.wire },
-                weightKg = m.profile_weight_kg, heightCm = m.profile_height_cm, hrMax = m.profile_hr_max.toInt(), hrRest = m.profile_hr_rest.toInt(),
-                zones = HRZones(m.profile_zones.split(',').map(String::toDouble)),
-            ),
+            profile = profileOf(m.profile_birth_date, m.profile_sex, m.profile_weight_kg, m.profile_height_cm, m.profile_hr_max, m.profile_hr_rest, m.profile_zones),
         )
     }
+
+    /** One decoding for the profile table and the metric rows' snapshot: the same columns, the same encoding. */
+    private fun profileOf(birthDate: Long, sex: String, weightKg: Double, heightCm: Double, hrMax: Long, hrRest: Long, zones: String) = Profile(
+        birthDate = instantOfNanos(birthDate), sex = wire(Sex.entries, sex) { it.wire },
+        weightKg = weightKg, heightCm = heightCm, hrMax = hrMax.toInt(), hrRest = hrRest.toInt(),
+        zones = HRZones(zones.split(',').map(String::toDouble)),
+    )
 
     private fun loadInTx(id: RecordingId): RecordingData? {
         val row = q.selectRecording(id.value).executeAsOneOrNull() ?: return null
