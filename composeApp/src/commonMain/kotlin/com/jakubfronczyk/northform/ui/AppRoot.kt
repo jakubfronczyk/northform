@@ -38,6 +38,8 @@ fun AppRoot(
     exportBackup: () -> Unit,
     /** Settings' Forget sensor, after its confirm sheet. */
     forgetSensor: () -> Unit,
+    /** The profile editor over Settings (profile-settings/03); `close` after Save or Back. The root supplies the profile. */
+    profileEditor: @Composable (close: () -> Unit) -> Unit,
     /** A saved recording tapped on Today or History: reopened as a review Summary in the [summary] slot. */
     openRecording: (RecordingId) -> Unit,
     /** The Run or Walk tile: starts a recording of that type. */
@@ -60,6 +62,7 @@ fun AppRoot(
     var showHistory by remember { mutableStateOf(false) }
     // Settings sits under the Summary too: a Summary found at launch shows over it and returns to it.
     var showSettings by remember { mutableStateOf(false) }
+    var showProfileEditor by remember { mutableStateOf(false) }
     var historyList by remember { mutableStateOf(LazyListState()) }
     var historyFilter by remember { mutableStateOf(HistoryFilter()) }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
@@ -71,8 +74,9 @@ fun AppRoot(
                 pairSensor = { showSensor = true },
             )
             summary != null -> summary()
+            showProfileEditor -> profileEditor { showProfileEditor = false }
             showSettings -> SettingsScreen(
-                settings, back = { showSettings = false }, editProfile = {}, editZones = {}, export = exportBackup, forgetSensor = forgetSensor,
+                settings, back = { showSettings = false }, editProfile = { showProfileEditor = true }, editZones = {}, export = exportBackup, forgetSensor = forgetSensor,
             )
             showHistory -> HistoryScreen(history(historyFilter), onFilter = { historyFilter = it }, back = { showHistory = false }, retry = retryHistory, openRecording = openRecording, listState = historyList)
             else -> {

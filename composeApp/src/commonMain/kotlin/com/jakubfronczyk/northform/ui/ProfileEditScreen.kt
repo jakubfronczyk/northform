@@ -1,0 +1,114 @@
+package com.jakubfronczyk.northform.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.jakubfronczyk.northform.core.Profile
+import com.jakubfronczyk.northform.core.Sex
+import com.jakubfronczyk.northform.ui.ProfileForm.Field
+import kotlin.time.Instant
+
+private val FieldShape = RoundedCornerShape(14.dp)
+private val PillShape = RoundedCornerShape(22.dp)
+
+/**
+ * The profile editor (`SetupProfile.dc.html` in its edit context, profile-settings/03): every field checked as typed
+ * by [ProfileForm], its message under it; Save only when all are valid; Back discards. The zones are kept as they are.
+ */
+@Composable
+fun ProfileEditScreen(initial: Profile, now: Instant, tzOffset: Int, onSave: (Profile) -> Unit, back: () -> Unit) {
+    var form by remember { mutableStateOf(ProfileForm.of(initial)) }
+    val checked = form.check(now, tzOffset, initial.zones)
+    Column(
+        Modifier.fillMaxSize().background(Theme.bg).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 64.dp, bottom = 50.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.offset(x = (-10).dp).size(44.dp).clickable(onClick = back), contentAlignment = Alignment.Center) {
+                NfIcon(NfIcons.back, Theme.text, size = 22.dp, label = "Back to Settings")
+            }
+            Text("Profile", style = Type.number(28, FontWeight.ExtraBold), color = Theme.text)
+            Text("Used for your heart rate zones.", style = Type.secondaryText, color = Theme.text2)
+        }
+        Input("Birth date", form.birthDate, checked.errors[Field.BirthDate], hint = checked.ageHint, keyboard = KeyboardType.Number) { form = form.copy(birthDate = it) }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Sex", style = Type.tertiaryText, color = Theme.text2)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (sex in Sex.entries) {
+                    val on = form.sex == sex
+                    Box(
+                        Modifier.weight(1f).height(48.dp).clip(PillShape)
+                            .then(if (on) Modifier.background(Theme.text) else Modifier.border(1.5.dp, Theme.outline, PillShape))
+                            .clickable { form = form.copy(sex = sex) },
+                        contentAlignment = Alignment.Center,
+                    ) { Text(sex.name, style = Type.statusLabel.copy(fontSize = 15.sp), color = if (on) Theme.bg else Theme.text) }
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Input("Weight", form.weight, checked.errors[Field.Weight], unit = "kg", modifier = Modifier.weight(1f), keyboard = KeyboardType.Decimal) { form = form.copy(weight = it) }
+            Input("Height", form.height, checked.errors[Field.Height], unit = "cm", modifier = Modifier.weight(1f), keyboard = KeyboardType.Decimal) { form = form.copy(height = it) }
+        }
+        Text("Heart rate", style = Type.sheetTitle.copy(fontSize = 17.sp), color = Theme.text)
+        Input("Max heart rate", form.hrMax, checked.errors[Field.HrMax], unit = "bpm") { form = form.copy(hrMax = it) }
+        Input("Resting heart rate", form.hrRest, checked.errors[Field.HrRest], unit = "bpm", hint = "Default 60. Change it any time.") { form = form.copy(hrRest = it) }
+        val profile = checked.profile
+        BigButton("Save", { if (profile != null) onSave(profile) }, enabled = profile != null, fill = if (profile != null) Theme.primary else Theme.track, textColor = if (profile != null) Theme.text else Theme.dim)
+    }
+}
+
+/** A labelled text field with its unit, its message in amber when invalid, or a grey [hint]. */
+@Composable
+private fun Input(
+    label: String, value: String, error: String?, modifier: Modifier = Modifier, unit: String? = null, hint: String? = null,
+    keyboard: KeyboardType = KeyboardType.Number, onChange: (String) -> Unit,
+) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label, style = Type.tertiaryText, color = Theme.text2)
+        Row(
+            Modifier.fillMaxWidth().height(52.dp).clip(FieldShape).background(Theme.card)
+                .border(1.5.dp, if (error != null) Theme.warn else Theme.card, FieldShape).padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BasicTextField(
+                value, onChange, singleLine = true, modifier = Modifier.weight(1f),
+                textStyle = Type.number(17, FontWeight.SemiBold).copy(color = Theme.text), cursorBrush = SolidColor(Theme.accent),
+                keyboardOptions = KeyboardOptions(keyboardType = keyboard),
+            )
+            unit?.let { Text(it, style = Type.tertiaryText, color = Theme.text2) }
+        }
+        when {
+            error != null -> Text(error, style = Type.tertiaryText, color = Theme.warn)
+            hint != null -> Text(hint, style = Type.tertiaryText, color = Theme.text3)
+        }
+    }
+}

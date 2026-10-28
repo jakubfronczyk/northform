@@ -103,6 +103,21 @@ object RunFormat {
     /** "14.03.1996": a birth date (stored as UTC midnight, so read in UTC), as the profile form types it. */
     fun birthDate(instant: Instant): String = civil(instant, 0).let { "${it.day.pad2()}.${it.month.pad2()}.${it.year}" }
 
+    /** "14.03.1996" → that day at UTC midnight; null unless it is DD.MM.YYYY and a real day (no 31.02). */
+    fun parseBirthDate(text: String): Instant? {
+        val m = Regex("""(\d{2})\.(\d{2})\.(\d{4})""").matchEntire(text.trim()) ?: return null
+        val (d, mo, y) = m.destructured.toList().map(String::toInt)
+        if (mo !in 1..12 || d !in 1..31) return null
+        // Days since the epoch from the civil date (Hinnant's days_from_civil), then back: a day the month lacks won't round-trip.
+        val yy = (if (mo <= 2) y - 1 else y).toLong()
+        val era = yy.floorDiv(400L)
+        val yoe = yy - era * 400
+        val doy = (153 * (if (mo > 2) mo - 3 else mo + 9) + 2) / 5 + d - 1
+        val doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+        val instant = Instant.fromEpochSeconds((era * 146_097 + doe - 719_468) * 86_400)
+        return instant.takeIf { civil(it, 0).let { c -> c.day == d && c.month == mo && c.year == y.toLong() } }
+    }
+
     /** Whole years from [birth] (UTC midnight) to [now] in the phone's zone: the age turns on the birthday, not before. */
     fun age(birth: Instant, now: Instant, tzOffset: Int): Int {
         val b = civil(birth, 0)

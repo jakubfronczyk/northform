@@ -291,6 +291,23 @@ class AppModelReplayTest {
         assertTrue(store.records.metrics(id).all { it.profile == mine }, "the run's metrics carry the stored profile")
     }
 
+    /** profile-settings/03: Save in the profile editor stores it, and the next run computes with it. */
+    @Test
+    fun a_saved_profile_reaches_the_store_and_the_next_run() = runTest {
+        val store = InMemoryRecordingStore()
+        val profiles = InMemoryProfileStore()
+        val model = appOver(store, profiles = profiles)
+        model.checkUnfinished(); runCurrent()
+        val edited = AppDeps.sampleProfile.copy(weightKg = 70.5, hrMax = 192)
+
+        model.saveProfile(edited); runCurrent()
+
+        assertEquals(edited, profiles.profile())
+        assertEquals(edited, model.profile.value)
+        val id = saveReplayRun(model)
+        assertTrue(store.records.metrics(id).all { it.profile == edited })
+    }
+
     /** profile-settings/01 (SU6): "Update" on the new-max card saves the new HRmax for the next runs. */
     @Test
     fun accepting_a_new_max_saves_it_to_the_profile() = runTest {
