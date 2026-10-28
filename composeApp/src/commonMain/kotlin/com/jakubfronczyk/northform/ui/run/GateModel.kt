@@ -9,7 +9,7 @@ import com.jakubfronczyk.northform.engine.run.RunSnapshot
  * offers pairing instead). Not on `RunSessionHandle` today — the composition root passes it when it has
  * it; null means "unknown", which hides the battery row and assumes a sensor (the snapshot's `hrLost` still rules).
  */
-data class GateSensor(val connected: Boolean, val batteryPercent: Int?, val paired: Boolean)
+data class GateSensor(val connected: Boolean, val batteryPercent: Int?, val paired: Boolean, /** The paired sensor's advertised name (visual-polish/03). */ val name: String? = null)
 
 /**
  * The Gate artboard's copy and states as one pure function of the snapshot at `RunPhase.Gate`
@@ -33,7 +33,8 @@ data class GateModel(
     val startEnabled: Boolean,
 ) {
     sealed interface HrRow {
-        data class Ready(val bpm: String) : HrRow
+        /** [source]: "Reading from Verity Sense", "sensor" when the name is unknown (visual-polish/03). */
+        data class Ready(val bpm: String, val source: String) : HrRow
         data object Waiting : HrRow
         /** Not connected. [action] is the button beside it: Connect a paired sensor, or Pair one when none is. */
         data class NoSensor(val action: SensorAction) : HrRow
@@ -79,7 +80,7 @@ data class GateModel(
                 },
                 hr = when {
                     noSensor -> HrRow.NoSensor(if (!sensor.paired) SensorAction.Pair else SensorAction.Connect)
-                    hrReady -> HrRow.Ready(snapshot.hrNow?.toString() ?: NO_VALUE)
+                    hrReady -> HrRow.Ready(snapshot.hrNow?.toString() ?: NO_VALUE, source = "Reading from ${sensor?.name ?: "sensor"}")
                     else -> HrRow.Waiting
                 },
                 gpsReady = gpsReady,

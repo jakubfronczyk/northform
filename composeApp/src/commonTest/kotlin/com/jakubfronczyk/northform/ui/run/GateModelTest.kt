@@ -26,7 +26,7 @@ class GateModelTest {
         val m = GateModel.from(hrOnly)
         assertEquals("Getting ready", m.title)
         assertEquals("Waiting for GPS. Heart rate is ready.", m.subtitle)
-        assertEquals(GateModel.HrRow.Ready("74"), m.hr)
+        assertEquals(GateModel.HrRow.Ready("74", "Reading from sensor"), m.hr)
         assertFalse(m.gpsReady)
         assertEquals("GPS · finding signal…", m.gpsTitle)
         assertEquals("0 of 3 fixes", m.fixLabel)
@@ -101,7 +101,7 @@ class GateModelTest {
 
     @Test
     fun a_heart_rate_reading_without_a_number_is_a_dash() {
-        assertEquals(GateModel.HrRow.Ready(NO_VALUE), GateModel.from(ready.copy(hrNow = null)).hr)
+        assertEquals(GateModel.HrRow.Ready(NO_VALUE, "Reading from sensor"), GateModel.from(ready.copy(hrNow = null)).hr)
     }
 
     /** today-screen/04: a walk's gate says walk wherever the run's says run, chip included. */
@@ -116,5 +116,13 @@ class GateModelTest {
         assertEquals("Pair a sensor, or start a GPS only walk.", GateModel.from(walk, GateSensor(connected = false, batteryPercent = null, paired = false)).subtitle)
         assertEquals("Sensor battery 14 % · may not last the walk", GateModel.from(walk, GateSensor(connected = true, batteryPercent = 14, paired = true)).warning)
         assertEquals("Run", GateModel.from(ready).typeLabel)
+    }
+
+    /** visual-polish/03: the heart-rate line names the paired sensor; without a name it says "sensor". */
+    @Test
+    fun the_heart_rate_line_names_the_sensor() {
+        assertEquals(GateModel.HrRow.Ready("74", "Reading from Verity Sense"), GateModel.from(ready, GateSensor(connected = true, batteryPercent = 82, paired = true, name = "Verity Sense")).hr)
+        assertEquals(GateModel.HrRow.Ready("74", "Reading from sensor"), GateModel.from(ready, GateSensor(connected = true, batteryPercent = 82, paired = true)).hr)
+        assertEquals(GateModel.HrRow.Ready("74", "Reading from sensor"), GateModel.from(ready).hr)
     }
 }

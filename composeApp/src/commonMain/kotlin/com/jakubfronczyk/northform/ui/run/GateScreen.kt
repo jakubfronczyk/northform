@@ -1,5 +1,7 @@
 package com.jakubfronczyk.northform.ui.run
 
+import com.jakubfronczyk.northform.ui.NfIcons
+import com.jakubfronczyk.northform.ui.NfIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -64,7 +66,7 @@ fun GateScreen(
                 Box(
                     Modifier.size(44.dp).background(Theme.bg.copy(alpha = 0.85f), CircleShape).clip(CircleShape).clickable(onClick = close),
                     contentAlignment = Alignment.Center,
-                ) { Text("‹", style = Type.number22, color = Theme.text) }
+                ) { NfIcon(NfIcons.gateBack, Theme.text, size = 20.dp, label = "Back to Today") }
                 Chip(model.typeLabel, Theme.of(snapshot.type))
             }
         }
@@ -84,8 +86,8 @@ fun GateScreen(
             Spacer(Modifier.weight(1f))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 BigButton(
-                    "▶  ${model.startLabel}", start, fill = if (model.startEnabled) Theme.primary else Theme.track,
-                    textColor = if (model.startEnabled) Color.White else Theme.dim, enabled = model.startEnabled,
+                    model.startLabel, start, fill = if (model.startEnabled) Theme.primary else Theme.track,
+                    textColor = if (model.startEnabled) Color.White else Theme.dim, enabled = model.startEnabled, icon = NfIcons.play,
                 )
                 if (model.showStartAnyway) {
                     Box(Modifier.fillMaxWidth().height(44.dp).clickable(onClick = start), contentAlignment = Alignment.Center) {
@@ -102,12 +104,12 @@ fun GateScreen(
 private fun ReadinessCard(model: GateModel, connectSensor: (() -> Unit)?, pairSensor: (() -> Unit)?) {
     Column(Modifier.fillMaxWidth().background(Theme.card, RoundedCornerShape(22.dp)).padding(horizontal = 16.dp, vertical = 4.dp)) {
         when (val hr = model.hr) {
-            is GateModel.HrRow.Ready -> CardRow(icon = { CheckBadge() }, title = "Heart rate", sub = "Reading from sensor") {
+            is GateModel.HrRow.Ready -> CardRow(icon = { CheckBadge() }, title = "Heart rate", sub = hr.source) {
                 BigValue(hr.bpm, "bpm")
             }
             GateModel.HrRow.Waiting -> CardRow(icon = { Spinner() }, title = "Heart rate · waiting…", sub = "No reading in the last 5 s") {}
             is GateModel.HrRow.NoSensor -> CardRow(
-                icon = { Text("♥", style = Type.number22, color = Theme.warn) },
+                icon = { NfIcon(NfIcons.sensor, Theme.warn) },
                 title = "Heart rate", sub = "Sensor not connected", subColor = Theme.warn, minHeight = 68.dp,
             ) {
                 val onClick = when (hr.action) {
@@ -136,7 +138,7 @@ private fun ReadinessCard(model: GateModel, connectSensor: (() -> Unit)?, pairSe
         }
         model.battery?.let { battery ->
             DashedLine()
-            CardRow(icon = { Text("▭", style = Type.number22, color = if (battery.low) Theme.warn else Theme.text2) }, title = "Sensor battery", sub = null, minHeight = 60.dp) {
+            CardRow(icon = { NfIcon(NfIcons.battery(battery.low), if (battery.low) Theme.warn else Theme.text2) }, title = "Sensor battery", sub = null, minHeight = 60.dp) {
                 BigValue(battery.percent.toString(), "%", if (battery.low) Theme.warn else Theme.text)
             }
         }
@@ -169,7 +171,7 @@ private fun BigValue(value: String, unit: String, color: Color = Theme.text) = V
 @Composable
 private fun CheckBadge() {
     Box(Modifier.size(32.dp).background(Theme.ok, CircleShape), contentAlignment = Alignment.Center) {
-        Text("✓", style = Type.pillLabel.copy(fontSize = 16.sp), color = Theme.bg)
+        NfIcon(NfIcons.check, Theme.bg, size = 18.dp)
     }
 }
 
@@ -183,7 +185,7 @@ private fun Spinner() {
 @Composable
 private fun WarningLine(text: String) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp).heightIn(min = 24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("△", style = Type.statusLabel, color = Theme.warn)
+        NfIcon(NfIcons.warning, Theme.warn, size = 20.dp)
         Text(text, style = Type.statusLabel.copy(fontSize = 15.sp), color = Theme.warn)
     }
 }
