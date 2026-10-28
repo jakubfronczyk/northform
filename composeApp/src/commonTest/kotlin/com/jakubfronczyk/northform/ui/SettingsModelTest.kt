@@ -77,4 +77,10 @@ class SettingsModelTest {
         assertEquals("Version 1.0 (14)", m.version)
         assertFalse(m.backupDetail.contains("profile"), "backup v1 carries no current profile (D26)")
     }
+
+    @Test
+    fun a_failed_profile_save_shows_under_the_profile() {
+        assertEquals("Couldn't save your profile: disk full", SettingsModel.from(profile, now, 7200, null, null, null, ExportState.Idle, "v", profileSaveError = "disk full").profileError)
+        assertNull(model().profileError)
+    }
 }

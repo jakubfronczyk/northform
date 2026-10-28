@@ -67,6 +67,7 @@ fun SettingsScreen(
                     DashedLine()
                     ValueRow("Heart rate", model.heartRate, note = null, editProfile)
                 }
+                model.profileError?.let { Text(it, style = Type.tertiaryText, color = Theme.warn) }
             }
             Section("Heart rate zones") {
                 Column(

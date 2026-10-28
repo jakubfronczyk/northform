@@ -18,8 +18,8 @@ class UnfinishedRun(val data: RecordingData, val rebuilt: RunState, val facts: C
     val id: RecordingId get() = data.recording.id
 
     companion object {
-        /** D9 step 4: `store.unfinished()`, then everything the prompt and a Continue need, read once. */
-        /** [profile]: the current one; a resumed run computes with it (D33). */
+        /** D9 step 4: `store.unfinished()`, then everything the prompt and a Continue need, read once. * [profile] is the current one: a resumed run computes with it (D33).
+         */
         suspend fun find(deps: AppDeps, profile: Profile): UnfinishedRun? {
             val recording = deps.store.unfinished() ?: return null
             val data = deps.store.load(recording.id) ?: return null

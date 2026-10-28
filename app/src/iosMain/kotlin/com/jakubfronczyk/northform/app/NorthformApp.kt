@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.app
 
+import platform.Foundation.NSLocale
 import com.jakubfronczyk.northform.ui.ZoneEditorScreen
 import com.jakubfronczyk.northform.ui.ProfileEditScreen
 import platform.Foundation.NSBundle
@@ -178,7 +179,8 @@ object NorthformApp {
      * the Files app (`UIFileSharingEnabled`). Returns the file name; throws when it cannot be written.
      */
     private suspend fun exportBackup(store: SqlRecordingStore, now: Instant): String {
-        val stamp = NSDateFormatter().apply { dateFormat = "yyyyMMdd-HHmm" }.stringFromDate(NSDate.dateWithTimeIntervalSince1970(now.epochSeconds.toDouble()))
+        // en_US_POSIX: a Buddhist or Japanese calendar would otherwise write "2569" or "0008" for the year.
+        val stamp = NSDateFormatter().apply { locale = NSLocale(localeIdentifier = "en_US_POSIX"); dateFormat = "yyyyMMdd-HHmm" }.stringFromDate(NSDate.dateWithTimeIntervalSince1970(now.epochSeconds.toDouble()))
         val name = "northform-backup-$stamp.json"
         val text = BackupCodec.encode(store.exportAll(now))
         check(Documents.write(Documents.topLevelPath(name), text)) { "could not write $name" }
@@ -223,13 +225,14 @@ object NorthformApp {
         val firmware by remember { if (live) sensorDetails.firmware else flowOf(null) }.collectAsState(null)
         val profile by model.profile.collectAsState()
         val export by model.export.collectAsState()
+        val profileSaveError by model.profileSaveError.collectAsState()
         AppRoot(
             activeRun = activeRun?.session,
             today = TodayModel.from(saved.recordings, gateSensor, sensorName, deps.wallClock.now(), deps.tzOffset()),
             history = { filter -> HistoryModel.from(saved, filter, deps.wallClock.now()) },
             retryHistory = model::refreshSaved,
             openRecording = model::openRecording,
-            settings = SettingsModel.from(profile, deps.wallClock.now(), deps.tzOffset(), paired, gateSensor?.batteryPercent, firmware, export, appVersion()),
+            settings = SettingsModel.from(profile, deps.wallClock.now(), deps.tzOffset(), paired, gateSensor?.batteryPercent, firmware, export, appVersion(), profileSaveError),
             exportBackup = model::exportBackup,
             zoneEditor = { close -> ZoneEditorScreen(profile, onSave = { model.saveProfile(it); close() }, back = close) },
             profileEditor = { close -> ProfileEditScreen(profile, deps.wallClock.now(), deps.tzOffset(), onSave = { model.saveProfile(it); close() }, back = close) },

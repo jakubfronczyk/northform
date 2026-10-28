@@ -38,10 +38,12 @@ class ProfileFormTest {
 
     @Test
     fun the_birth_date_must_be_a_real_day_in_dd_mm_yyyy() {
-        for (bad in listOf("", "1996-03-14", "14/03/1996", "31.02.1996", "00.03.1996", "14.13.1996")) {
+        for (bad in listOf("", "1996-03-14", "14.3.1996", "31.02.1996", "00.03.1996", "14.13.1996")) {
             assertEquals("Use DD.MM.YYYY", error(valid.copy(birthDate = bad), Field.BirthDate), bad)
         }
         assertNull(error(valid.copy(birthDate = "29.02.1996"), Field.BirthDate), "1996 was a leap year")
+        assertEquals("Use DD.MM.YYYY", error(valid.copy(birthDate = "29.02.1997"), Field.BirthDate), "1997 was not")
+        for (sep in listOf("/", "-", ",")) assertNull(error(valid.copy(birthDate = "14${sep}03${sep}1996"), Field.BirthDate), "keyboards without a dot: $sep")
         assertNull(check(valid.copy(birthDate = "")).ageHint)
     }
 

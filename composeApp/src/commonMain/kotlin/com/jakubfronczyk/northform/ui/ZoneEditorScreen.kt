@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.ui
 
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,7 +29,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,7 +43,7 @@ import com.jakubfronczyk.northform.core.Profile
  */
 @Composable
 fun ZoneEditorScreen(profile: Profile, onSave: (Profile) -> Unit, back: () -> Unit) {
-    var editor by remember { mutableStateOf(ZoneEditor.of(profile)) }
+    var editor by remember(profile) { mutableStateOf(ZoneEditor.of(profile)) }
     Column(
         Modifier.fillMaxSize().background(Theme.bg).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 64.dp, bottom = 50.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -71,6 +74,9 @@ fun ZoneEditorScreen(profile: Profile, onSave: (Profile) -> Unit, back: () -> Un
                 }
             }
         }
+        Row(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            editor.bar.forEachIndexed { zone, weight -> Box(Modifier.weight(weight.toFloat()).fillMaxHeight().background(Theme.zoneColors[zone])) }
+        }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(editor.preview, style = Type.tertiaryText, color = Theme.text2)
             Text("Karvonen · stored as % so bpm follow your max", style = Type.tertiaryText.copy(fontSize = 12.sp), color = Theme.text3)
@@ -84,7 +90,7 @@ fun ZoneEditorScreen(profile: Profile, onSave: (Profile) -> Unit, back: () -> Un
 private fun Stepper(symbol: String, label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.size(36.dp).clip(CircleShape).border(1.5.dp, if (enabled) Theme.outline else Theme.track, CircleShape)
-            .clickable(enabled = enabled, onClick = onClick).semantics { contentDescription = label },
+            .clickable(enabled = enabled, onClick = onClick).clearAndSetSemantics { contentDescription = label; role = Role.Button },
         contentAlignment = Alignment.Center,
     ) { Text(symbol, style = Type.number(20, FontWeight.Bold), color = if (enabled) Theme.text else Theme.dim) }
 }

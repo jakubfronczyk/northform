@@ -1,5 +1,10 @@
 package com.jakubfronczyk.northform.ui
 
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -46,7 +51,7 @@ private val PillShape = RoundedCornerShape(22.dp)
  */
 @Composable
 fun ProfileEditScreen(initial: Profile, now: Instant, tzOffset: Int, onSave: (Profile) -> Unit, back: () -> Unit) {
-    var form by remember { mutableStateOf(ProfileForm.of(initial)) }
+    var form by remember(initial) { mutableStateOf(ProfileForm.of(initial)) }
     val checked = form.check(now, tzOffset, initial.zones)
     Column(
         Modifier.fillMaxSize().background(Theme.bg).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 64.dp, bottom = 50.dp),
@@ -59,7 +64,7 @@ fun ProfileEditScreen(initial: Profile, now: Instant, tzOffset: Int, onSave: (Pr
             Text("Profile", style = Type.number(28, FontWeight.ExtraBold), color = Theme.text)
             Text("Used for your heart rate zones.", style = Type.secondaryText, color = Theme.text2)
         }
-        Input("Birth date", form.birthDate, checked.errors[Field.BirthDate], hint = checked.ageHint, keyboard = KeyboardType.Number) { form = form.copy(birthDate = it) }
+        Input("Birth date", form.birthDate, checked.errors[Field.BirthDate], hint = checked.ageHint, keyboard = KeyboardType.Text) { form = form.copy(birthDate = it) }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Sex", style = Type.tertiaryText, color = Theme.text2)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -68,7 +73,8 @@ fun ProfileEditScreen(initial: Profile, now: Instant, tzOffset: Int, onSave: (Pr
                     Box(
                         Modifier.weight(1f).height(48.dp).clip(PillShape)
                             .then(if (on) Modifier.background(Theme.text) else Modifier.border(1.5.dp, Theme.outline, PillShape))
-                            .clickable { form = form.copy(sex = sex) },
+                            .clickable { form = form.copy(sex = sex) }
+                            .semantics { selected = on; role = Role.RadioButton },
                         contentAlignment = Alignment.Center,
                     ) { Text(sex.name, style = Type.statusLabel.copy(fontSize = 15.sp), color = if (on) Theme.bg else Theme.text) }
                 }
@@ -100,7 +106,7 @@ private fun Input(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BasicTextField(
-                value, onChange, singleLine = true, modifier = Modifier.weight(1f),
+                value, onChange, singleLine = true, modifier = Modifier.weight(1f).semantics { contentDescription = label },
                 textStyle = Type.number(17, FontWeight.SemiBold).copy(color = Theme.text), cursorBrush = SolidColor(Theme.accent),
                 keyboardOptions = KeyboardOptions(keyboardType = keyboard),
             )

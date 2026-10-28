@@ -34,10 +34,12 @@ data class ProfileForm(
             born == null -> errors[Field.BirthDate] = "Use DD.MM.YYYY"
             age !in AGE -> errors[Field.BirthDate] = "Age must be 13–100"
         }
-        val kg = decimal(weight)?.takeIf { it in WEIGHT } ?: null.also { errors[Field.Weight] = "30–250 kg" }
-        val cm = decimal(height)?.takeIf { it in HEIGHT } ?: null.also { errors[Field.Height] = "100–250 cm" }
-        val max = hrMax.trim().toIntOrNull()?.takeIf { it in HR_MAX } ?: null.also { errors[Field.HrMax] = "100–230 bpm" }
-        val rest = hrRest.trim().toIntOrNull()?.takeIf { it in HR_REST } ?: null.also { errors[Field.HrRest] = "30–120 bpm" }
+        // Each value, or null with its field's message recorded.
+        fun <T> field(field: Field, message: String, value: T?): T? = value.also { if (it == null) errors[field] = message }
+        val kg = field(Field.Weight, "30–250 kg", decimal(weight)?.takeIf { it in WEIGHT })
+        val cm = field(Field.Height, "100–250 cm", decimal(height)?.takeIf { it in HEIGHT })
+        val max = field(Field.HrMax, "100–230 bpm", hrMax.trim().toIntOrNull()?.takeIf { it in HR_MAX })
+        val rest = field(Field.HrRest, "30–120 bpm", hrRest.trim().toIntOrNull()?.takeIf { it in HR_REST })
         if (max != null && rest != null && max - rest < MIN_RESERVE) errors[Field.HrMax] = "At least 20 above resting"
         val profile = if (errors.isEmpty()) {
             Profile(born!!, sex, kg!!, cm!!, hrMax = max!!, hrRest = rest!!, zones = zones)
@@ -55,10 +57,8 @@ data class ProfileForm(
         const val MIN_RESERVE = 20
 
         /** The form a saved profile opens as. */
-        fun of(p: Profile) = ProfileForm(RunFormat.birthDate(p.birthDate), p.sex, number(p.weightKg), number(p.heightCm), p.hrMax.toString(), p.hrRest.toString())
+        fun of(p: Profile) = ProfileForm(RunFormat.birthDate(p.birthDate), p.sex, RunFormat.number(p.weightKg), RunFormat.number(p.heightCm), p.hrMax.toString(), p.hrRest.toString())
 
         private fun decimal(text: String): Double? = text.trim().replace(',', '.').toDoubleOrNull()
-
-        private fun number(x: Double): String = if (x % 1.0 == 0.0) x.toLong().toString() else x.toString()
     }
 }

@@ -72,4 +72,18 @@ class ZoneEditorTest {
         assertEquals(listOf(50, 60, 70, 80, 90), other.rows.map { it.percent })
         assertEquals(125, other.rows[0].bpm, "50 + 0.5 × 150")
     }
+
+    /** Stored bounds that round to the same whole percent can't be edited safely: the editor opens on the defaults. */
+    @Test
+    fun zones_that_collide_when_rounded_open_on_the_defaults() {
+        val close = ZoneEditor.of(profile.copy(zones = HRZones(listOf(0.5, 0.6, 0.705, 0.709, 0.9))))
+        assertEquals(ZoneEditor.DEFAULT, close.rows.map { it.percent })
+    }
+
+    /** The preview bar: six segments, Z0 ten points wide, each zone as wide as its range up to 100 %. */
+    @Test
+    fun the_bar_weights_each_zone_by_its_width() {
+        assertEquals(listOf(10, 10, 10, 10, 10, 10), standard.bar)
+        assertEquals(listOf(10, 9, 11, 10, 10, 10), standard.lower(1).bar, "Z2 starts at 59: Z1 is 50→59, Z2 59→70")
+    }
 }

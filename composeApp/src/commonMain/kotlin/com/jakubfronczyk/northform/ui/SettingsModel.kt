@@ -26,6 +26,8 @@ data class SettingsModel(
     val profileNote: String,
     /** "max 187 · rest 60". */
     val heartRate: String,
+    /** "Couldn't save your profile: …" under the profile card; null when the last save worked. */
+    val profileError: String?,
     /** The paired sensor; null when none is paired. */
     val sensor: Sensor?,
     val units: String,
@@ -46,11 +48,12 @@ data class SettingsModel(
         fun from(
             profile: Profile, now: Instant, tzOffset: Int,
             sensor: PairedSensorInfo?, battery: Int?, firmware: String?,
-            export: ExportState, version: String,
+            export: ExportState, version: String, profileSaveError: String? = null,
         ) = SettingsModel(
-            profileValue = "${RunFormat.age(profile.birthDate, now, tzOffset)} · ${number(profile.weightKg)} kg · ${number(profile.heightCm)} cm",
+            profileValue = "${RunFormat.age(profile.birthDate, now, tzOffset)} · ${RunFormat.number(profile.weightKg)} kg · ${RunFormat.number(profile.heightCm)} cm",
             profileNote = "born ${RunFormat.birthDate(profile.birthDate)} · ${if (profile.sex == Sex.Male) "male" else "female"}",
             heartRate = "max ${profile.hrMax} · rest ${profile.hrRest}",
+            profileError = profileSaveError?.let { "Couldn't save your profile: $it" },
             sensor = sensor?.let { s ->
                 Sensor(s.displayName, listOfNotNull("ID ${s.code}", firmware?.let { "firmware $it" }).joinToString(" · "), battery?.let { "$it %" })
             },
@@ -66,7 +69,5 @@ data class SettingsModel(
             version = version,
         )
 
-        /** "78", "61.3": a whole number without its ".0". */
-        private fun number(x: Double): String = if (x % 1.0 == 0.0) x.toLong().toString() else x.toString()
     }
 }

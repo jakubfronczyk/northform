@@ -28,6 +28,12 @@ data class ZoneEditor(private val bounds: List<Int>, private val hrMax: Int, pri
     /** "Preview · max 187 · resting 60 bpm": what the bpm are computed for. */
     val preview: String get() = "Preview · max $hrMax · resting $hrRest bpm"
 
+    /**
+     * The preview bar's six segment weights, Z0 first: Z0 drawn ten points wide, each zone as wide as its range up to
+     * 100 %, at least 1 so none vanishes (`ZoneEditor.dc.html`).
+     */
+    val bar: List<Int> get() = (listOf(bounds.first() - 10) + bounds + 100).zipWithNext { a, b -> maxOf(1, b - a) }
+
     /** What Save stores. */
     val zones: HRZones get() = HRZones(bounds.map { it / 100.0 })
 
@@ -44,6 +50,14 @@ data class ZoneEditor(private val bounds: List<Int>, private val hrMax: Int, pri
         const val GAP = 2
         val DEFAULT = listOf(50, 60, 70, 80, 90)
 
-        fun of(profile: Profile) = ZoneEditor(profile.zones.lowerBounds.map { (it * 100).roundToInt() }, profile.hrMax, profile.hrRest)
+        /**
+         * The editor for [profile]'s zones in whole %. Bounds the rules can't hold once rounded (closer than [GAP], outside
+         * [FLOOR]..[CEILING]) open on [DEFAULT]: editing them could only produce zones that don't rise.
+         */
+        fun of(profile: Profile): ZoneEditor {
+            val whole = profile.zones.lowerBounds.map { (it * 100).roundToInt() }
+            val holds = whole.first() >= FLOOR && whole.last() <= CEILING && whole.zipWithNext().all { (a, b) -> b - a >= GAP }
+            return ZoneEditor(if (holds) whole else DEFAULT, profile.hrMax, profile.hrRest)
+        }
     }
 }

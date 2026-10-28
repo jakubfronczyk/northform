@@ -1,9 +1,12 @@
 package com.jakubfronczyk.northform.app
 
+import com.jakubfronczyk.northform.replay.RecordingTap
+import com.jakubfronczyk.northform.replay.ReplayMeta
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.ports.ProfileStore
+import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.engine.store.InMemoryProfileStore
 import com.jakubfronczyk.northform.core.Recording
 import com.jakubfronczyk.northform.core.metrics.Headline
@@ -191,11 +194,12 @@ class AppModelReplayTest {
         port: RecordingStore = store,
         profiles: ProfileStore = InMemoryProfileStore(),
         exportBackup: suspend () -> String = { "northform-backup.json" },
+        makeTap: (ReplayMeta, String) -> RecordingTap? = { _, _ -> null },
         newRecordingId: () -> String = { "00000000-0000-0000-0000-00000000000a" },
     ) = AppModel(
         AppDeps(
             source = RunSource.Replay { straightRun() }, store = port, reliability = store, wallClock = virtualWallClock(straightRun().meta.start),
-            alerts = RecordedAlerts(), profileStore = profiles, exportBackup = exportBackup, newRecordingId = newRecordingId, saved = saved,
+            alerts = RecordedAlerts(), profileStore = profiles, exportBackup = exportBackup, makeTap = makeTap, newRecordingId = newRecordingId, saved = saved,
         ),
         backgroundScope,
     )
@@ -291,6 +295,62 @@ class AppModelReplayTest {
         assertTrue(store.records.metrics(id).all { it.profile == mine }, "the run's metrics carry the stored profile")
     }
 
+    /** profile-settings review: a run started before the launch read of the profile lands still computes with the stored one. */
+    @Test
+    fun a_run_started_before_the_profile_is_read_still_uses_the_stored_profile() = runTest {
+        val mine = AppDeps.sampleProfile.copy(hrMax = 199, hrRest = 48)
+        val metas = ArrayList<ReplayMeta>()
+        val model = appOver(InMemoryRecordingStore(), profiles = InMemoryProfileStore(mine), makeTap = { meta, _ -> metas += meta; null })
+
+        model.startRun(); runCurrent() // no checkUnfinished first: Run tapped as the app opens
+
+        // The run's config (its live zones, its replay header) carries the stored profile, not the fallback.
+        assertEquals(listOf(199 to 48), metas.map { it.hrMax to it.hrRest })
+    }
+
+    /** profile-settings review: the launch read never overwrites an edit saved before it landed. */
+    @Test
+    fun the_launch_read_does_not_overwrite_an_earlier_save() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val stored = InMemoryProfileStore(AppDeps.sampleProfile)
+        // The read sees the store as it was when it started, and answers late.
+        val slow = object : ProfileStore by stored { override suspend fun profile(): Profile? { val then = stored.profile(); gate.await(); return then } }
+        val model = appOver(InMemoryRecordingStore(), profiles = slow)
+        model.checkUnfinished(); runCurrent() // the read waits
+        val edited = AppDeps.sampleProfile.copy(weightKg = 70.0)
+
+        model.saveProfile(edited); runCurrent()
+        gate.complete(Unit); runCurrent()
+
+        assertEquals(edited, model.profile.value)
+        assertEquals(edited, stored.profile())
+    }
+
+    /** profile-settings review: a save the store refuses is said, not swallowed (Settings shows it). */
+    @Test
+    fun a_failed_profile_save_is_reported() = runTest {
+        val refusing = object : ProfileStore by InMemoryProfileStore() { override suspend fun saveProfile(profile: Profile) = error("disk full") }
+        val model = appOver(InMemoryRecordingStore(), profiles = refusing)
+
+        model.saveProfile(AppDeps.sampleProfile.copy(weightKg = 70.0)); runCurrent()
+
+        assertEquals("disk full", model.profileSaveError.value)
+    }
+
+    /** E15: an edit after a run was saved leaves its reopened Summary on the profile it was saved with. */
+    @Test
+    fun a_profile_edit_leaves_a_reopened_saved_run_on_its_stored_profile() = runTest {
+        val store = InMemoryRecordingStore()
+        val model = appOver(store)
+        model.checkUnfinished(); runCurrent()
+        val id = saveReplayRun(model)
+
+        model.saveProfile(AppDeps.sampleProfile.copy(hrMax = 200)); runCurrent()
+        model.openRecording(id); runCurrent()
+
+        assertEquals(AppDeps.sampleProfile, assertIs<SummarySession.State.Ready>(assertNotNull(model.summary.value).state.value).summary.profile)
+    }
+
     /** profile-settings/03: Save in the profile editor stores it, and the next run computes with it. */
     @Test
     fun a_saved_profile_reaches_the_store_and_the_next_run() = runTest {
@@ -325,8 +385,23 @@ class AppModelReplayTest {
 
         model.acceptHrMax(); runCurrent()
 
-        assertEquals(suggested, assertNotNull(profiles.profile()).hrMax)
+        assertEquals(AppDeps.sampleProfile.copy(hrMax = suggested), profiles.profile(), "only HRmax changes")
         assertEquals(suggested, model.profile.value.hrMax)
+    }
+
+    /** SU6 is not offered on a reopened run: Update there changes nothing. */
+    @Test
+    fun update_on_a_reopened_run_saves_nothing() = runTest {
+        val store = InMemoryRecordingStore()
+        val profiles = InMemoryProfileStore(AppDeps.sampleProfile.copy(hrMax = 130))
+        val model = appOver(store, profiles = profiles)
+        model.checkUnfinished(); runCurrent()
+        val id = saveReplayRun(model)
+        model.openRecording(id); runCurrent()
+
+        model.acceptHrMax(); runCurrent()
+
+        assertEquals(130, assertNotNull(profiles.profile()).hrMax)
     }
 
     /** history-screen/03: a saved recording reopens read-only, computed with the profile it was saved with (D24). */

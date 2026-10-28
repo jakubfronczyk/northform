@@ -71,7 +71,7 @@ class ActiveRun private constructor(
          * A new recording of [type] (today-screen/04: the Run or Walk tile): a fresh gate, a new id, the debug tap. [profile] is
          * the runner's current one, captured here: an edit during the run changes nothing live (profile-settings spec).
          */
-        suspend fun open(deps: AppDeps, scope: CoroutineScope, type: RecordingType = RecordingType.Run, profile: Profile = deps.profile): ActiveRun {
+        suspend fun open(deps: AppDeps, scope: CoroutineScope, type: RecordingType = RecordingType.Run, profile: Profile = deps.fallbackProfile): ActiveRun {
             val config = RunConfig(RecordingId(deps.newRecordingId()), type, profile, deps.tzOffset())
             val start = deps.wallClock.now()
             val tap = deps.makeTap(

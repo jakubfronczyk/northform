@@ -107,7 +107,7 @@ class AppDeps(
     /** The lock screen (D11): `LiveActivityBridge::publish` on the phone, a recorder in tests, nothing in the simulator. */
     val liveActivity: (LiveActivityEvent) -> Unit = {},
     /** The profile until the runner saves one (profile-settings spec; first-launch Setup will replace this fallback). */
-    val profile: Profile = sampleProfile,
+    val fallbackProfile: Profile = sampleProfile,
     /** Where the runner's profile is kept: the SQL store on the phone. */
     val profileStore: ProfileStore = InMemoryProfileStore(),
     /** Settings' Export backup (profile-settings/02, D26): writes every run to a file in Files and returns its name; throws on failure. */
