@@ -17,7 +17,11 @@ forbidden='Color\(0x|TextStyle\(|fontSize *=|\.sp\b|RoundedCornerShape\(|\b(44|4
 #    52 dp disc), artwork rather than layout; a theme change does not move it.
 allowed='[0-9.]+\.dp\.toPx\(\)'
 
-if grep -nE "$forbidden" $files | sed -E "s/$allowed//g" | grep -E "$forbidden" ; then
+# grep exits 1 for "no match", which is clean; anything else (2: a read error) must fail, not pass as "ok".
+matches=$(grep -nE "$forbidden" $files || [ $? -eq 1 ])
+leaks=$(printf '%s\n' "$matches" | sed -E "s/$allowed//g" | grep -E "$forbidden" || [ $? -eq 1 ])
+if [ -n "$leaks" ]; then
+    printf '%s\n' "$leaks"
     echo "check-style: styling spelled out outside ui/theme/: use a Theme / Type / Shapes / Dimens token" >&2
     exit 1
 fi
