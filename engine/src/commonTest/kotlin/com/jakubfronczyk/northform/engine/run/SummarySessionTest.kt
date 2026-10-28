@@ -355,3 +355,50 @@ class SummarySessionEditsFlowTest {
         assertEquals(8, saved.rpe)
     }
 }
+
+/** today-screen/01: Save stores the headline numbers Today and History read back. */
+class SummarySessionHeadlineTest {
+    private val config = RunHarness.config
+
+    /** 5 s → 60 s, paused 30–40 s, 3 m/s north while moving; HR 150 unless [hr] is false. */
+    private fun stored(type: RecordingType, hr: Boolean) = RecordingData(
+        recording = Recording(id = config.recordingId, type = type, state = RecordingState.Computing, startUtc = at(5), tzOffset = config.tzOffset, endUtc = at(60)),
+        hr = if (hr) (6..60).map { HrSample(at(it), 150) } else emptyList(),
+        fixes = (6..60).map { fix(it, north = (it - 5) * 3.0) },
+        events = listOf(
+            RecordingEvent(at(30), EventKind.Pause, EventSource.Manual),
+            RecordingEvent(at(40), EventKind.Resume, EventSource.Manual),
+            RecordingEvent(at(60), EventKind.Stop, EventSource.Manual),
+            RecordingEvent(at(120), EventKind.CooldownEnd, EventSource.Auto),
+        ),
+        lastPersistedAt = at(120),
+    )
+
+    private suspend fun saved(type: RecordingType, hr: Boolean): Pair<RunSummary, Map<String, Double>> {
+        val store = InMemoryRecordingStore()
+        store.seedComputing(stored(type, hr))
+        val session = SummarySession(config.recordingId, store, store, config.profile)
+        session.load()
+        val summary = assertIs<SummarySession.State.Ready>(session.state.value).summary
+        session.save()
+        return summary to store.records.metrics(config.recordingId).associate { it.metricId.value to it.value }
+    }
+
+    @Test
+    fun save_stores_distance_total_moving_time_and_average_hr() = runTest {
+        val (summary, metrics) = saved(RecordingType.Run, hr = true)
+
+        assertEquals(summary.distance, metrics.getValue("distance"))
+        assertEquals(55.0, metrics.getValue("total_time"))
+        assertEquals(45.0, metrics.getValue("moving_time"), "the pause is out of moving time")
+        assertEquals(150.0, metrics.getValue("avg_hr"))
+    }
+
+    @Test
+    fun a_walk_without_heart_rate_stores_no_average_hr() = runTest {
+        val (_, metrics) = saved(RecordingType.Walk, hr = false)
+
+        assertTrue("distance" in metrics && "moving_time" in metrics)
+        assertNull(metrics["avg_hr"])
+    }
+}

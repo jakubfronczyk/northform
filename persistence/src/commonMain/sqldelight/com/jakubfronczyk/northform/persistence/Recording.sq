@@ -63,6 +63,9 @@ SELECT * FROM recording WHERE id = ?;
 unfinished:
 SELECT * FROM recording WHERE state != 'saved' ORDER BY start_utc LIMIT 1;
 
+savedNewestFirst:
+SELECT * FROM recording WHERE state = 'saved' ORDER BY start_utc DESC, id DESC LIMIT ?;
+
 selectRecordingIds:
 SELECT id FROM recording ORDER BY start_utc, id;
 

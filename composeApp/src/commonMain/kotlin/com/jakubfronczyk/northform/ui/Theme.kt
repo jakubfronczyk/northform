@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.roundedHalfAwayFromZero
 import kotlin.time.Duration
 import kotlin.time.Instant
@@ -23,6 +24,9 @@ object Theme {
     val primary = Color(0xFFC2461C)
     val warn = Color(0xFFE9C46A)
     val ok = Color(0xFF5FD08A)
+
+    /** A recording type's colour (the gate chip, Today's dots and thumbnail): a run in the accent, a walk in grey. */
+    fun of(type: RecordingType) = if (type == RecordingType.Run) accent else text2
 
     /** Zone colours by number, Z0 first. The names live on `core` `Zone.name` (D29): one table. */
     val zoneColors = listOf(

@@ -21,6 +21,8 @@ import com.jakubfronczyk.northform.persistence.SqlRecordingStore
 import com.jakubfronczyk.northform.persistence.nativeDriver
 import com.jakubfronczyk.northform.replay.RecordingTap
 import com.jakubfronczyk.northform.ui.AppRoot
+import com.jakubfronczyk.northform.ui.TodayModel
+import com.jakubfronczyk.northform.engine.store.StoredSavedRecordings
 import com.jakubfronczyk.northform.ui.run.SummaryScreen
 import com.jakubfronczyk.northform.ui.crash.CrashPromptScreen
 import com.jakubfronczyk.northform.ui.run.GateSensor
@@ -33,6 +35,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.Foundation.NSNotificationCenter
@@ -73,6 +76,8 @@ object NorthformApp {
         private set
     lateinit var model: AppModel
         private set
+    /** The wiring [model] runs on; Today reads its clock and zone from here too (one source for both). */
+    private lateinit var deps: AppDeps
     private var live = false
 
     /**
@@ -109,11 +114,12 @@ object NorthformApp {
         live = !AppDeps.isSimulator
         val runAlerts = RunAlertPlayer(alerts, DeviceLog::runTrace)
         val sqlStore = SqlRecordingStore(nativeDriver())
-        val deps = AppDeps(
+        deps = AppDeps(
             source = if (live) RunSource.Live(sensor, location, KeepAlive(DeviceLog.location::notice).asRunKeepAlive(), ::requestRunPermissions)
                      else RunSource.Replay { BundleFixtures.script("straight-run-3min") },
             store = LoggingStore(sqlStore, DeviceLog::runTrace),
             reliability = sqlStore,
+            saved = StoredSavedRecordings(sqlStore, sqlStore),
             wallClock = wallClock,
             alerts = runAlerts,
             clearAlerts = runAlerts::clear,
@@ -181,8 +187,11 @@ object NorthformApp {
         val unfinished by model.unfinished.collectAsState()
         val summary by model.summary.collectAsState()
         val gateSensor by remember { gateSensorStates() }.collectAsState(null)
+        val saved by model.saved.collectAsState()
+        val sensorName by remember { if (live) sensorDetails.paired.map { it?.name } else flowOf(null) }.collectAsState(null)
         AppRoot(
             activeRun = activeRun?.session,
+            today = TodayModel.from(saved, gateSensor, sensorName, deps.wallClock.now(), deps.tzOffset()),
             onStartRun = model::startRun,
             onCloseRun = model::closeRun,
             map = { route -> RouteMap(route, showsUserLocation = live) },

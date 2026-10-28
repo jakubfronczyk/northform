@@ -66,9 +66,9 @@ class ActiveRun private constructor(
     }
 
     companion object {
-        /** A new run: a fresh gate, a new id, the debug tap. */
-        suspend fun open(deps: AppDeps, scope: CoroutineScope): ActiveRun {
-            val config = RunConfig(RecordingId(deps.newRecordingId()), RecordingType.Run, deps.profile, deps.tzOffset())
+        /** A new recording of [type] (today-screen/04: the Run or Walk tile): a fresh gate, a new id, the debug tap. */
+        suspend fun open(deps: AppDeps, scope: CoroutineScope, type: RecordingType = RecordingType.Run): ActiveRun {
+            val config = RunConfig(RecordingId(deps.newRecordingId()), type, deps.profile, deps.tzOffset())
             val start = deps.wallClock.now()
             val tap = deps.makeTap(
                 ReplayMeta(config.type, start, config.profile.hrMax, config.profile.hrRest, config.profile.sex),

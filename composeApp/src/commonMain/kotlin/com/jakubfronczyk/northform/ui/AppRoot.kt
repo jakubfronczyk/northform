@@ -1,21 +1,15 @@
 package com.jakubfronczyk.northform.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.engine.run.Route
 import com.jakubfronczyk.northform.engine.run.RunSessionHandle
 import com.jakubfronczyk.northform.ui.run.GateSensor
@@ -30,7 +24,10 @@ import com.jakubfronczyk.northform.ui.run.RunFlow
 @Composable
 fun AppRoot(
     activeRun: RunSessionHandle?,
-    onStartRun: () -> Unit,
+    /** What Today shows (today-screen spec); the root builds it from the saved list and the sensor link. */
+    today: TodayModel,
+    /** The Run or Walk tile: starts a recording of that type. */
+    onStartRun: (RecordingType) -> Unit,
     onCloseRun: () -> Unit,
     map: @Composable (route: Route) -> Unit,
     sensorScreen: @Composable (close: () -> Unit) -> Unit,
@@ -54,22 +51,9 @@ fun AppRoot(
             )
             summary != null -> summary()
             else -> {
-                TodayScreen(startRun = onStartRun, openSensor = { showSensor = true })
+                TodayScreen(today, start = onStartRun, openSensor = { showSensor = true })
                 crashPrompt?.invoke()
             }
         }
-    }
-}
-
-/** `Features/TodayView.swift`. */
-@Composable
-fun TodayScreen(startRun: () -> Unit, openSensor: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(top = 64.dp, bottom = 50.dp)) {
-        Text("Today", style = Type.homeTitle, color = Theme.text)
-        Spacer(Modifier.height(8.dp))
-        Text("No runs yet", style = Type.secondaryText, color = Theme.text2)
-        Text("Sensor", color = Theme.text2, modifier = Modifier.clickable(onClick = openSensor).padding(vertical = 12.dp))
-        Spacer(Modifier.weight(1f))
-        BigButton("Start run", startRun)
     }
 }

@@ -65,7 +65,7 @@ fun GateScreen(
                     Modifier.size(44.dp).background(Theme.bg.copy(alpha = 0.85f), CircleShape).clip(CircleShape).clickable(onClick = close),
                     contentAlignment = Alignment.Center,
                 ) { Text("‹", style = Type.number22, color = Theme.text) }
-                Chip("Run", Theme.accent)
+                Chip(model.typeLabel, Theme.of(snapshot.type))
             }
         }
         Column(

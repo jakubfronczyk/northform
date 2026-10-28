@@ -130,7 +130,8 @@ class RunSummaryTest {
         assertNull(unrated.firstOrNull { it.metricId == RecordingMetrics.Ids.sRpe })
         assertEquals(7 * 0.75, assertNotNull(rated.firstOrNull { it.metricId == RecordingMetrics.Ids.sRpe }).value, "7 × 45 s")
         assertTrue(rated.all { it.profile == profile })
-        assertEquals((0..5).map { RecordingMetrics.Ids.timeInZone(it) } + RecordingMetrics.Ids.trimp + RecordingMetrics.Ids.sRpe + RecordingMetrics.Ids.hrRecovery, rated.map { it.metricId })
+        assertEquals((0..5).map { RecordingMetrics.Ids.timeInZone(it) } + RecordingMetrics.Ids.trimp + RecordingMetrics.Ids.sRpe + RecordingMetrics.Ids.hrRecovery +
+            listOf(RecordingMetrics.Ids.distance, RecordingMetrics.Ids.totalTime, RecordingMetrics.Ids.movingTime, RecordingMetrics.Ids.avgHr), rated.map { it.metricId })
     }
 
     /** Save writes the rows and finishes the recording; Delete removes everything, rows included. */
