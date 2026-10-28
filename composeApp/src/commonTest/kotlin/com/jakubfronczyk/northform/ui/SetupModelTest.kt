@@ -3,6 +3,7 @@ package com.jakubfronczyk.northform.ui
 import com.jakubfronczyk.northform.core.HRZones
 import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.Sex
+import com.jakubfronczyk.northform.ui.SetupPermissions.Bluetooth
 import com.jakubfronczyk.northform.ui.SetupPermissions.Location
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -43,22 +44,37 @@ class SetupModelTest {
 
     @Test
     fun the_permission_rows_follow_what_ios_says() {
-        val asked = SetupPermissions.of(bluetoothAllowed = true, location = Location.NotAsked)
+        val asked = SetupPermissions.of(bluetooth = Bluetooth.Allowed, location = Location.NotAsked)
         assertEquals(SetupPermissions.Row(allowed = true, action = null), asked.bluetooth)
         assertEquals(SetupPermissions.Row(allowed = false, action = SetupPermissions.Action.Allow), asked.location)
         assertNull(asked.locationNote)
         assertFalse(asked.location.showsNotAllowed, "not asked yet: only Allow, no \"Not allowed\" line (SetupPermissions.dc.html)")
 
-        val denied = SetupPermissions.of(bluetoothAllowed = false, location = Location.Denied)
+        val denied = SetupPermissions.of(bluetooth = Bluetooth.Denied, location = Location.Denied)
         assertEquals(SetupPermissions.Row(allowed = false, action = SetupPermissions.Action.OpenSettings), denied.bluetooth)
         assertEquals(SetupPermissions.Row(allowed = false, action = SetupPermissions.Action.OpenSettings), denied.location)
         assertEquals("Location is off for this app. Turn it on in iOS Settings, then come back.", denied.locationNote)
         assertTrue(denied.location.showsNotAllowed)
         assertTrue(denied.bluetooth.showsNotAllowed)
-        assertTrue(SetupPermissions.of(true, Location.Restricted).location.showsNotAllowed, "restricted: said, with no button")
-        assertFalse(SetupPermissions.of(true, Location.Allowed).location.showsNotAllowed)
+        assertTrue(SetupPermissions.of(Bluetooth.Allowed, Location.Restricted).location.showsNotAllowed, "restricted: said, with no button")
+        assertFalse(SetupPermissions.of(Bluetooth.Allowed, Location.Allowed).location.showsNotAllowed)
 
-        assertEquals(SetupPermissions.Row(allowed = false, action = null), SetupPermissions.of(true, Location.Restricted).location, "restricted: nothing the runner can change")
-        assertEquals(SetupPermissions.Row(allowed = true, action = null), SetupPermissions.of(true, Location.Allowed).location)
+        assertEquals(SetupPermissions.Row(allowed = false, action = null), SetupPermissions.of(Bluetooth.Allowed, Location.Restricted).location, "restricted: nothing the runner can change")
+        assertEquals(SetupPermissions.Row(allowed = true, action = null), SetupPermissions.of(Bluetooth.Allowed, Location.Allowed).location)
+    }
+
+    /** The Bluetooth prompt moved into Setup (ADR 0005, amended 2026-10-28): its row asks the way Location's does. */
+    @Test
+    fun the_bluetooth_row_offers_allow_until_ios_has_an_answer() {
+        val table = mapOf(
+            Bluetooth.NotAsked to SetupPermissions.Row(allowed = false, action = SetupPermissions.Action.Allow),
+            Bluetooth.Allowed to SetupPermissions.Row(allowed = true, action = null),
+            Bluetooth.Denied to SetupPermissions.Row(allowed = false, action = SetupPermissions.Action.OpenSettings),
+            Bluetooth.Restricted to SetupPermissions.Row(allowed = false, action = null),
+        )
+        assertEquals(Bluetooth.entries.toSet(), table.keys, "every state is mapped")
+        for ((bluetooth, row) in table) assertEquals(row, SetupPermissions.of(bluetooth, Location.Allowed).bluetooth, "$bluetooth")
+        assertFalse(SetupPermissions.of(Bluetooth.NotAsked, Location.Allowed).bluetooth.showsNotAllowed, "not asked yet: only Allow")
+        assertTrue(SetupPermissions.of(Bluetooth.Restricted, Location.Allowed).bluetooth.showsNotAllowed, "restricted: said, with no button")
     }
 }

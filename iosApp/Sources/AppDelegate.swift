@@ -1,8 +1,9 @@
 import UIKit
 import Northform
 
-/// D9: `boot()` is the FIRST statement. Kotlin creates the CBCentralManager inside it, so a background
-/// relaunch's `willRestoreState` lands in a live Kotlin delegate. Nothing else belongs in this file, ever.
+/// D9: `boot()` is the FIRST statement. Kotlin creates the CBCentralManager inside it (once iOS has an
+/// answer about Bluetooth, ADR 0005), so a background relaunch's `willRestoreState` lands in a live
+/// Kotlin delegate. Nothing else belongs in this file, ever.
 final class AppDelegate: NSObject, UIApplicationDelegate {
     private let liveActivity = LiveActivityController()
 
