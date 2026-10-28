@@ -72,6 +72,13 @@ data class Profile(
     /** `Zones.swift:3` — heart-rate reserve fraction: (HR − HRrest) / (HRmax − HRrest) (Karvonen). */
     fun reserveFraction(bpm: Int): Double = (bpm - hrRest).toDouble() / (hrMax - hrRest).toDouble()
 
+    /**
+     * The inverse of [reserveFraction]: the bpm at a fraction of heart-rate reserve, HRrest + fraction × (HRmax − HRrest),
+     * rounded half away from zero. The one rule behind every zone boundary shown in bpm (Setup's zones, the zone editor,
+     * the Summary's bands), so they always agree.
+     */
+    fun bpmAt(reserveFraction: Double): Int = (hrRest + reserveFraction * (hrMax - hrRest)).roundedHalfAwayFromZero().toInt()
+
     // The zone of a bpm is `profile.zoneOf(bpm)` (`core/metrics/Zone.kt`, D23): a `Zone` value, never a bare Int.
 
     companion object {

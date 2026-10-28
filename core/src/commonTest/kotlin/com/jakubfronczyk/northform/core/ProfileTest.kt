@@ -44,4 +44,13 @@ class ProfileTest {
         assertEquals(173, Profile.estimatedHrMax(age = 50), "173.0")
         assertEquals(191, Profile.estimatedHrMax(age = 25), "190.5 rounds up")
     }
+
+    /** Karvonen's inverse: the bpm at a fraction of heart-rate reserve, the one rule the zone tables and the Summary share. */
+    @Test
+    fun the_bpm_at_a_reserve_fraction_is_rest_plus_that_much_reserve_rounded_half_away_from_zero() {
+        assertEquals(124, profile.bpmAt(0.5), "60 + 0.5 × 127 = 123.5 rounds up")
+        assertEquals(136, profile.bpmAt(0.6), "136.2")
+        assertEquals(60, profile.bpmAt(0.0))
+        assertEquals(187, profile.bpmAt(1.0))
+    }
 }

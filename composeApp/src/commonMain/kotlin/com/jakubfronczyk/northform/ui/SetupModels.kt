@@ -2,7 +2,6 @@ package com.jakubfronczyk.northform.ui
 
 import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.metrics.Zone
-import com.jakubfronczyk.northform.core.roundedHalfAwayFromZero
 import kotlin.math.roundToInt
 
 /** first-launch-setup: the four steps in D71's order, each with its "n of 4". */
@@ -20,7 +19,7 @@ enum class SetupStep {
 
 /**
  * Step 4, "Your zones" (`SetupZones.dc.html`): Z0–Z5 with their % of heart-rate reserve and bpm from the saved profile.
- * Bpm by [ZoneEditor]'s rule, so the two screens agree.
+ * Bpm by [Profile.bpmAt], the rule the zone editor uses too, so the two screens agree.
  */
 data class SetupZones(val subtitle: String, val rows: List<Row>) {
     /** "Z3 Moderate", "70–80 %", "149–162". */
@@ -29,7 +28,7 @@ data class SetupZones(val subtitle: String, val rows: List<Row>) {
     companion object {
         fun of(profile: Profile): SetupZones {
             val bounds = profile.zones.lowerBounds.map { (it * 100).roundToInt() }
-            fun bpm(p: Int) = (profile.hrRest + p / 100.0 * (profile.hrMax - profile.hrRest)).roundedHalfAwayFromZero().toInt()
+            fun bpm(p: Int) = profile.bpmAt(p / 100.0)
             val edges = bounds + 100
             val rows = listOf(Row("Z0 ${Zone.names[0]}", "below ${bounds.first()} %", "below ${bpm(bounds.first())}")) +
                 bounds.indices.map { i ->

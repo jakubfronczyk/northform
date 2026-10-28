@@ -3,7 +3,6 @@ package com.jakubfronczyk.northform.ui
 import com.jakubfronczyk.northform.core.HRZones
 import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.metrics.Zone
-import com.jakubfronczyk.northform.core.roundedHalfAwayFromZero
 import kotlin.math.roundToInt
 
 /**
@@ -12,7 +11,7 @@ import kotlin.math.roundToInt
  * least [GAP] points above the one below, so the zones can't overlap; a stepper at its limit is off. Stored as %, so a new
  * max or resting heart rate moves the bpm, never the percentages.
  */
-data class ZoneEditor(private val bounds: List<Int>, private val hrMax: Int, private val hrRest: Int) {
+data class ZoneEditor(private val bounds: List<Int>, private val profile: Profile) {
     /** One zone's row: "Z3 Moderate", from 70 % = 149 bpm, and whether each stepper is on. */
     data class Row(val label: String, val percent: Int, val bpm: Int, val canLower: Boolean, val canRaise: Boolean)
 
@@ -20,13 +19,13 @@ data class ZoneEditor(private val bounds: List<Int>, private val hrMax: Int, pri
         val p = bounds[i]
         Row(
             label = "Z${i + 1} ${Zone.names[i + 1]}", percent = p,
-            bpm = (hrRest + p / 100.0 * (hrMax - hrRest)).roundedHalfAwayFromZero().toInt(),
+            bpm = profile.bpmAt(p / 100.0),
             canLower = p - 1 >= min(i), canRaise = p + 1 <= max(i),
         )
     }
 
     /** "Preview · max 187 · resting 60 bpm": what the bpm are computed for. */
-    val preview: String get() = "Preview · max $hrMax · resting $hrRest bpm"
+    val preview: String get() = "Preview · max ${profile.hrMax} · resting ${profile.hrRest} bpm"
 
     /**
      * The preview bar's six segment weights, Z0 first: Z0 drawn ten points wide, each zone as wide as its range up to
@@ -57,7 +56,7 @@ data class ZoneEditor(private val bounds: List<Int>, private val hrMax: Int, pri
         fun of(profile: Profile): ZoneEditor {
             val whole = profile.zones.lowerBounds.map { (it * 100).roundToInt() }
             val holds = whole.first() >= FLOOR && whole.last() <= CEILING && whole.zipWithNext().all { (a, b) -> b - a >= GAP }
-            return ZoneEditor(if (holds) whole else DEFAULT, profile.hrMax, profile.hrRest)
+            return ZoneEditor(if (holds) whole else DEFAULT, profile)
         }
     }
 }
