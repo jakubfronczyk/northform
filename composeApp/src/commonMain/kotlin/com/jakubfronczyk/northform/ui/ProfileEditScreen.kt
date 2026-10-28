@@ -74,11 +74,11 @@ private fun ProfileFormScreen(
     val checked = form.check(now, tzOffset, zones)
     // An empty field shows no error yet (nothing typed is not a mistake); Save / Continue stays off until all are valid.
     fun shown(field: Field, value: String) = checked.errors[field]?.takeIf { value.isNotBlank() }
-    Column(
-        Modifier.fillMaxSize().background(Theme.bg).verticalScroll(rememberScrollState()).padding(horizontal = Dimens.gutter).padding(top = Dimens.screenTop, bottom = Dimens.screenBottom),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val profile = checked.profile
+    PinnedScreen(button = {
+        BigButton(if (setup) "Continue" else "Save", { if (profile != null) onSubmit(profile) }, enabled = profile != null, fill = if (profile != null) Theme.primary else Theme.track, textColor = if (profile != null) Theme.text else Theme.dim)
+    }) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             header()
             Text(if (setup) "About you" else "Profile", style = Type.pageTitle, color = Theme.text)
             Text(if (setup) "Used for your heart rate zones. You can change it later." else "Used for your heart rate zones.", style = Type.secondaryText, color = Theme.text2)
@@ -104,10 +104,14 @@ private fun ProfileFormScreen(
             Input("Height", form.height, shown(Field.Height, form.height), unit = "cm", modifier = Modifier.weight(1f), keyboard = KeyboardType.Decimal) { form = form.copy(height = it) }
         }
         Text("Heart rate", style = Type.cardTitle, color = Theme.text)
-        Input("Max heart rate", form.hrMax, shown(Field.HrMax, form.hrMax), unit = "bpm", hint = checked.maxHint) { form = form.copy(hrMax = it) }
-        Input("Resting heart rate", form.hrRest, shown(Field.HrRest, form.hrRest), unit = "bpm", hint = "Default 60. Change it any time.") { form = form.copy(hrRest = it) }
-        val profile = checked.profile
-        BigButton(if (setup) "Continue" else "Save", { if (profile != null) onSubmit(profile) }, enabled = profile != null, fill = if (profile != null) Theme.primary else Theme.track, textColor = if (profile != null) Theme.text else Theme.dim)
+        // Max and resting side by side, like weight and height, so the whole form fits the screen; one hint under both.
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Input("Max", form.hrMax, shown(Field.HrMax, form.hrMax), unit = "bpm", modifier = Modifier.weight(1f)) { form = form.copy(hrMax = it) }
+                Input("Resting", form.hrRest, shown(Field.HrRest, form.hrRest), unit = "bpm", modifier = Modifier.weight(1f)) { form = form.copy(hrRest = it) }
+            }
+            Text("${checked.maxHint} Resting defaults to 60.", style = Type.caption, color = Theme.text3)
+        }
     }
 }
 

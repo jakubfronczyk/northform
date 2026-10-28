@@ -89,17 +89,13 @@ fun SetupScreen(
 /** One Setup page: the progress, a title and subtitle, the step's content and its button at the bottom. */
 @Composable
 private fun SetupPage(step: SetupStep, back: (() -> Unit)?, title: String, subtitle: String, button: String, onButton: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        Modifier.fillMaxSize().background(Theme.bg).verticalScroll(rememberScrollState()).padding(horizontal = Dimens.gutter).padding(top = Dimens.screenTop, bottom = Dimens.screenBottom),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    PinnedScreen(button = { BigButton(button, onButton) }) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Progress(step, back)
             Text(title, style = Type.pageTitle, color = Theme.text)
             Text(subtitle, style = Type.secondaryText, color = Theme.text2)
         }
         content()
-        BigButton(button, onButton)
     }
 }
 

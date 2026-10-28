@@ -4,6 +4,10 @@ import androidx.compose.ui.unit.dp
 
 /** The recurring sizes of the artboards. One-off gaps and paddings stay where they are used. */
 object Dimens {
+    /** Between the blocks of a form-like screen (Setup, the editors): tight enough that a step fits the 16e without scrolling. */
+    val blockGap = 14.dp
+    /** Above a [com.jakubfronczyk.northform.ui.PinnedScreen]'s pinned button. */
+    val buttonGap = 12.dp
     /** The screen's side margin. */
     val gutter = 16.dp
     /** A screen's content starts this far down (under the status bar). */

@@ -1,5 +1,8 @@
 package com.jakubfronczyk.northform.ui
 
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -126,5 +129,18 @@ fun ConfirmSheet(title: String, detail: String, confirm: String, keep: String, o
             BigButton(confirm, onConfirm, fill = Theme.destructive)
             BigButton(keep, onKeep, fill = null)
         }
+    }
+}
+
+/**
+ * A screen whose content fits the phone when it can (Jakub's rule: no scrolling if it can be squeezed in) with its main
+ * [button] pinned at the bottom. The content scrolls only when it truly can't fit (the keyboard up, a smaller phone).
+ */
+@Composable
+fun PinnedScreen(button: @Composable () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxSize().background(Theme.bg).padding(horizontal = Dimens.gutter).padding(top = Dimens.screenTop, bottom = Dimens.screenBottom)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(Dimens.blockGap), content = content)
+        Spacer(Modifier.height(Dimens.buttonGap))
+        button()
     }
 }
