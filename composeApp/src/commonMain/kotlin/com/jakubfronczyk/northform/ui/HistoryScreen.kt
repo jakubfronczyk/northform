@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -52,9 +51,7 @@ fun HistoryScreen(
 ) {
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = Dimens.gutter).padding(top = Dimens.screenTop), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.offset(x = (-10).dp).size(Dimens.iconButton).clickable(onClick = back), contentAlignment = Alignment.Center) {
-                NfIcon(NfIcons.back, Theme.text, size = 22.dp, label = "Back to Today")
-            }
+            BackButton("Back to Today", back)
             Text("History", style = Type.pageTitle, color = Theme.text)
             if (model is HistoryModel.Listed) Filters(model, onFilter)
         }

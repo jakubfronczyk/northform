@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -53,9 +52,7 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(Modifier.offset(x = (-10).dp).size(Dimens.iconButton).clickable(onClick = back), contentAlignment = Alignment.Center) {
-                    NfIcon(NfIcons.back, Theme.text, size = 22.dp, label = "Back to Today")
-                }
+                BackButton("Back to Today", back)
                 Text("Settings", style = Type.pageTitle, color = Theme.text)
             }
             Section("Profile") {
@@ -76,7 +73,7 @@ fun SettingsScreen(
                             Text("Zones", style = Type.bodyStrong, color = Theme.text)
                             Text(SettingsModel.ZONES_SUB, style = Type.tertiaryText, color = Theme.text2)
                         }
-                        NfIcon(NfIcons.forward, Theme.text2, size = 18.dp)
+                        NfIcon(NfIcons.forward, Theme.text2, size = Dimens.iconSmall)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Theme.zoneColors.forEachIndexed { zone, color ->
@@ -96,7 +93,7 @@ fun SettingsScreen(
                     } else {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             Box(Modifier.size(Dimens.sensorDisc).background(Theme.bg, CircleShape), contentAlignment = Alignment.Center) {
-                                NfIcon(NfIcons.sensor, Theme.text, size = 22.dp)
+                                NfIcon(NfIcons.sensor, Theme.text, size = Dimens.icon)
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 Text(sensor.name, style = Type.cardTitle, color = Theme.text)
