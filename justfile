@@ -9,7 +9,7 @@ bootstrap:
     gradle wrapper --gradle-version 9.2.0 --distribution-type bin
     ./gradlew --version
 
-# The green bar: pure-module tests on the JVM (what CI runs on ubuntu). Fast, no Xcode.
+# The green bar: pure-module tests on the JVM. Fast, no Xcode.
 test:
     ./gradlew :core:jvmTest :engine:jvmTest :replay:jvmTest :persistence:jvmTest
 
