@@ -15,7 +15,7 @@ test:
 
 # Kotlin/Native tests in the iOS simulator (the boot-order test lives here, D9).
 test-sim:
-    ./gradlew :app:iosSimulatorArm64Test
+    ./gradlew :app:iosSimulatorArm64Test :replay:iosSimulatorArm64Test
 
 # Link the iOS framework without Xcode — proves the Kotlin side builds for device.
 link:

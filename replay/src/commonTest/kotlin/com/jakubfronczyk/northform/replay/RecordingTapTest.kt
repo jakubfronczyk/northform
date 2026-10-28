@@ -67,7 +67,7 @@ class RecordingTapTest {
             val tap = RecordingTap(script.meta) { written += it }
             for (input in RunHarness.timeline(script.meta.start, script.runInputs)) tap.observe(input) // ticks interleaved, as live
             tap.write()
-            assertEquals(text, written.last(), name)
+            if (swiftByteParity) assertEquals(text, written.last(), name) else assertEquals(Fixture.parse(text), Fixture.parse(written.last()), name)
         }
     }
 

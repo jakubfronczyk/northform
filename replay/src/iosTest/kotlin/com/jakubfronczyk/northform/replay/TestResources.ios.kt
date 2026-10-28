@@ -19,5 +19,11 @@ actual fun resourceText(path: String): String {
         ?: error("missing test resource $root/$path")
 }
 
+/**
+ * Kotlin/Native's `Double.toString` breaks an exact 17-digit tie the other way from the JVM and Swift
+ * (`1.1629104614257813` where they print `…812`, in run-2-walk); both strings parse to the same Double.
+ */
+actual val swiftByteParity: Boolean = false
+
 /** The simulator has no environment to point at a private file. */
 actual fun swiftFixtureText(): String? = null
