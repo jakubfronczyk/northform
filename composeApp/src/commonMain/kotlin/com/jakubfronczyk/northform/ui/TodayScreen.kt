@@ -161,7 +161,7 @@ internal fun RecentRow(row: RecordingRow, onClick: () -> Unit) {
             Text(km(row.distance, 13), style = Type.number22, color = Theme.text)
             Text(row.detail, style = Type.tertiaryText, color = Theme.text2)
         }
-        Chevron(Theme.text3, size = 16.dp)
+        Chevron(Theme.text3, size = 16.dp, icon = NfIcons.rowChevron)
     }
 }
 
@@ -172,7 +172,7 @@ private fun km(distance: String, unitSize: Int) = buildAnnotatedString {
 }
 
 @Composable
-private fun Chevron(color: Color = Theme.text2, size: Dp = 18.dp) = NfIcon(NfIcons.forward, color, size)
+private fun Chevron(color: Color = Theme.text2, size: Dp = 18.dp, icon: ImageVector = NfIcons.forward) = NfIcon(icon, color, size)
 
 /** The card's thumbnail: a generic loop, not this recording's route (the route map is the Summary's). */
 @Composable

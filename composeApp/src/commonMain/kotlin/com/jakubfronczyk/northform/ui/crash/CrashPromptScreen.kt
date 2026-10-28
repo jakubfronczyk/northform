@@ -1,5 +1,8 @@
 package com.jakubfronczyk.northform.ui.crash
 
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.jakubfronczyk.northform.ui.NfIcons
+import com.jakubfronczyk.northform.ui.NfIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -69,7 +72,10 @@ fun CrashPromptScreen(facts: CrashFacts, now: () -> Instant, onChoice: (CrashCho
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Interrupted $minutesAgo min ago · run started ${RunFormat.localTime(facts.startedAt, facts.tzOffset)}", style = Type.statusLabel, color = Theme.warn)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    NfIcon(NfIcons.interrupted, Theme.warn, size = 18.dp)
+                    Text("Interrupted $minutesAgo min ago · run started ${RunFormat.localTime(facts.startedAt, facts.tzOffset)}", style = Type.statusLabel, color = Theme.warn)
+                }
                 Text("Your run was interrupted", style = SheetHeadline, color = Theme.text)
                 Text(
                     if (facts.state == RecordingState.Active) "The app closed. This part is saved." else "The app closed after you stopped. This part is saved.",
@@ -99,7 +105,7 @@ fun CrashPromptScreen(facts: CrashFacts, now: () -> Instant, onChoice: (CrashCho
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 var confirmDelete by remember { mutableStateOf(false) }
                 for (choice in prompt.inFixedOrder()) when (choice) {
-                    CrashChoice.Continue -> ChoiceButton("Continue run", main = prompt.main == choice, mainColors = Continue) { onChoice(choice) }
+                    CrashChoice.Continue -> ChoiceButton("Continue run", main = prompt.main == choice, mainColors = Continue, icon = NfIcons.play) { onChoice(choice) }
                     CrashChoice.Save -> ChoiceButton("Save and finish", main = prompt.main == choice, mainColors = Save) { onChoice(choice) }
                     CrashChoice.Delete -> Text(
                         if (confirmDelete) "Tap again to delete this run" else "Delete run",
@@ -117,8 +123,8 @@ fun CrashPromptScreen(facts: CrashFacts, now: () -> Instant, onChoice: (CrashCho
 
 /** A main action is filled (white for Continue, the primary orange for Save); the other is outlined. */
 @Composable
-private fun ChoiceButton(title: String, main: Boolean, mainColors: Pair<Color, Color>, action: () -> Unit) =
-    BigButton(title, action, fill = mainColors.first.takeIf { main }, textColor = if (main) mainColors.second else Theme.text)
+private fun ChoiceButton(title: String, main: Boolean, mainColors: Pair<Color, Color>, icon: ImageVector? = null, action: () -> Unit) =
+    BigButton(title, action, fill = mainColors.first.takeIf { main }, textColor = if (main) mainColors.second else Theme.text, icon = icon)
 
 @Composable
 private fun RowScope.Fact(label: String, value: String, unit: String? = null) =

@@ -23,8 +23,6 @@ data class GateModel(
     val title: String,
     val subtitle: String,
     val hr: HrRow,
-    /** "Reading from Verity Sense" under a ready heart rate; "sensor" when the name is unknown (visual-polish/03). */
-    val hrSource: String,
     val gpsReady: Boolean,
     val gpsTitle: String,
     val gpsSub: String,
@@ -35,7 +33,8 @@ data class GateModel(
     val startEnabled: Boolean,
 ) {
     sealed interface HrRow {
-        data class Ready(val bpm: String) : HrRow
+        /** [source]: "Reading from Verity Sense", "sensor" when the name is unknown (visual-polish/03). */
+        data class Ready(val bpm: String, val source: String) : HrRow
         data object Waiting : HrRow
         /** Not connected. [action] is the button beside it: Connect a paired sensor, or Pair one when none is. */
         data class NoSensor(val action: SensorAction) : HrRow
@@ -81,10 +80,9 @@ data class GateModel(
                 },
                 hr = when {
                     noSensor -> HrRow.NoSensor(if (!sensor.paired) SensorAction.Pair else SensorAction.Connect)
-                    hrReady -> HrRow.Ready(snapshot.hrNow?.toString() ?: NO_VALUE)
+                    hrReady -> HrRow.Ready(snapshot.hrNow?.toString() ?: NO_VALUE, source = "Reading from ${sensor?.name ?: "sensor"}")
                     else -> HrRow.Waiting
                 },
-                hrSource = "Reading from ${sensor?.name ?: "sensor"}",
                 gpsReady = gpsReady,
                 gpsTitle = if (gpsReady) "GPS" else "GPS · finding signal…",
                 gpsSub = if (gpsReady) "Locked in" else "Needs ${RunReducer.gateFixes} fixes within ${RunReducer.gateFixAccuracy.toInt()} m",

@@ -66,7 +66,7 @@ fun GateScreen(
                 Box(
                     Modifier.size(44.dp).background(Theme.bg.copy(alpha = 0.85f), CircleShape).clip(CircleShape).clickable(onClick = close),
                     contentAlignment = Alignment.Center,
-                ) { NfIcon(NfIcons.back, Theme.text, size = 20.dp) }
+                ) { NfIcon(NfIcons.gateBack, Theme.text, size = 20.dp, label = "Back to Today") }
                 Chip(model.typeLabel, Theme.of(snapshot.type))
             }
         }
@@ -104,7 +104,7 @@ fun GateScreen(
 private fun ReadinessCard(model: GateModel, connectSensor: (() -> Unit)?, pairSensor: (() -> Unit)?) {
     Column(Modifier.fillMaxWidth().background(Theme.card, RoundedCornerShape(22.dp)).padding(horizontal = 16.dp, vertical = 4.dp)) {
         when (val hr = model.hr) {
-            is GateModel.HrRow.Ready -> CardRow(icon = { CheckBadge() }, title = "Heart rate", sub = model.hrSource) {
+            is GateModel.HrRow.Ready -> CardRow(icon = { CheckBadge() }, title = "Heart rate", sub = hr.source) {
                 BigValue(hr.bpm, "bpm")
             }
             GateModel.HrRow.Waiting -> CardRow(icon = { Spinner() }, title = "Heart rate · waiting…", sub = "No reading in the last 5 s") {}
