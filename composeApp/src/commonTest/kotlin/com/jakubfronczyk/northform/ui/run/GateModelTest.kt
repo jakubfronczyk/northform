@@ -117,4 +117,12 @@ class GateModelTest {
         assertEquals("Sensor battery 14 % · may not last the walk", GateModel.from(walk, GateSensor(connected = true, batteryPercent = 14, paired = true)).warning)
         assertEquals("Run", GateModel.from(ready).typeLabel)
     }
+
+    /** visual-polish/03: the heart-rate line names the paired sensor; without a name it says "sensor". */
+    @Test
+    fun the_heart_rate_line_names_the_sensor() {
+        assertEquals("Reading from Verity Sense", GateModel.from(ready, GateSensor(connected = true, batteryPercent = 82, paired = true, name = "Verity Sense")).hrSource)
+        assertEquals("Reading from sensor", GateModel.from(ready, GateSensor(connected = true, batteryPercent = 82, paired = true)).hrSource)
+        assertEquals("Reading from sensor", GateModel.from(ready).hrSource)
+    }
 }

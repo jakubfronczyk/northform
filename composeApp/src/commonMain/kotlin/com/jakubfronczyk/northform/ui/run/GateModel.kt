@@ -9,7 +9,7 @@ import com.jakubfronczyk.northform.engine.run.RunSnapshot
  * offers pairing instead). Not on `RunSessionHandle` today — the composition root passes it when it has
  * it; null means "unknown", which hides the battery row and assumes a sensor (the snapshot's `hrLost` still rules).
  */
-data class GateSensor(val connected: Boolean, val batteryPercent: Int?, val paired: Boolean)
+data class GateSensor(val connected: Boolean, val batteryPercent: Int?, val paired: Boolean, /** The paired sensor's advertised name (visual-polish/03). */ val name: String? = null)
 
 /**
  * The Gate artboard's copy and states as one pure function of the snapshot at `RunPhase.Gate`
@@ -23,6 +23,8 @@ data class GateModel(
     val title: String,
     val subtitle: String,
     val hr: HrRow,
+    /** "Reading from Verity Sense" under a ready heart rate; "sensor" when the name is unknown (visual-polish/03). */
+    val hrSource: String,
     val gpsReady: Boolean,
     val gpsTitle: String,
     val gpsSub: String,
@@ -82,6 +84,7 @@ data class GateModel(
                     hrReady -> HrRow.Ready(snapshot.hrNow?.toString() ?: NO_VALUE)
                     else -> HrRow.Waiting
                 },
+                hrSource = "Reading from ${sensor?.name ?: "sensor"}",
                 gpsReady = gpsReady,
                 gpsTitle = if (gpsReady) "GPS" else "GPS · finding signal…",
                 gpsSub = if (gpsReady) "Locked in" else "Needs ${RunReducer.gateFixes} fixes within ${RunReducer.gateFixAccuracy.toInt()} m",

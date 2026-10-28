@@ -173,7 +173,7 @@ object NorthformApp {
         if (!live) flowOf(null)
         else combine(sensor.states(), sensorDetails.paired) { change, paired ->
             val connected = change.state as? SensorState.Connected
-            GateSensor(connected = connected != null, batteryPercent = connected?.battery, paired = paired != null)
+            GateSensor(connected = connected != null, batteryPercent = connected?.battery, paired = paired != null, name = paired?.name)
         }
 
     /** `KeepAlive` is an `:adapters` class; `RunKeepAlive` is the app's seam for it (a fake in tests). */
