@@ -86,8 +86,8 @@ private fun HrChart(m: SummaryModel, modifier: Modifier) {
 private fun ZoneBar(z: SummaryModel.ZoneRow) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(z.label, style = Type.statusLabel, color = Theme.zoneColors[z.zone], modifier = Modifier.width(28.dp))
-        Box(Modifier.weight(1f).height(10.dp).background(Theme.track, Shapes.barTall)) {
-            Box(Modifier.fillMaxHeight().fillMaxWidth(z.fraction).background(Theme.zoneColors[z.zone], Shapes.barTall))
+        Box(Modifier.weight(1f).height(10.dp).background(Theme.track, Shapes.capsule)) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(z.fraction).background(Theme.zoneColors[z.zone], Shapes.capsule))
         }
         Text(z.time, style = Type.tertiaryText, color = Theme.text2, modifier = Modifier.width(Dimens.zoneTimeColumn))
     }
@@ -106,8 +106,8 @@ internal fun SplitsCard(m: SummaryModel) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(row.km, style = style, color = Theme.text, modifier = Modifier.weight(0.5f))
                 Row(Modifier.weight(2f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(Modifier.weight(1f).height(8.dp).background(Theme.track, Shapes.bar)) {
-                        Box(Modifier.fillMaxHeight().fillMaxWidth(row.paceFraction).background(Theme.accent, Shapes.bar))
+                    Box(Modifier.weight(1f).height(8.dp).background(Theme.track, Shapes.capsule)) {
+                        Box(Modifier.fillMaxHeight().fillMaxWidth(row.paceFraction).background(Theme.accent, Shapes.capsule))
                     }
                     Text(row.pace, style = style, color = Theme.text, modifier = Modifier.width(Dimens.paceColumn))
                 }

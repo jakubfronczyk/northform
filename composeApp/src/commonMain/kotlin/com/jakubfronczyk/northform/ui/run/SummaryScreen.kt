@@ -90,7 +90,7 @@ private fun FailedContent(reason: String, noun: String, busy: Boolean, onRetry: 
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         Column(Modifier.fillMaxSize().padding(horizontal = Dimens.gutter).padding(top = Dimens.screenTop, bottom = Dimens.screenBottom), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.weight(1f))
-            Text("Couldn't compute this $noun", style = Type.screenTitle, color = Theme.text)
+            Text("Couldn't compute this $noun", style = Type.pageTitle, color = Theme.text)
             Spacer(Modifier.height(8.dp))
             Text(reason, style = Type.secondaryText, color = Theme.text3)
             Spacer(Modifier.weight(1f))
@@ -116,7 +116,7 @@ private fun SummaryContent(m: SummaryModel, edits: SummaryEdits, onEdit: (Summar
             }
             Column(Modifier.padding(horizontal = Dimens.gutter).padding(top = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(m.typeLabel, style = Type.pillLabel, color = Theme.text, modifier = Modifier.background(Theme.card, Shapes.tag).padding(horizontal = 10.dp, vertical = 4.dp))
+                Text(m.typeLabel, style = Type.pillLabel, color = Theme.text, modifier = Modifier.background(Theme.card, Shapes.capsule).padding(horizontal = 10.dp, vertical = 4.dp))
                 Text(m.dateLine, style = Type.secondaryText, color = Theme.text2)
                 Spacer(Modifier.weight(1f))
                 BinButton(enabled = !busy) { confirmDelete = true }

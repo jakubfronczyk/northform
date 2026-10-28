@@ -42,17 +42,16 @@ object Type {
     val countdown = number(190, FontWeight.ExtraBold, family = Fonts.narrowest).tight()
 
     // Hoisted once: these sit on the 1 Hz live screen.
-    val number54Black = number(54, FontWeight.Black, family = Fonts.narrowest)
+    /** A live big number and the Sensor screen's heart rate (54 px, 800, 78 %). */
+    val number54 = number(54, FontWeight.ExtraBold, family = Fonts.narrowest)
     val number40 = number(40, family = Fonts.narrowest)
     val number24 = number(24, family = Fonts.condensed)
     val number22 = number(22, family = Fonts.condensed)
     val pillLabel = text(13, FontWeight.Bold)
 
-    // Near-duplicate: `screenTitle` (28 Black), `pageTitle` (28 ExtraBold, tabular) and `heroTitle` (28 ExtraBold);
-    // kept apart for the owner to decide.
-    val screenTitle = text(28, FontWeight.Black, family = Fonts.condensed)
-    val homeTitle = text(34, FontWeight.Black, family = Fonts.condensed)
-    // Near-duplicate: `sheetTitle` (18 Bold) and `cardTitle` (17 Bold); kept apart for the owner to decide.
+    /** Today's "Today" title (34 px, 800, 85 %). */
+    val homeTitle = text(34, FontWeight.ExtraBold, family = Fonts.condensed)
+    /** A sheet's title (18 Bold). One step above [cardTitle] (17 Bold) on purpose: the artboards keep the two apart. */
     val sheetTitle = text(18, FontWeight.Bold)
     /** A big button's label and the live screen's "Hold to stop": `sheetTitle`'s size, a touch narrower (90 %). */
     val buttonLabel = text(18, FontWeight.Bold, family = Fonts.semiCondensed)
@@ -60,22 +59,23 @@ object Type {
     val secondaryText = text(15)
     val tertiaryText = text(13)
     val statusLabel = text(14, FontWeight.SemiBold)
-    // Near-duplicate: `unitLabel` (15 Medium) and `liveUnit` (16 Medium); kept apart for the owner to decide.
-    val unitLabel = text(15, FontWeight.Medium)
+    /** A unit after a live value: " /km", " km", " bpm", the cool-down's "left" (LiveDark: 16 px, 500). */
+    val unitLabel = text(16, FontWeight.Medium)
 
-    /** The title of a pushed page: History, Settings, Profile, Zones. */
-    val pageTitle = number(28, FontWeight.ExtraBold, family = Fonts.condensed)
-    /** The Sensor screen's state headline ("Connected", "Can’t find it"). */
-    val heroTitle = text(28, FontWeight.ExtraBold, family = Fonts.condensed)
+    /**
+     * A screen's 28 px title (800, 85 %): History, Settings, Profile, Zones, the Sensor screen's state headline, the
+     * cool-down's title, the Summary's error.
+     */
+    val pageTitle = text(28, FontWeight.ExtraBold, family = Fonts.condensed)
     /** The Gate's "Ready to run" headline. */
     val gateTitle = text(24, FontWeight.ExtraBold, family = Fonts.condensed)
     /** The headline of a bottom sheet: the shared confirm, the crash prompt. */
-    val sheetHeadline = text(22, FontWeight.Black, family = Fonts.condensed)
+    val sheetHeadline = text(22, FontWeight.ExtraBold, family = Fonts.condensed)
     /** Today's Run and Walk tile names. */
     val tileTitle = number(26, FontWeight.ExtraBold, family = Fonts.condensed)
     /** The distance on Today's last-recording card. */
     val cardDistance = number(28, FontWeight.ExtraBold, family = Fonts.narrow)
-    /** A card's or section's title: Today's Recent, a sensor's name, Settings' Backup, the profile's Heart rate. */
+    /** A card's or section's title: Today's Recent, a sensor's name, Settings' Backup, the profile's Heart rate. See [sheetTitle]. */
     val cardTitle = text(17, FontWeight.Bold)
     /** A row's bold name: Today's sensor card, the Sensor screen's firmware warning. */
     val bodyBold = text(16, FontWeight.Bold)
@@ -103,8 +103,6 @@ object Type {
     val fieldText = number(16, FontWeight.Normal)
     /** The zone editor's − and + symbols. */
     val stepperSymbol = number(20, FontWeight.Bold)
-    /** " bpm" beside the Sensor screen's live heart rate. */
-    val liveUnit = text(16, FontWeight.Medium)
     /** " km" after the distance on Today's last-recording card (a span: the caller colours it). */
     val cardUnit = SpanStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium)
     /** " km" after the distance on a Recent / History row (a span: the caller colours it). */

@@ -166,7 +166,7 @@ private fun Hero(look: Look) {
                 sensorGlyph(look.ring, 46.dp.toPx(), 1.8.dp.toPx())
             }
         }
-        Text(look.title, style = Type.heroTitle, color = look.status)
+        Text(look.title, style = Type.pageTitle, color = look.status)
         Text(look.sub, style = Type.secondaryText, color = Theme.text2, textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 300.dp))
     }
 }
@@ -201,8 +201,8 @@ private fun ConnectedCard(ui: SensorScreenModel.Ui) = Card {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text("Live heart rate", style = Type.rowLabel, color = Theme.text2)
             Row(verticalAlignment = Alignment.Bottom) {
-                Text(ui.bpm?.toString() ?: "–", style = Type.number54Black, color = Theme.text)
-                Text(" bpm", style = Type.liveUnit, color = Theme.text2, modifier = Modifier.padding(bottom = 10.dp))
+                Text(ui.bpm?.toString() ?: "–", style = Type.number54, color = Theme.text)
+                Text(" bpm", style = Type.unitLabel, color = Theme.text2, modifier = Modifier.padding(bottom = 10.dp))
             }
         }
         Spacer(Modifier.weight(1f))

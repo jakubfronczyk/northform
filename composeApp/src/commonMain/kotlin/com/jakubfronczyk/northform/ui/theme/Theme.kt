@@ -14,9 +14,9 @@ object Theme {
     val line = Color(0xFF34363A)
     val text = Color(0xFFF4F4F2)
     val text2 = Color(0xFFA9AAA6)
-    // Near-duplicate: `text3` (#8E8F8B) and `dim` (#8A8B88) differ by a few steps; kept apart for the owner to decide.
     val text3 = Color(0xFF8E8F8B)
-    val dim = Color(0xFF8A8B88)
+    /** A disabled control's ink. The same grey as [text3], kept as its own role so disabled can change on its own. */
+    val dim = text3
     val ring = Color(0xFF6A6B6E)
     /** The outline of an unselected pill and the Walk tile (`#707175` on the Today and History artboards). */
     val outline = Color(0xFF707175)
@@ -37,11 +37,8 @@ object Theme {
     val danger = Color(0xFFFF6961)
     /** The filled confirm of the shared destructive sheet (`DeleteConfirm.dc.html`). */
     val destructive = Color(0xFFB83A2E)
-    // Near-duplicate: `scrim` (black at 60 %) and `scrimStrong` (rgba(8,8,9,0.72)); kept apart for the owner to decide.
-    /** The dim behind the shared confirm sheet. */
+    /** The dim behind a bottom sheet: the shared confirm, the crash prompt (black at 60 %). */
     val scrim = Color(0x99000000)
-    /** The dim behind the crash prompt (`CrashPrompt.dc.html`, rgba(8,8,9,0.72)). */
-    val scrimStrong = Color(0xB8080809)
     /** The map placeholder (LiveDark / Gate artboards) and Today's last-recording thumbnail. */
     val panel = Color(0xFF1D1F21)
     /** An unlit segment: the live zone bar, the Gate's GPS fix bars. */
