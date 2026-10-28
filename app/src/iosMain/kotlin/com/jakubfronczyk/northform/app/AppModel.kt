@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.app
 
+import com.jakubfronczyk.northform.ui.ExportState
 import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.EventKind
 import com.jakubfronczyk.northform.core.RecordingId
@@ -44,6 +45,10 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     private val _profile = MutableStateFlow(deps.profile)
     /** The runner's current profile (profile-settings spec): the stored one once read at launch, the fallback until then. */
     val profile: StateFlow<Profile> = _profile.asStateFlow()
+
+    private val _export = MutableStateFlow<ExportState>(ExportState.Idle)
+    /** Settings' Export backup (profile-settings/02). */
+    val export: StateFlow<ExportState> = _export.asStateFlow()
 
     private val _saved = MutableStateFlow<SavedList>(SavedList.Loading)
     /** Every saved recording (history-screen spec: one list, Today takes three), re-read at launch and whenever the Summary closes. */
@@ -288,6 +293,26 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
         if (session.review) return
         session.acceptHrMax()
         saveProfile(_profile.value.copy(hrMax = suggested))
+    }
+
+    /**
+     * Export backup: Busy while the file is written, then Saved with its name or Failed with why (and can be tapped
+     * again). Busy is claimed by compare-and-set, so a second tap meanwhile writes nothing.
+     */
+    fun exportBackup() {
+        var claimed = false
+        _export.update { now -> if (now == ExportState.Busy) now else ExportState.Busy.also { claimed = true } }
+        if (!claimed) return
+        scope.launch {
+            _export.value = try {
+                ExportState.Saved(deps.exportBackup())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                deps.log("export failed: $e")
+                ExportState.Failed(e.message ?: e.toString())
+            }
+        }
     }
 
     /** Stores [profile] as the runner's own; every run, Summary and suggestion from now on uses it. A failure is logged. */

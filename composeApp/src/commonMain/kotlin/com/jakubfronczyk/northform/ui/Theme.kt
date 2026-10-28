@@ -100,16 +100,27 @@ object RunFormat {
         return "${WEEKDAYS[d.weekday]} ${d.day} ${MONTHS[d.month - 1]}" + if (withYear) " ${d.year}" else ""
     }
 
+    /** "14.03.1996": a birth date (stored as UTC midnight, so read in UTC), as the profile form types it. */
+    fun birthDate(instant: Instant): String = civil(instant, 0).let { "${it.day.pad2()}.${it.month.pad2()}.${it.year}" }
+
+    /** Whole years from [birth] (UTC midnight) to [now] in the phone's zone: the age turns on the birthday, not before. */
+    fun age(birth: Instant, now: Instant, tzOffset: Int): Int {
+        val b = civil(birth, 0)
+        val n = civil(now, tzOffset)
+        return (n.year - b.year).toInt() - if (n.month < b.month || (n.month == b.month && n.day < b.day)) 1 else 0
+    }
+
     /** The calendar year at [instant] in a zone [tzOffset] seconds east of UTC. */
     fun year(instant: Instant, tzOffset: Int): Long = civil(instant, tzOffset).year
 
     /** "156 bpm", or null without heart rate: a row or card leaves it out rather than showing a dash. */
     fun bpm(avgHr: Int?): String? = avgHr?.let { "$it bpm" }
 
-    private class Civil(val year: Long, val month: Int, val day: Int, val weekday: Int)
+    /** A calendar date: weekday 0 = Sunday. */
+    internal class Civil(val year: Long, val month: Int, val day: Int, val weekday: Int)
 
     /** Civil date from days since the epoch (Howard Hinnant's algorithm); no date library. */
-    private fun civil(instant: Instant, tzOffset: Int): Civil {
+    internal fun civil(instant: Instant, tzOffset: Int): Civil {
         val days = (instant.epochSeconds + tzOffset).floorDiv(86_400L)
         val z = days + 719_468
         val era = z.floorDiv(146_097L)

@@ -1,5 +1,10 @@
 package com.jakubfronczyk.northform.ui
 
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -101,4 +106,26 @@ fun VDivider(modifier: Modifier) = Box(modifier.width(1.dp).background(Theme.lin
 @Composable
 fun DashedLine() = Canvas(Modifier.fillMaxWidth().height(1.dp)) {
     drawLine(Theme.line, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx())))
+}
+
+/**
+ * The shared destructive confirm (`DeleteConfirm.dc.html`): a sheet over a dimmed screen with [title], [detail], the
+ * red [confirm] and an outlined [keep]. Tapping outside keeps. Summary's Delete and Settings' Forget sensor use it.
+ */
+@Composable
+fun ConfirmSheet(title: String, detail: String, confirm: String, keep: String, onKeep: () -> Unit, onConfirm: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(Color(0x99000000)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onKeep)) {
+        Column(
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .background(Theme.card, RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
+                .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 50.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            Text(title, style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Black), color = Theme.text)
+            Text(detail, style = Type.secondaryText, color = Theme.text2)
+            BigButton(confirm, onConfirm, fill = Color(0xFFB83A2E))
+            BigButton(keep, onKeep, fill = null)
+        }
+    }
 }

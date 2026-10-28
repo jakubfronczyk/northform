@@ -1,5 +1,12 @@
 package com.jakubfronczyk.northform.app
 
+import platform.Foundation.NSBundle
+import com.jakubfronczyk.northform.ui.SettingsModel
+import kotlin.time.Instant
+import platform.Foundation.dateWithTimeIntervalSince1970
+import platform.Foundation.NSDate
+import platform.Foundation.NSDateFormatter
+import com.jakubfronczyk.northform.persistence.BackupCodec
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -121,6 +128,7 @@ object NorthformApp {
             store = LoggingStore(sqlStore, DeviceLog::runTrace),
             reliability = sqlStore,
             profileStore = sqlStore,
+            exportBackup = { exportBackup(sqlStore, wallClock.now()) },
             saved = StoredSavedRecordings(sqlStore, sqlStore, DeviceLog::runTrace),
             wallClock = wallClock,
             alerts = runAlerts,
@@ -163,6 +171,24 @@ object NorthformApp {
     /** The Settings deep link the gate offers next to a `Denied` hint (`LocationHint.canOpenSettings`). */
     fun openLocationSettings() = openAppSettings()
 
+    /**
+     * Settings' Export backup (D26): every run and its raw streams as one JSON file at the top of Documents, visible in
+     * the Files app (`UIFileSharingEnabled`). Returns the file name; throws when it cannot be written.
+     */
+    private suspend fun exportBackup(store: SqlRecordingStore, now: Instant): String {
+        val stamp = NSDateFormatter().apply { dateFormat = "yyyyMMdd-HHmm" }.stringFromDate(NSDate.dateWithTimeIntervalSince1970(now.epochSeconds.toDouble()))
+        val name = "northform-backup-$stamp.json"
+        val text = BackupCodec.encode(store.exportAll(now))
+        check(Documents.write(Documents.topLevelPath(name), text)) { "could not write $name" }
+        return name
+    }
+
+    /** "Version 1.0 (14)" from the bundle (Info.plist), as the Settings artboard prints it. */
+    private fun appVersion(): String {
+        val info = NSBundle.mainBundle.infoDictionary
+        return "Version ${info?.get("CFBundleShortVersionString") ?: "?"} (${info?.get("CFBundleVersion") ?: "?"})"
+    }
+
     /** Connects the paired sensor, if any; a timeout is not an error here (the link keeps trying). */
     private fun connectPairedSensor() {
         val id = sensor.linkState.value.paired ?: return
@@ -191,12 +217,19 @@ object NorthformApp {
         val gateSensor by remember { gateSensorStates() }.collectAsState(null)
         val saved by model.saved.collectAsState()
         val sensorName by remember { if (live) sensorDetails.paired.map { it?.name } else flowOf(null) }.collectAsState(null)
+        val paired by remember { if (live) sensorDetails.paired else flowOf(null) }.collectAsState(null)
+        val firmware by remember { if (live) sensorDetails.firmware else flowOf(null) }.collectAsState(null)
+        val profile by model.profile.collectAsState()
+        val export by model.export.collectAsState()
         AppRoot(
             activeRun = activeRun?.session,
             today = TodayModel.from(saved.recordings, gateSensor, sensorName, deps.wallClock.now(), deps.tzOffset()),
             history = { filter -> HistoryModel.from(saved, filter, deps.wallClock.now()) },
             retryHistory = model::refreshSaved,
             openRecording = model::openRecording,
+            settings = SettingsModel.from(profile, deps.wallClock.now(), deps.tzOffset(), paired, gateSensor?.batteryPercent, firmware, export, appVersion()),
+            exportBackup = model::exportBackup,
+            forgetSensor = { scope.launch { runCatching { sensorDetails.forget() }.onFailure { DeviceLog.app.notice("forget failed: $it") } } },
             onStartRun = model::startRun,
             onCloseRun = model::closeRun,
             map = { route -> RouteMap(route, showsUserLocation = live) },

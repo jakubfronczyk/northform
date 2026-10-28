@@ -37,6 +37,8 @@ object NfIcons {
     val sensor = stroked(2f, roundedRect(6f, 5f, 12f, 14f, 4f), "M9 12h1.5l1-2 1.5 4 1-2H15")
     val runner = stroked(2f, circle(15f, 4.5f, 1.8f), "M9 21l3-6 3 2v4", "M6 12l3-4 4 1 2 4 3 1")
     val walker = stroked(2f, circle(13f, 4.5f, 1.8f), "M10 21l2-6 2 2v4", "M9 13l1-5 3 1 2 3")
+    /** Today's Settings button. */
+    val gear = stroked(2f, circle(12f, 12f, 3f), "M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z")
     val play: ImageVector = icon { addPath(addPathNodes("M7 4.5v15l13-7.5z"), fill = SolidColor(Color.Black)) }
 
     private val batteryFull = battery("M6 10.5v3M9.5 10.5v3M13 10.5v3")

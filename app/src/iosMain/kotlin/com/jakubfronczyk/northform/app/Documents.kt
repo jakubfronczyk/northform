@@ -27,10 +27,12 @@ object Documents {
         return dir.URLByAppendingPathComponent(fileName)!!.path!!
     }
 
-    /** Whole-file atomic write, as the Swift `write(to:atomically:)`. */
-    fun write(path: String, text: String) {
+    /** A file at the top of Documents, where the Files app shows it (the backup, D26). */
+    fun topLevelPath(fileName: String): String = root.URLByAppendingPathComponent(fileName)!!.path!!
+
+    /** Whole-file atomic write, as the Swift `write(to:atomically:)`; false when it could not be written. */
+    fun write(path: String, text: String): Boolean =
         (text as NSString).writeToFile(path, atomically = true, encoding = NSUTF8StringEncoding, error = null)
-    }
 }
 
 /**

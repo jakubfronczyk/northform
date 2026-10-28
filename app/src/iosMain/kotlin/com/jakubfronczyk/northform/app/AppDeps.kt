@@ -110,6 +110,8 @@ class AppDeps(
     val profile: Profile = sampleProfile,
     /** Where the runner's profile is kept: the SQL store on the phone. */
     val profileStore: ProfileStore = InMemoryProfileStore(),
+    /** Settings' Export backup (profile-settings/02, D26): writes every run to a file in Files and returns its name; throws on failure. */
+    val exportBackup: suspend () -> String = { error("no backup in this wiring") },
     val newRecordingId: () -> String = { NSUUID().UUIDString },
     val tzOffset: () -> Int = { NSTimeZone.localTimeZone.secondsFromGMT.toInt() },
 ) {

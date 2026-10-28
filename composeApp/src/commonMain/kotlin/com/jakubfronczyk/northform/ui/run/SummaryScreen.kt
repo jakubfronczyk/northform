@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.ui.run
 
+import com.jakubfronczyk.northform.ui.ConfirmSheet
 import com.jakubfronczyk.northform.ui.NfIcons
 import com.jakubfronczyk.northform.ui.NfIcon
 import androidx.compose.foundation.background
@@ -102,7 +103,7 @@ private fun FailedContent(reason: String, noun: String, busy: Boolean, onRetry: 
             BigButton("Delete $noun", { confirmDelete = true }, fill = null, enabled = !busy)
         }
         if (review) BackButton(onBack)
-        if (confirmDelete) DeleteConfirmSheet(what = noun, detail = "Nothing could be computed from it. This can't be undone.", onKeep = { confirmDelete = false }, onDelete = { confirmDelete = false; onDelete() })
+        if (confirmDelete) ConfirmSheet("Delete this $noun?", "Nothing could be computed from it. This can't be undone.", confirm = "Delete for good", keep = "Keep $noun", onKeep = { confirmDelete = false }, onConfirm = { confirmDelete = false; onDelete() })
     }
 }
 
@@ -158,7 +159,7 @@ private fun SummaryContent(m: SummaryModel, edits: SummaryEdits, onEdit: (Summar
         }
         if (review) BackButton(onBack)
         // `DeleteConfirm.dc.html`: "Tempo · 10.21 km · 30 Sep. This can't be undone."
-        if (confirmDelete) DeleteConfirmSheet(what = m.typeLabel.lowercase(), detail = "${edits.tag?.name ?: m.typeLabel} · ${m.distance} km · ${m.dateLine.substringBefore(" ·")}. This can't be undone.", onKeep = { confirmDelete = false }, onDelete = { confirmDelete = false; onDelete() })
+        if (confirmDelete) ConfirmSheet("Delete this ${m.typeLabel.lowercase()}?", "${edits.tag?.name ?: m.typeLabel} · ${m.distance} km · ${m.dateLine.substringBefore(" ·")}. This can't be undone.", confirm = "Delete for good", keep = "Keep ${m.typeLabel.lowercase()}", onKeep = { confirmDelete = false }, onConfirm = { confirmDelete = false; onDelete() })
     }
 }
 
@@ -239,24 +240,6 @@ private fun BinButton(enabled: Boolean, onClick: () -> Unit) {
     ) { NfIcon(NfIcons.bin, if (enabled) Theme.text2 else Theme.dim, size = 18.dp, label = "Delete") }
 }
 
-/** `DeleteConfirm.dc.html` (R27: the second of the two taps): a scrim and a bottom sheet with the run's headline numbers. */
-@Composable
-private fun DeleteConfirmSheet(what: String, detail: String, onKeep: () -> Unit, onDelete: () -> Unit) {
-    Box(Modifier.fillMaxSize().background(Color(0x99000000)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onKeep)) {
-        Column(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                .background(Theme.card, RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
-                .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 50.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-        ) {
-            Text("Delete this $what?", style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Black), color = Theme.text)
-            Text(detail, style = Type.secondaryText, color = Theme.text2)
-            BigButton("Delete for good", onDelete, fill = Color(0xFFB83A2E))
-            BigButton("Keep $what", onKeep, fill = null)
-        }
-    }
-}
 
 /** history-screen/03: Back on a reopened Summary, over the map's top-left corner as on the gate. */
 @Composable

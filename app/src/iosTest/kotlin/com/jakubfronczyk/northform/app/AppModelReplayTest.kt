@@ -12,6 +12,7 @@ import kotlinx.coroutines.CompletableDeferred
 import com.jakubfronczyk.northform.core.ports.SavedRecordings
 import com.jakubfronczyk.northform.core.ports.SavedRows
 import com.jakubfronczyk.northform.engine.store.StoredSavedRecordings
+import com.jakubfronczyk.northform.ui.ExportState
 import com.jakubfronczyk.northform.ui.SavedList
 import com.jakubfronczyk.northform.core.UserAction
 import com.jakubfronczyk.northform.core.ports.Alert
@@ -189,11 +190,12 @@ class AppModelReplayTest {
         saved: SavedRecordings = StoredSavedRecordings(store, store) {},
         port: RecordingStore = store,
         profiles: ProfileStore = InMemoryProfileStore(),
+        exportBackup: suspend () -> String = { "northform-backup.json" },
         newRecordingId: () -> String = { "00000000-0000-0000-0000-00000000000a" },
     ) = AppModel(
         AppDeps(
             source = RunSource.Replay { straightRun() }, store = port, reliability = store, wallClock = virtualWallClock(straightRun().meta.start),
-            alerts = RecordedAlerts(), profileStore = profiles, newRecordingId = newRecordingId, saved = saved,
+            alerts = RecordedAlerts(), profileStore = profiles, exportBackup = exportBackup, newRecordingId = newRecordingId, saved = saved,
         ),
         backgroundScope,
     )
@@ -245,6 +247,34 @@ class AppModelReplayTest {
         model.closeRun(); advanceTimeBy(1.seconds); runCurrent()
         model.editSummary(SummaryEdits(tag = RunTag.Easy, rpe = 4, notes = "flat")); model.saveSummary(); runCurrent()
         return run.id
+    }
+
+    /** profile-settings/02: Export backup is busy while the file is written, then says where it went. */
+    @Test
+    fun export_is_busy_while_writing_then_saved_and_a_second_tap_meanwhile_does_nothing() = runTest {
+        val written = CompletableDeferred<String>()
+        var calls = 0
+        val model = appOver(InMemoryRecordingStore(), exportBackup = { calls++; written.await() })
+
+        model.exportBackup(); runCurrent()
+        assertEquals(ExportState.Busy, model.export.value)
+        model.exportBackup(); runCurrent()
+        written.complete("northform-backup-20261028-1200.json"); runCurrent()
+
+        assertEquals(ExportState.Saved("northform-backup-20261028-1200.json"), model.export.value)
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun a_failed_export_says_why_and_can_be_tried_again() = runTest {
+        var fail = true
+        val model = appOver(InMemoryRecordingStore(), exportBackup = { if (fail) error("disk full") else "b.json" })
+
+        model.exportBackup(); runCurrent()
+        assertEquals(ExportState.Failed("disk full"), model.export.value)
+        fail = false
+        model.exportBackup(); runCurrent()
+        assertEquals(ExportState.Saved("b.json"), model.export.value)
     }
 
     /** profile-settings/01: the stored profile, read at launch, is what a new run computes with. */
