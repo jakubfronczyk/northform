@@ -23,3 +23,10 @@ kotlin {
         }
     }
 }
+
+// A Kotlin/Native test runs in the simulator (`simctl spawn`), not in this module's directory, and its binary
+// carries no resources. The simulator shares the host filesystem, so hand the test the absolute path of the
+// fixtures; `simctl` passes a `SIMCTL_CHILD_`-prefixed variable to the spawned process without the prefix.
+tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeSimulatorTest>().configureEach {
+    environment("SIMCTL_CHILD_NORTHFORM_REPLAY_RESOURCES", file("src/commonMain/resources").absolutePath)
+}
