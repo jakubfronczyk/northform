@@ -9,6 +9,7 @@ import com.jakubfronczyk.northform.core.LocationFix
 import com.jakubfronczyk.northform.testing.virtualWallClock
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -38,14 +39,20 @@ class LiveLocationRestartTest {
         override fun release() { trace += "release" }
     }
 
-    /** The Swift forwarder as a fake: counts starts, lets the test end the stream or deliver a fix. */
+    /**
+     * The Swift forwarder as a fake: counts starts, lets the test end the stream or deliver a fix. Like the real one
+     * (`LocationForwarder.swift`), `start` stops the previous stream first, and stopping a stream that is still alive
+     * ends its `for try await`, which reports `onEnded` to *that* stream's sink.
+     */
     private inner class FakeUpdates : LocationUpdates {
         var starts = 0
         var stops = 0
         var sink: LocationSink? = null
-        override fun start(sink: LocationSink) { starts += 1; this.sink = sink; trace += "start" }
-        override fun stop() { stops += 1; trace += "stop" }
-        fun end() = sink!!.onEnded("test")
+        private var alive = false
+        override fun start(sink: LocationSink) { cancelLive(); starts += 1; this.sink = sink; alive = true; trace += "start" }
+        override fun stop() { stops += 1; trace += "stop"; cancelLive() }
+        private fun cancelLive() { if (alive) { alive = false; sink!!.onEnded("cancelled") } }
+        fun end() { alive = false; sink!!.onEnded("test") }
         fun fix(at: Instant) {
             val location = CLLocation(
                 coordinate = CLLocationCoordinate2DMake(52.5, 13.4), altitude = 0.0, horizontalAccuracy = 5.0, verticalAccuracy = -1.0,
@@ -60,7 +67,7 @@ class LiveLocationRestartTest {
         val updates = FakeUpdates()
         val log = ArrayList<String>()
         val received = ArrayList<LocationFix>()
-        val live = LiveLocation(updates, virtualWallClock(start), MutableStateFlow(LocationAuthorization.WhenInUse), log::add, keepAlive)
+        val live = LiveLocation(updates, virtualWallClock(start), MutableStateFlow(LocationAuthorization.WhenInUse), keepAlive, log::add)
         val job = live.fixes().onEach { received += it }.launchIn(backgroundScope)
         runCurrent()
         assertEquals(1, updates.starts)
@@ -103,7 +110,7 @@ class LiveLocationRestartTest {
     fun does_not_restart_when_location_is_denied() = runTest {
         val updates = FakeUpdates()
         val log = ArrayList<String>()
-        val live = LiveLocation(updates, virtualWallClock(start), MutableStateFlow(LocationAuthorization.Denied), log::add, keepAlive)
+        val live = LiveLocation(updates, virtualWallClock(start), MutableStateFlow(LocationAuthorization.Denied), keepAlive, log::add)
         live.fixes().launchIn(backgroundScope); runCurrent()
         updates.end(); advanceTimeBy(120.seconds); runCurrent()
         assertEquals(1, updates.starts)
@@ -116,7 +123,7 @@ class LiveLocationRestartTest {
     fun does_not_restart_when_location_is_restricted() = runTest {
         val updates = FakeUpdates()
         val log = ArrayList<String>()
-        val live = LiveLocation(updates, virtualWallClock(start), MutableStateFlow(LocationAuthorization.Restricted), log::add, keepAlive)
+        val live = LiveLocation(updates, virtualWallClock(start), MutableStateFlow(LocationAuthorization.Restricted), keepAlive, log::add)
         live.fixes().launchIn(backgroundScope); runCurrent()
         updates.end(); advanceTimeBy(120.seconds); runCurrent()
         assertEquals(1, updates.starts)
@@ -128,7 +135,7 @@ class LiveLocationRestartTest {
         val updates = FakeUpdates()
         val log = ArrayList<String>()
         val authorization = MutableStateFlow(LocationAuthorization.Denied)
-        val live = LiveLocation(updates, virtualWallClock(start), authorization, log::add, keepAlive)
+        val live = LiveLocation(updates, virtualWallClock(start), authorization, keepAlive, log::add)
         live.fixes().launchIn(backgroundScope); runCurrent()
         updates.end(); advanceTimeBy(120.seconds); runCurrent()
         assertEquals(1, updates.starts, "denied: GPS stays off")
@@ -187,5 +194,46 @@ class LiveLocationRestartTest {
         updates.end(); advanceTimeBy(60.seconds); runCurrent()
         job.cancel(); runCurrent()
         assertEquals(listOf("hold", "start", "stop", "release"), trace, "as before: the run holds it whatever the answer; iOS keeps it suspended")
+    }
+
+    // ── review fixes ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun the_old_stream_ending_because_a_grant_replaced_it_does_not_restart_gps() = runTest {
+        val updates = FakeUpdates()
+        val authorization = MutableStateFlow(LocationAuthorization.NotDetermined)
+        val live = LiveLocation(updates, virtualWallClock(start), authorization, keepAlive = keepAlive)
+        live.fixes().launchIn(backgroundScope); runCurrent()
+        authorization.value = LocationAuthorization.WhenInUse; runCurrent()
+        assertEquals(2, updates.starts, "granted: restarted once")
+        advanceTimeBy(120.seconds); runCurrent()
+        assertEquals(2, updates.starts, "the replaced stream's onEnded is stale: no backoff restart loop")
+    }
+
+    @Test
+    fun a_slow_collector_loses_no_fix() = runTest {
+        val updates = FakeUpdates()
+        val received = ArrayList<LocationFix>()
+        val live = LiveLocation(updates, virtualWallClock(start), MutableStateFlow(LocationAuthorization.WhenInUse), keepAlive = keepAlive)
+        live.fixes().onEach { delay(1.seconds); received += it }.launchIn(backgroundScope); runCurrent()
+        repeat(200) { updates.fix(start + (it + 1).seconds) }
+        advanceTimeBy(300.seconds); runCurrent()
+        assertEquals(200, received.size)
+    }
+
+    @Test
+    fun overlapping_collections_keep_gps_and_the_keep_alive_until_the_last_one_leaves() = runTest {
+        val updates = FakeUpdates()
+        val received = ArrayList<LocationFix>()
+        val live = LiveLocation(updates, virtualWallClock(start), MutableStateFlow(LocationAuthorization.WhenInUse), keepAlive = keepAlive)
+        val finishing = live.fixes().launchIn(backgroundScope); runCurrent()
+        val next = live.fixes().onEach { received += it }.launchIn(backgroundScope); runCurrent()
+        finishing.cancel(); advanceTimeBy(60.seconds); runCurrent()
+        assertEquals(listOf("hold", "start", "start"), trace, "the finishing run neither stops the new run's GPS, nor releases, nor restarts")
+
+        updates.fix(start + 61.seconds); runCurrent()
+        assertEquals(1, received.size, "the new run still gets fixes")
+        next.cancel(); runCurrent()
+        assertEquals(listOf("hold", "start", "start", "stop", "release"), trace)
     }
 }

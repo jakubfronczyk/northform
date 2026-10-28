@@ -24,6 +24,7 @@ import com.jakubfronczyk.northform.adapters.ble.BluetoothAuthorization
 import com.jakubfronczyk.northform.adapters.ble.CoreBluetoothCentral
 import com.jakubfronczyk.northform.adapters.clock.IosWallClock
 import com.jakubfronczyk.northform.adapters.liveactivity.LiveActivityBridge
+import com.jakubfronczyk.northform.adapters.location.BackgroundActivityKeepAlive
 import com.jakubfronczyk.northform.adapters.location.LiveLocation
 import com.jakubfronczyk.northform.adapters.location.LocationAuthorization
 import com.jakubfronczyk.northform.adapters.location.LocationAuthorizationMonitor
@@ -117,7 +118,7 @@ object NorthformApp {
         val wallClock = IosWallClock
         alerts = NotificationAlertPlayer(scope, DeviceLog.run::notice)
         locationAuthorization = LocationAuthorizationMonitor() // main thread: boot() runs in didFinishLaunching
-        location = LiveLocation(locationUpdates, wallClock, locationAuthorization.state, DeviceLog.location::notice)
+        location = LiveLocation(locationUpdates, wallClock, locationAuthorization.state, BackgroundActivityKeepAlive(DeviceLog.location::notice), DeviceLog.location::notice)
 
         // 2  the central manager is created HERE, so willRestoreState lands in a live Kotlin delegate — once iOS has an
         //    answer about Bluetooth (ADR 0005, amended). Undetermined means a fresh install: no sensor can be paired, so
