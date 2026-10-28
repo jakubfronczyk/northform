@@ -27,3 +27,6 @@ private fun preview(sensor: PairedSensorInfo? = verity, export: ExportState = Ex
 // The profile editor (profile-settings/03).
 @Preview @Composable fun ProfileEditPreview() = ProfileEditScreen(profile, previewNow, PREVIEW_TZ, onSave = {}, back = {})
 @Preview @Composable fun ProfileEditInvalidPreview() = ProfileEditScreen(profile.copy(hrMax = 75, hrRest = 60), previewNow, PREVIEW_TZ, onSave = {}, back = {})
+
+// The zone editor (profile-settings/04).
+@Preview @Composable fun ZoneEditorPreview() = ZoneEditorScreen(profile, onSave = {}, back = {})

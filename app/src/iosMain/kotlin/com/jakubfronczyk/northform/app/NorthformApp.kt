@@ -1,5 +1,6 @@
 package com.jakubfronczyk.northform.app
 
+import com.jakubfronczyk.northform.ui.ZoneEditorScreen
 import com.jakubfronczyk.northform.ui.ProfileEditScreen
 import platform.Foundation.NSBundle
 import com.jakubfronczyk.northform.ui.SettingsModel
@@ -230,6 +231,7 @@ object NorthformApp {
             openRecording = model::openRecording,
             settings = SettingsModel.from(profile, deps.wallClock.now(), deps.tzOffset(), paired, gateSensor?.batteryPercent, firmware, export, appVersion()),
             exportBackup = model::exportBackup,
+            zoneEditor = { close -> ZoneEditorScreen(profile, onSave = { model.saveProfile(it); close() }, back = close) },
             profileEditor = { close -> ProfileEditScreen(profile, deps.wallClock.now(), deps.tzOffset(), onSave = { model.saveProfile(it); close() }, back = close) },
             forgetSensor = { scope.launch { runCatching { sensorDetails.forget() }.onFailure { DeviceLog.app.notice("forget failed: $it") } } },
             onStartRun = model::startRun,
