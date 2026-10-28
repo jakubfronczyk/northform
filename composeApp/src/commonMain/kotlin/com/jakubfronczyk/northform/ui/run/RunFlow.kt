@@ -61,7 +61,7 @@ fun RunFlow(
                     snapshot, route, map, start = { send(UserAction.Start) }, close = onClose, sensor = gateSensor, connectSensor = connectSensor,
                     pairSensor = pairSensor, location = gateLocation, openLocationSettings = openLocationSettings,
                 )
-                is RunPhase.Countdown -> CountdownScreen(phase.endsAt, snapshot.type, session.wallClock, cancel = onClose)
+                is RunPhase.Countdown -> CountdownScreen(phase.endsAt, snapshot.type, session.wallClock, cancel = { RunFlow.cancelCountdown(send, onClose) })
                 RunPhase.Active, is RunPhase.Paused -> LiveRunScreen(snapshot, route, session.wallClock, send, map)
                 is RunPhase.Cooldown -> CooldownScreen(snapshot, session.wallClock, skip = { send(UserAction.SkipCooldown) })
                 RunPhase.Done -> LaunchedEffect(Unit) { onClose() } // RunFlow.closesAt: the root opens the Summary
@@ -74,4 +74,12 @@ fun RunFlow(
 object RunFlow {
     /** summary-screen/01: the run is in `computing` once the snapshot is Done; the flow closes itself and the root opens the Summary. */
     fun closesAt(snapshot: RunSnapshot): Boolean = snapshot.phase == RunPhase.Done
+
+    /**
+     * The countdown's ✕ (run-flow-artboards): closes the flow and sends the session nothing, so the run ends with nothing
+     * recorded and is discarded (D116). [send] is the flow's tap path, taken only so the script test can prove ✕ never
+     * uses it (no `UserAction` cancels a countdown; the frozen reducer has none).
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun cancelCountdown(send: (UserAction) -> Unit, close: () -> Unit) = close()
 }

@@ -11,6 +11,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.launch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -105,8 +107,14 @@ class RunFlowScriptTest {
         assertEquals(2, shown.litDots)
         assertFalse(RunFlow.closesAt(fake.snapshots.value), "the flow closes on ✕, not by itself")
 
+        // ✕ as the flow wires it: `send` is the flow's tap path to the session, `close` its `onClose` (→ AppModel.closeRun → end()).
+        var closed = false
+        RunFlow.cancelCountdown(send = { action -> launch { fake.tap(action) } }, close = { closed = true })
+        runCurrent()
+        assertTrue(closed, "✕ closes the flow")
+        assertEquals(listOf<UserAction>(UserAction.Start), fake.sent.map { it.first }, "✕ sends no action: only the gate's Start reached the session")
+        assertIs<RunPhase.Countdown>(fake.snapshots.value.phase, "nothing moved the run on")
         assertEquals(EndResult.Discarded, fake.end(), "✕ before the countdown ends records nothing")
-        assertEquals(listOf<UserAction>(UserAction.Start), fake.sent.map { it.first }, "✕ sends no action")
     }
 
     /**
