@@ -5,7 +5,11 @@ import kotlinx.cinterop.ObjCSignatureOverride
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.channels.Channel
+import kotlin.concurrent.Volatile
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import com.jakubfronczyk.northform.core.SensorId
 import com.jakubfronczyk.northform.core.ports.BleCentral
@@ -48,11 +52,14 @@ import platform.posix.memcpy
  *
  * Neither half decides anything; `SensorLink` (:engine) is the brain.
  *
- * Boot order (D9): construct this INSIDE `NorthformApp.boot()`, which Swift calls first in
- * `didFinishLaunching`. The `CBCentralManager` is created in this class's initializer, with the
- * delegate already alive, so when iOS relaunches the app for a Bluetooth event
- * `centralManager(_:willRestoreState:)` — "the first method invoked when your app is relaunched into
- * the background" (Core Bluetooth Background Processing guide) — lands in a live Kotlin delegate.
+ * Boot order (D9, ADR 0005 amended 2026-10-28): construct this INSIDE `NorthformApp.boot()`, which
+ * Swift calls first in `didFinishLaunching`. The `CBCentralManager` is created by [activate], with the
+ * delegate already alive: boot activates at once when iOS already has an answer about Bluetooth, so
+ * when iOS relaunches the app for a Bluetooth event `centralManager(_:willRestoreState:)` — "the first
+ * method invoked when your app is relaunched into the background" (Core Bluetooth Background
+ * Processing guide) — lands in a live Kotlin delegate. On a fresh install (undetermined) it waits for
+ * Setup's Allow, because creating it is what shows iOS's prompt; no sensor can be paired, so nothing
+ * can need restoring, before that.
  */
 @OptIn(ExperimentalForeignApi::class)
 class CoreBluetoothCentral(
@@ -60,7 +67,7 @@ class CoreBluetoothCentral(
      * Must be identical across executions; a compile-time constant, never read from `launchOptions`
      * (nil in scene-based apps): https://developer.apple.com/documentation/corebluetooth/cbcentralmanageroptionrestoreidentifierkey
      */
-    restoreIdentifier: String,
+    private val restoreIdentifier: String,
     private val log: (String) -> Unit = {},
 ) : BleCentral {
 
@@ -84,17 +91,45 @@ class CoreBluetoothCentral(
         (NSBundle.mainBundle.objectForInfoDictionaryKey("UIBackgroundModes") as? List<*>)
             ?.contains("bluetooth-central") == true
 
-    private val manager: CBCentralManager = CBCentralManager(
-        delegate = delegate,
-        queue = queue,
-        options = buildMap<Any?, Any?> {
-            put(CBCentralManagerOptionShowPowerAlertKey, false)
-            if (restorationAllowed) put(CBCentralManagerOptionRestoreIdentifierKey, restoreIdentifier)
-        },
-    ).also {
+    /**
+     * Null until [activate]: creating a `CBCentralManager` is what makes iOS show its Bluetooth prompt, so on a fresh
+     * install it waits for Setup's Allow (ADR 0005, amended). `@Volatile`: written once on the main thread, read by
+     * the commands, which `GattHeartRateSensor` issues from its mailbox coroutine.
+     */
+    @Volatile private var manager: CBCentralManager? = null
+
+    private val _authorization = MutableStateFlow(BluetoothAuthorization.current())
+    /** What iOS says now; re-read on every central state change, which is how the answer to the prompt arrives. */
+    val authorization: StateFlow<BluetoothAuthorization> = _authorization.asStateFlow()
+
+    /** True once the `CBCentralManager` exists. */
+    val isActive: Boolean get() = manager != null
+
+    /**
+     * Creates the `CBCentralManager`, with the restore identifier, the first time; a no-op after. Call it on the main
+     * thread: at boot when iOS already has an answer ([BluetoothAuthorization.decided]), else from the runner's Allow
+     * (or a screen that cannot work without the radio). While authorization is undetermined, this is what prompts.
+     */
+    fun activate() {
+        if (manager != null) return
+        manager = CBCentralManager(
+            delegate = delegate,
+            queue = queue,
+            options = buildMap<Any?, Any?> {
+                put(CBCentralManagerOptionShowPowerAlertKey, false)
+                if (restorationAllowed) put(CBCentralManagerOptionRestoreIdentifierKey, restoreIdentifier)
+            },
+        )
         if (restorationAllowed) log("CBCentralManager created (restore id = $restoreIdentifier)")
         else log("CBCentralManager created WITHOUT state restoration: no bluetooth-central background mode in Info.plist")
     }
+
+    /**
+     * The manager for a command, or null (logged) before [activate]. A dropped command loses nothing: the link only
+     * acts on a powered-on central, and re-issues what it still wants (the connect, the search) on the first power-on.
+     */
+    private fun active(command: String): CBCentralManager? =
+        manager ?: run { log("$command: central not active yet (Bluetooth not asked), dropped"); null }
 
     private fun emit(e: BleEvent) {
         log("ble ← $e")
@@ -104,24 +139,28 @@ class CoreBluetoothCentral(
     // ── BleCentral commands ───────────────────────────────────────────────────────────────────
 
     override fun scan(services: List<GattUuid>) {
-        manager.scanForPeripheralsWithServices(services.map { CBUUID.UUIDWithString(it.short) }, options = null)
+        active("scan")?.scanForPeripheralsWithServices(services.map { CBUUID.UUIDWithString(it.short) }, options = null)
     }
 
-    override fun stopScan() = manager.stopScan()
+    override fun stopScan() {
+        active("stopScan")?.stopScan()
+    }
 
     override fun isKnown(id: SensorId): Boolean = peripheral(id) != null
 
     override fun connect(id: SensorId, autoReconnect: Boolean) {
+        val m = active("connect") ?: return
         val p = peripheral(id) ?: return log("connect: unknown peripheral $id (scan first)")
         // iOS 17+: the system re-links after an unexpected drop and reports it via
         // centralManager(_:didDisconnectPeripheral:timestamp:isReconnecting:error:).
         // https://developer.apple.com/documentation/corebluetooth/cbconnectperipheraloptionenableautoreconnect
         val options: Map<Any?, Any?>? = if (autoReconnect) mapOf(CBConnectPeripheralOptionEnableAutoReconnect to true) else null
-        manager.connectPeripheral(p, options = options)
+        m.connectPeripheral(p, options = options)
     }
 
     override fun cancelConnect(id: SensorId) {
-        peripheral(id)?.let { manager.cancelPeripheralConnection(it) }
+        val m = active("cancelConnect") ?: return
+        peripheral(id)?.let { m.cancelPeripheralConnection(it) }
     }
 
     override fun discover(id: SensorId, services: List<GattUuid>) {
@@ -142,11 +181,15 @@ class CoreBluetoothCentral(
 
     // ── peripheral bookkeeping (shared by both halves) ────────────────────────────────────────
 
-    /** Known to the system (previously connected) or seen in this process. `retrievePeripherals(withIdentifiers:)`, iOS 7+. */
+    /**
+     * Known to the system (previously connected) or seen in this process. `retrievePeripherals(withIdentifiers:)`, iOS 7+.
+     * Nothing is known before [activate] (no peripheral can be remembered without a manager).
+     */
     private fun peripheral(id: SensorId): CBPeripheral? {
         peripherals[id.value]?.let { return it }
+        val m = manager ?: return null
         val uuid = NSUUID(uUIDString = id.value) ?: return null
-        val found = manager.retrievePeripheralsWithIdentifiers(listOf(uuid)).firstOrNull() as? CBPeripheral ?: return null
+        val found = m.retrievePeripheralsWithIdentifiers(listOf(uuid)).firstOrNull() as? CBPeripheral ?: return null
         return remember(found)
     }
 
@@ -179,6 +222,7 @@ class CoreBluetoothCentral(
         // ── CBCentralManagerDelegate ──────────────────────────────────────────────────────────
 
         override fun centralManagerDidUpdateState(central: CBCentralManager) {
+            _authorization.value = BluetoothAuthorization.current() // the prompt's answer arrives as a state change
             emit(BleEvent.CentralState(central.state.toInt()))
             when (central.state) {
                 CBManagerStatePoweredOn -> emit(BleEvent.PowerOn)

@@ -6,6 +6,7 @@ import com.jakubfronczyk.northform.core.DiscoveredSensor
 import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.SensorId
 import com.jakubfronczyk.northform.core.Sex
+import com.jakubfronczyk.northform.ui.SetupPermissions.Bluetooth
 import com.jakubfronczyk.northform.ui.SetupPermissions.Location
 import com.jakubfronczyk.northform.ui.sensor.PairedSensorInfo
 import com.jakubfronczyk.northform.ui.sensor.SensorScreenModel
@@ -20,18 +21,18 @@ private val paired = SensorScreenModel.Ui(Mode.Connected, paired = PairedSensorI
 
 @Composable
 private fun preview(
-    start: SetupStep, profile: Profile? = saved, bluetooth: Boolean = true, location: Location = Location.NotAsked, sensor: SensorScreenModel.Ui = searching,
+    start: SetupStep, profile: Profile? = saved, bluetooth: Bluetooth = Bluetooth.Allowed, location: Location = Location.NotAsked, sensor: SensorScreenModel.Ui = searching,
 ) = SetupScreen(
-    profile, previewNow, PREVIEW_TZ, onSaveProfile = {}, permissions = SetupPermissions.of(bluetooth, location), allowLocation = {}, openSettings = {},
+    profile, previewNow, PREVIEW_TZ, onSaveProfile = {}, permissions = SetupPermissions.of(bluetooth, location), allowBluetooth = {}, allowLocation = {}, openSettings = {},
     pairing = { SetupPairing(sensor, pair = {}, search = {}) }, finish = {}, start = start,
 )
 
 @Preview @Composable fun SetupAboutYouPreview() = preview(SetupStep.AboutYou, profile = null)
 @Preview @Composable fun SetupAboutYouAgainPreview() = preview(SetupStep.AboutYou)
 
-@Preview @Composable fun SetupPermissionsAskPreview() = preview(SetupStep.Permissions)
+@Preview @Composable fun SetupPermissionsAskPreview() = preview(SetupStep.Permissions, bluetooth = Bluetooth.NotAsked)
 @Preview @Composable fun SetupPermissionsAllowedPreview() = preview(SetupStep.Permissions, location = Location.Allowed)
-@Preview @Composable fun SetupPermissionsDeniedPreview() = preview(SetupStep.Permissions, bluetooth = false, location = Location.Denied)
+@Preview @Composable fun SetupPermissionsDeniedPreview() = preview(SetupStep.Permissions, bluetooth = Bluetooth.Denied, location = Location.Denied)
 
 @Preview @Composable fun SetupPairSearchingPreview() = preview(SetupStep.Pair)
 @Preview @Composable fun SetupPairPairedPreview() = preview(SetupStep.Pair, sensor = paired)

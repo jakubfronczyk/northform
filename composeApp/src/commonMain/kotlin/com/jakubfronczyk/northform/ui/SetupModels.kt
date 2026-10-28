@@ -41,11 +41,14 @@ data class SetupZones(val subtitle: String, val rows: List<Row>) {
 
 /**
  * Step 2, "Two permissions" (`SetupPermissions.dc.html`): what iOS says for each, and what the runner can do about it.
- * Bluetooth was already asked when the app opened (the central is created at boot, D9), so its row only reports.
+ * Both rows ask here: iOS's Bluetooth prompt waits for this step's Allow on a fresh install (ADR 0005, amended).
  */
 data class SetupPermissions(val bluetooth: Row, val location: Row, val locationNote: String?) {
     /** Location as iOS reports it, mapped by the composition root from the platform's authorization. */
     enum class Location { NotAsked, Allowed, Denied, Restricted }
+
+    /** Bluetooth as iOS reports it (`CBManager.authorization`), mapped by the composition root. */
+    enum class Bluetooth { NotAsked, Allowed, Denied, Restricted }
 
     /** What the row's button does. */
     enum class Action { Allow, OpenSettings }
@@ -59,13 +62,20 @@ data class SetupPermissions(val bluetooth: Row, val location: Row, val locationN
     }
 
     companion object {
-        fun of(bluetoothAllowed: Boolean, location: Location) = SetupPermissions(
-            bluetooth = if (bluetoothAllowed) Row(true, null) else Row(false, Action.OpenSettings),
+        fun of(bluetooth: Bluetooth, location: Location) = SetupPermissions(
+            // Both rows follow one rule: Allow until iOS was asked, then Allowed, or Open Settings (denied), or no button
+            // (restricted: parental controls or a profile, nothing the runner can change).
+            bluetooth = when (bluetooth) {
+                Bluetooth.Allowed -> Row(true, null)
+                Bluetooth.NotAsked -> Row(false, Action.Allow)
+                Bluetooth.Denied -> Row(false, Action.OpenSettings)
+                Bluetooth.Restricted -> Row(false, null)
+            },
             location = when (location) {
                 Location.Allowed -> Row(true, null)
                 Location.NotAsked -> Row(false, Action.Allow)
                 Location.Denied -> Row(false, Action.OpenSettings)
-                Location.Restricted -> Row(false, null) // parental controls or a profile: nothing the runner can change
+                Location.Restricted -> Row(false, null)
             },
             locationNote = if (location == Location.Denied) LOCATION_OFF else null,
         )

@@ -75,6 +75,7 @@ fun SetupScreen(
     tzOffset: Int,
     onSaveProfile: (Profile) -> Unit,
     permissions: SetupPermissions,
+    allowBluetooth: () -> Unit,
     allowLocation: () -> Unit,
     openSettings: () -> Unit,
     pairing: @Composable () -> SetupPairing,
@@ -93,7 +94,7 @@ fun SetupScreen(
             onContinue = { onSaveProfile(it); next() },
         ) { Progress(step, back = null) }
         step == SetupStep.Permissions -> SetupPage(step, back, "Two permissions", "Only what a run needs. Nothing else is asked now.", { LightButton("Continue", ::next) }) {
-            Permissions(permissions, allowLocation, openSettings)
+            Permissions(permissions, allowBluetooth, allowLocation, openSettings)
         }
         step == SetupStep.Pair -> {
             val p = pairing()
@@ -148,10 +149,9 @@ private fun SetupCard(padding: Modifier = Modifier.padding(16.dp), content: @Com
     Column(Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).then(padding), content = content)
 
 @Composable
-private fun Permissions(model: SetupPermissions, allowLocation: () -> Unit, openSettings: () -> Unit) {
+private fun Permissions(model: SetupPermissions, allowBluetooth: () -> Unit, allowLocation: () -> Unit, openSettings: () -> Unit) {
     SetupCard(Modifier.padding(horizontal = 16.dp)) {
-        // Bluetooth never offers Allow: iOS asked when the app opened (D9), so the row only reports, or sends to Settings.
-        PermissionRow(NfIcons.bluetooth, "Bluetooth", "To connect the armband.", model.bluetooth, allow = {}, openSettings)
+        PermissionRow(NfIcons.bluetooth, "Bluetooth", "To connect the armband.", model.bluetooth, allowBluetooth, openSettings)
         DashedLine()
         PermissionRow(NfIcons.location, "Location", "For map, distance and pace. While using the app, and in the background during a run.", model.location, allowLocation, openSettings)
     }

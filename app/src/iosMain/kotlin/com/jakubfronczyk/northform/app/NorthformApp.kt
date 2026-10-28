@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.window.ComposeUIViewController
 import com.jakubfronczyk.northform.adapters.alerts.NotificationAlertPlayer
+import com.jakubfronczyk.northform.adapters.ble.BluetoothAuthorization
 import com.jakubfronczyk.northform.adapters.ble.CoreBluetoothCentral
 import com.jakubfronczyk.northform.adapters.clock.IosWallClock
 import com.jakubfronczyk.northform.adapters.liveactivity.LiveActivityBridge
@@ -119,9 +120,13 @@ object NorthformApp {
         locationAuthorization = LocationAuthorizationMonitor() // main thread: boot() runs in didFinishLaunching
         location = LiveLocation(locationUpdates, wallClock, locationAuthorization.state, DeviceLog.location::notice)
 
-        // 2  the central manager is created HERE, so willRestoreState lands in a live Kotlin delegate
+        // 2  the central manager is created HERE, so willRestoreState lands in a live Kotlin delegate — once iOS has an
+        //    answer about Bluetooth (ADR 0005, amended). Undetermined means a fresh install: no sensor can be paired, so
+        //    nothing can be restored, and creating it would put iOS's prompt over Setup. Setup's Allow creates it then.
         central = CoreBluetoothCentral(BLE_RESTORE_ID, DeviceLog.polar::notice)
-        DeviceLog.app.notice("CBCentralManager created (restore id = $BLE_RESTORE_ID)")
+        val bluetooth = BluetoothAuthorization.current()
+        central.activateAtBoot(bluetooth)
+        DeviceLog.app.notice("Bluetooth authorization $bluetooth: CBCentralManager ${if (central.isActive) "created (restore id = $BLE_RESTORE_ID)" else "waits for Setup's Allow"}")
 
         // 3  the sensor mailbox is alive before any radio event can be delivered (delegate callbacks are
         //    dispatched on the BLE queue only after CBCentralManager's init returns)
@@ -199,7 +204,8 @@ object NorthformApp {
     }
 
     /**
-     * first-launch-setup: the four steps over the real ports — the profile through the app model, Location through the
+     * first-launch-setup: the four steps over the real ports — the profile through the app model, Bluetooth by creating
+     * the central (iOS asks then, ADR 0005 amended; a no-op once it exists), Location through the
      * same request a run start makes (it does nothing once decided, so never two prompts), the sensor through the Sensor
      * screen's model, created and followed only while the Pair step is up. [profile] is null until step 1 has saved one
      * (the fallback must not prefill the form).
@@ -207,17 +213,26 @@ object NorthformApp {
     @Composable
     private fun Setup(profile: Profile?, finish: () -> Unit) {
         val location by locationAuthorization.state.collectAsState()
-        // Starts from what the link reports now, so an unauthorized device never shows "Allowed" for a frame.
-        val bluetoothAllowed by remember { sensor.linkState.map { it.reported !is SensorState.Unauthorized } }
-            .collectAsState(sensor.linkState.value.reported !is SensorState.Unauthorized)
+        val bluetooth by central.authorization.collectAsState()
         SetupScreen(
             profile = profile, now = deps.wallClock.now(), tzOffset = deps.tzOffset(), onSaveProfile = model::saveProfile,
-            permissions = SetupPermissions.of(bluetoothAllowed, location.asPermission()),
+            permissions = SetupPermissions.of(bluetooth.asPermission(), location.asPermission()),
+            allowBluetooth = central::activate,
             allowLocation = { scope.launch { DeviceLog.app.notice("location authorization answered: ${requestWhenInUseAuthorization()}") } },
             openSettings = ::openAppSettings,
-            pairing = { rememberSetupPairing { SensorScreenModel(sensor, sensorDetails) } },
+            pairing = { rememberSetupPairing(::pairingModel) },
             finish = finish,
         )
+    }
+
+    /**
+     * The Sensor screen's model, for the Sensor sheet and Setup's Pair step. Pairing cannot work without the radio, so
+     * opening either is the runner asking for Bluetooth: it creates the central if Setup's Allow was skipped (iOS asks
+     * then; a no-op otherwise). The search it starts waits in the link until the central powers on.
+     */
+    private fun pairingModel(): SensorScreenModel {
+        central.activate()
+        return SensorScreenModel(sensor, sensorDetails)
     }
 
     /** "Version 1.0 (14)" from the bundle (Info.plist), as the Settings artboard prints it. */
@@ -278,7 +293,7 @@ object NorthformApp {
             onCloseRun = model::closeRun,
             map = { route -> RouteMap(route, showsUserLocation = live) },
             // One model per opening (SU10): its collectors and 30 s search live exactly as long as the screen.
-            sensorScreen = { close -> SensorScreen(remember { SensorScreenModel(sensor, sensorDetails) }, onClose = close) },
+            sensorScreen = { close -> SensorScreen(remember { pairingModel() }, onClose = close) },
             gateSensor = gateSensor,
             connectSensor = ::connectPairedSensor,
             // Replay feeds its own fixes whatever iOS says, so the gate has no location reason there (null = unknown).

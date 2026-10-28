@@ -2,7 +2,9 @@ package com.jakubfronczyk.northform.app
 
 import com.jakubfronczyk.northform.adapters.location.LocationSink
 import com.jakubfronczyk.northform.adapters.location.LocationUpdates
+import com.jakubfronczyk.northform.adapters.ble.BluetoothAuthorization
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.TimeSource
 
@@ -27,6 +29,8 @@ class BootTest {
         // lateinit access throws if boot() skipped step 2 or 3
         NorthformApp.central
         NorthformApp.sensor
+        // ADR 0005 (amended): the CBCentralManager exists at boot exactly when iOS already has an answer about Bluetooth
+        assertEquals(BluetoothAuthorization.current().decided, NorthformApp.central.isActive)
         // TODO(spike): tighten once measured on the 16e; the simulator number is only a smoke check.
         assertTrue(took.inWholeMilliseconds < 2_000, "boot() took $took")
     }
