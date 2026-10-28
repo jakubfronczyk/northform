@@ -1,6 +1,8 @@
 package com.jakubfronczyk.northform.app
 
+import com.jakubfronczyk.northform.core.LocationFix
 import com.jakubfronczyk.northform.core.UserAction
+import com.jakubfronczyk.northform.core.ports.LocationProvider
 import com.jakubfronczyk.northform.engine.run.EndResult
 import com.jakubfronczyk.northform.engine.run.LiveActivityEvent
 import com.jakubfronczyk.northform.engine.run.RunPhase
@@ -14,6 +16,9 @@ import com.jakubfronczyk.northform.testing.tap
 import com.jakubfronczyk.northform.testing.virtualWallClock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -25,8 +30,8 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * The LIVE branch of a run, which only the phone exercised before: permissions are asked before the
- * keep-alive is held, the keep-alive is held once the session runs, and it is released once the run is
+ * The LIVE branch of a run, which only the phone exercised before: permissions are asked before GPS is
+ * collected (collecting is what holds the keep-alive, `LiveLocation`), and GPS is let go once the run is
  * over — whichever way it ended. The ports are the replay ones; the source is `RunSource.Live`.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -35,11 +40,13 @@ class ActiveRunTest {
 
     private class Trace {
         val events = ArrayList<String>()
-        val keepAlive = object : RunKeepAlive {
-            override fun hold() { events += "hold" }
-            override fun release() { events += "release" }
-        }
         val permissions: suspend () -> Unit = { events += "permissions" }
+
+        /** The location port as the session sees it, writing when it is collected and let go. */
+        fun traced(location: LocationProvider) = object : LocationProvider {
+            override fun fixes(): Flow<LocationFix> =
+                location.fixes().onStart { events += "collect" }.onCompletion { events += "cancel" }
+        }
     }
 
     private fun kotlinx.coroutines.test.TestScope.liveDeps(
@@ -51,7 +58,7 @@ class ActiveRunTest {
         val timeline = ReplayTimeline(script, clock) // never played: the live branch, not the fixture, is under test
         val store = InMemoryRecordingStore()
         return AppDeps(
-            source = RunSource.Live(ReplaySensor(timeline), ReplayLocation(timeline), trace.keepAlive, trace.permissions),
+            source = RunSource.Live(ReplaySensor(timeline), trace.traced(ReplayLocation(timeline)), trace.permissions),
             store = store, reliability = store, wallClock = clock, alerts = RecordedAlerts(), log = log,
             newRecordingId = { "00000000-0000-0000-0000-00000000000b" },
             liveActivity = liveActivity,
@@ -92,12 +99,12 @@ class ActiveRunTest {
     }
 
     @Test
-    fun permissions_then_session_then_keep_alive_then_release_on_close() = runTest {
+    fun permissions_then_gps_collected_then_let_go_on_close() = runTest {
         val trace = Trace()
         val log = ArrayList<String>()
         val run = ActiveRun.open(liveDeps(trace, log = { log += it }), backgroundScope)
         runCurrent()
-        assertEquals(listOf("permissions", "hold"), trace.events, "the prompt comes before the keep-alive, the keep-alive after the session exists")
+        assertEquals(listOf("permissions", "collect"), trace.events, "the prompt comes before GPS (and so the keep-alive), GPS once the session runs")
         assertTrue(log.first().startsWith("session start"), "$log")
         assertEquals(RunPhase.Gate, run.session.snapshots.value.phase)
 
@@ -110,19 +117,19 @@ class ActiveRunTest {
         val closing = async { run.close() }
         advanceTimeBy(1.seconds); runCurrent()
         assertEquals(EndResult.Finishing, closing.await())
-        assertEquals(listOf("permissions", "hold", "release"), trace.events, "released exactly once, after the run's last write")
+        assertEquals(listOf("permissions", "collect", "cancel"), trace.events, "let go exactly once, after the run's last write")
         assertTrue(run.runJob.isCompleted)
     }
 
     @Test
-    fun closing_at_the_gate_discards_and_still_releases_the_keep_alive() = runTest {
+    fun closing_at_the_gate_discards_and_still_lets_gps_go() = runTest {
         val trace = Trace()
         val run = ActiveRun.open(liveDeps(trace), backgroundScope)
         runCurrent()
         val closing = async { run.close() }
         advanceTimeBy(1.seconds); runCurrent()
         assertEquals(EndResult.Discarded, closing.await())
-        assertEquals(listOf("permissions", "hold", "release"), trace.events)
+        assertEquals(listOf("permissions", "collect", "cancel"), trace.events)
     }
 
     @Test
@@ -135,6 +142,6 @@ class ActiveRunTest {
         run.backgrounded(run.session.wallClock.now()); runCurrent()
         assertEquals(RunPhase.Active, run.session.snapshots.value.phase)
         assertFalse(run.runJob.isCompleted)
-        assertFalse("release" in trace.events)
+        assertFalse("cancel" in trace.events)
     }
 }

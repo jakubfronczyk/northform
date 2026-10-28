@@ -28,15 +28,9 @@ import platform.Foundation.localTimeZone
 import platform.Foundation.secondsFromGMT
 import kotlin.time.Instant
 
-/** Keeps the process alive while locked during a run (D14): `KeepAlive` on the phone, a fake in tests. */
-interface RunKeepAlive {
-    fun hold()
-    fun release()
-}
-
 /**
  * What a source hands one run: its two input ports, a hook for the moment the session is running
- * (hold the keep-alive, start the playback) and the matching release when the run is over.
+ * (start the playback) and the matching release when the run is over.
  */
 class RunInputs(
     val sensor: HeartRateSensor,
@@ -56,16 +50,16 @@ sealed interface RunSource {
 
     class Live(
         val sensor: HeartRateSensor,
+        /** Holds the keep-alive itself while its fixes are collected (`LiveLocation`, D14). */
         val location: LocationProvider,
-        val keepAlive: RunKeepAlive,
         /** Asks for the permissions a live run needs before the run screen opens (`AppModel.swift:64-74`). */
         val requestPermissions: suspend () -> Unit,
     ) : RunSource {
         // Asked here, before the run screen opens, so the prompt never covers a running clock (`AppModel.swift:66-74`);
-        // the keep-alive is held only after that, because it needs the location answer (`KeepAlive`).
+        // the session collects `location` only after that, and collecting is what holds the keep-alive, which needs the answer.
         override suspend fun open(wallClock: WallClock, scope: CoroutineScope): RunInputs {
             requestPermissions()
-            return RunInputs(sensor, location, onRunning = keepAlive::hold, release = keepAlive::release)
+            return RunInputs(sensor, location)
         }
     }
 

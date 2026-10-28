@@ -6,11 +6,11 @@ import com.jakubfronczyk.northform.core.ports.WallClock
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import platform.CoreLocation.CLLocation
@@ -28,6 +28,9 @@ import kotlin.time.Instant
  * the run shows GPS lost. Every restart is logged with its attempt number. `delay` runs on the
  * collector's dispatcher, so a test on a virtual clock drives the backoff without waiting.
  *
+ * D14 (adapters/05): the keep-alive is this adapter's, held for exactly as long as `fixes()` is collected — the only
+ * time a run needs the process alive while locked is while it records GPS. The app never sees it.
+ *
  * adapters/03: `authorization` is watched for the whole stream. The moment it turns to `WhenInUse`
  * (granted in Settings mid-run, the app comes back) the forwarder is restarted at once, backoff reset,
  * so GPS returns without an app restart. A change to `Denied`/`Restricted` does nothing by itself:
@@ -40,51 +43,73 @@ class LiveLocation(
     /** Required: a snapshot that never changes would silently turn off restart-on-grant (adapters/03). */
     private val authorization: StateFlow<LocationAuthorization>,
     private val log: (String) -> Unit = {},
+    /** Held while `fixes()` is collected (D14); a fake in tests. */
+    private val keepAlive: KeepAlive = BackgroundActivityKeepAlive(log),
 ) : LocationProvider {
 
-    /** A cold stream per call; `awaitClose` is mandatory in `callbackFlow` and is where the forwarder stops. */
-    override fun fixes(): Flow<LocationFix> = callbackFlow {
+    /** What reaches the stream's one owner: a fix, the forwarder's end, a grant. Three, so the loop is exhaustive. */
+    private sealed interface Event {
+        data class Fix(val fix: LocationFix) : Event
+        data class Ended(val message: String?) : Event
+        data object Granted : Event
+    }
+
+    /**
+     * A cold stream per call. One owner (adapters/05): the Swift forwarder calls the sink on the main actor and the
+     * collector runs on its own dispatcher, so the sink only *posts* an [Event]; `attempt` and `restart` are read and
+     * written by the loop below alone. Order per collection: hold the keep-alive, start GPS, …, stop GPS, release.
+     */
+    override fun fixes(): Flow<LocationFix> = channelFlow {
         val streamStart = wallClock.now()
-        var attempt = 0
-        var restart: Job? = null
-        lateinit var sink: LocationSink
-        sink = object : LocationSink {
+        val events = Channel<Event>(Channel.UNLIMITED) // never blocks or drops a callback from Swift
+        val sink = object : LocationSink {
             override fun onUpdate(location: CLLocation, stationary: Boolean) {
                 val fix = location.toFix(stationary) ?: return
                 if (fix.t < streamStart) return // cached fix from before this stream began (D92 rule)
-                attempt = 0 // a fix proves the stream is healthy again
-                trySend(fix)
+                events.trySend(Event.Fix(fix))
             }
 
             override fun onEnded(message: String?) {
-                log("live updates ended: ${message ?: "finished"}")
-                if (authorization.value.blocksLocation) {
-                    log("location ${authorization.value.name.lowercase()}: no restart")
-                    return
-                }
-                val wait = backoff[minOf(attempt, backoff.lastIndex)]
-                attempt += 1
-                log("restart $attempt in ${wait.inWholeSeconds} s")
-                restart = launch {
-                    delay(wait)
-                    updates.start(sink)
-                }
+                events.trySend(Event.Ended(message))
             }
         }
-        updates.start(sink)
-        // `drop(1)`: a StateFlow replays its current value; only a *change* to granted restarts.
-        launch {
-            authorization.drop(1).collect { status ->
-                if (status != LocationAuthorization.WhenInUse) return@collect
-                restart?.cancel()
-                attempt = 0
-                log("location granted: restart now")
-                updates.start(sink) // the forwarder stops any previous stream itself (`LocationForwarder.start`)
+        var attempt = 0
+        var restart: Job? = null
+        keepAlive.hold() // after the location answer (`RunSource.Live.open`), before the first fix can arrive
+        try {
+            updates.start(sink)
+            // `drop(1)`: a StateFlow replays its current value; only a *change* to granted restarts.
+            launch { authorization.drop(1).collect { if (it == LocationAuthorization.WhenInUse) events.send(Event.Granted) } }
+            for (event in events) when (event) {
+                is Event.Fix -> {
+                    attempt = 0 // a fix proves the stream is healthy again
+                    trySend(event.fix)
+                }
+                is Event.Ended -> {
+                    log("live updates ended: ${event.message ?: "finished"}")
+                    if (authorization.value.blocksLocation) {
+                        log("location ${authorization.value.name.lowercase()}: no restart")
+                        continue
+                    }
+                    val wait = backoff[minOf(attempt, backoff.lastIndex)]
+                    attempt += 1
+                    log("restart $attempt in ${wait.inWholeSeconds} s")
+                    restart = launch {
+                        delay(wait)
+                        updates.start(sink)
+                    }
+                }
+                Event.Granted -> {
+                    restart?.cancel()
+                    attempt = 0
+                    log("location granted: restart now")
+                    updates.start(sink) // the forwarder stops any previous stream itself (`LocationForwarder.start`)
+                }
             }
-        }
-        awaitClose {
+        } finally {
             restart?.cancel()
             updates.stop()
+            keepAlive.release()
         }
     }
 
