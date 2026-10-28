@@ -74,6 +74,12 @@ object NorthformApp {
     /** D9: a compile-time constant, identical across executions; never read from launchOptions. */
     const val BLE_RESTORE_ID = "com.jakubfronczyk.northform.ble"
 
+    /**
+     * For now: true starts every install with the sample profile (born 14.03.1996, male, 78 kg, 182 cm, max 187, rest 60),
+     * so the app skips Setup and opens on Today. Set false to see first-launch Setup again. See [HardcodedProfile].
+     */
+    const val HARDCODED_PROFILE = true
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val deviceTestLog = DeviceTestLog()
 
@@ -135,7 +141,7 @@ object NorthformApp {
                      else RunSource.Replay { BundleFixtures.script("straight-run-3min") },
             store = LoggingStore(sqlStore, DeviceLog::runTrace),
             reliability = sqlStore,
-            profileStore = sqlStore,
+            profileStore = if (HARDCODED_PROFILE) HardcodedProfile(sqlStore, AppDeps.sampleProfile) else sqlStore,
             exportBackup = { exportBackup(sqlStore, wallClock.now()) },
             saved = StoredSavedRecordings(sqlStore, sqlStore, DeviceLog::runTrace),
             wallClock = wallClock,
