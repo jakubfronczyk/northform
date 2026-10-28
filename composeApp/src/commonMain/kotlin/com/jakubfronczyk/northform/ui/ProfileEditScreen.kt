@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -33,19 +32,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.Sex
 import com.jakubfronczyk.northform.ui.ProfileForm.Field
 import kotlin.time.Instant
 import com.jakubfronczyk.northform.ui.theme.Theme
 import com.jakubfronczyk.northform.ui.theme.Type
-
-private val FieldShape = RoundedCornerShape(14.dp)
-private val PillShape = RoundedCornerShape(22.dp)
+import com.jakubfronczyk.northform.ui.theme.Shapes
+import com.jakubfronczyk.northform.ui.theme.Dimens
 
 /**
  * The profile editor (`SetupProfile.dc.html` in its edit context, profile-settings/03): every field checked as typed
@@ -56,14 +52,14 @@ fun ProfileEditScreen(initial: Profile, now: Instant, tzOffset: Int, onSave: (Pr
     var form by remember(initial) { mutableStateOf(ProfileForm.of(initial)) }
     val checked = form.check(now, tzOffset, initial.zones)
     Column(
-        Modifier.fillMaxSize().background(Theme.bg).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 64.dp, bottom = 50.dp),
+        Modifier.fillMaxSize().background(Theme.bg).verticalScroll(rememberScrollState()).padding(horizontal = Dimens.gutter).padding(top = Dimens.screenTop, bottom = Dimens.screenBottom),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.offset(x = (-10).dp).size(44.dp).clickable(onClick = back), contentAlignment = Alignment.Center) {
+            Box(Modifier.offset(x = (-10).dp).size(Dimens.iconButton).clickable(onClick = back), contentAlignment = Alignment.Center) {
                 NfIcon(NfIcons.back, Theme.text, size = 22.dp, label = "Back to Settings")
             }
-            Text("Profile", style = Type.number(28, FontWeight.ExtraBold), color = Theme.text)
+            Text("Profile", style = Type.pageTitle, color = Theme.text)
             Text("Used for your heart rate zones.", style = Type.secondaryText, color = Theme.text2)
         }
         Input("Birth date", form.birthDate, checked.errors[Field.BirthDate], hint = checked.ageHint, keyboard = KeyboardType.Text) { form = form.copy(birthDate = it) }
@@ -73,12 +69,12 @@ fun ProfileEditScreen(initial: Profile, now: Instant, tzOffset: Int, onSave: (Pr
                 for (sex in Sex.entries) {
                     val on = form.sex == sex
                     Box(
-                        Modifier.weight(1f).height(48.dp).clip(PillShape)
-                            .then(if (on) Modifier.background(Theme.text) else Modifier.border(1.5.dp, Theme.outline, PillShape))
+                        Modifier.weight(1f).height(Dimens.secondaryButton).clip(Shapes.pill)
+                            .then(if (on) Modifier.background(Theme.text) else Modifier.border(Dimens.stroke, Theme.outline, Shapes.pill))
                             .clickable { form = form.copy(sex = sex) }
                             .semantics { selected = on; role = Role.RadioButton },
                         contentAlignment = Alignment.Center,
-                    ) { Text(sex.name, style = Type.statusLabel.copy(fontSize = 15.sp), color = if (on) Theme.bg else Theme.text) }
+                    ) { Text(sex.name, style = Type.secondaryStrong, color = if (on) Theme.bg else Theme.text) }
                 }
             }
         }
@@ -86,7 +82,7 @@ fun ProfileEditScreen(initial: Profile, now: Instant, tzOffset: Int, onSave: (Pr
             Input("Weight", form.weight, checked.errors[Field.Weight], unit = "kg", modifier = Modifier.weight(1f), keyboard = KeyboardType.Decimal) { form = form.copy(weight = it) }
             Input("Height", form.height, checked.errors[Field.Height], unit = "cm", modifier = Modifier.weight(1f), keyboard = KeyboardType.Decimal) { form = form.copy(height = it) }
         }
-        Text("Heart rate", style = Type.sheetTitle.copy(fontSize = 17.sp), color = Theme.text)
+        Text("Heart rate", style = Type.cardTitle, color = Theme.text)
         Input("Max heart rate", form.hrMax, checked.errors[Field.HrMax], unit = "bpm") { form = form.copy(hrMax = it) }
         Input("Resting heart rate", form.hrRest, checked.errors[Field.HrRest], unit = "bpm", hint = "Default 60. Change it any time.") { form = form.copy(hrRest = it) }
         val profile = checked.profile
@@ -103,13 +99,13 @@ private fun Input(
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(label, style = Type.tertiaryText, color = Theme.text2)
         Row(
-            Modifier.fillMaxWidth().height(52.dp).clip(FieldShape).background(Theme.card)
-                .border(1.5.dp, if (error != null) Theme.warn else Theme.card, FieldShape).padding(horizontal = 14.dp),
+            Modifier.fillMaxWidth().height(Dimens.field).clip(Shapes.field).background(Theme.card)
+                .border(Dimens.stroke, if (error != null) Theme.warn else Theme.card, Shapes.field).padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BasicTextField(
                 value, onChange, singleLine = true, modifier = Modifier.weight(1f).semantics { contentDescription = label },
-                textStyle = Type.number(17, FontWeight.SemiBold).copy(color = Theme.text), cursorBrush = SolidColor(Theme.accent),
+                textStyle = Type.fieldValue.copy(color = Theme.text), cursorBrush = SolidColor(Theme.accent),
                 keyboardOptions = KeyboardOptions(keyboardType = keyboard),
             )
             unit?.let { Text(it, style = Type.tertiaryText, color = Theme.text2) }

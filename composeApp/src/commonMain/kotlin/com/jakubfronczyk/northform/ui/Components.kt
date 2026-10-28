@@ -1,7 +1,5 @@
 package com.jakubfronczyk.northform.ui
 
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -19,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -33,8 +30,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.jakubfronczyk.northform.ui.theme.Theme
 import com.jakubfronczyk.northform.ui.theme.Type
-
-private val BigButtonShape = RoundedCornerShape(16.dp)
+import com.jakubfronczyk.northform.ui.theme.Shapes
+import com.jakubfronczyk.northform.ui.theme.Dimens
 
 /**
  * The one 68 dp action button of every artboard (`RunView.swift:107`): filled with [fill], or outlined
@@ -53,9 +50,9 @@ fun BigButton(
     /** A 20 dp icon before [title] (Start, Resume: the artboards' play), tinted like the text. */
     icon: ImageVector? = null,
 ) {
-    val framed = if (fill != null) modifier.background(fill, BigButtonShape) else modifier.border(1.5.dp, Theme.ring, BigButtonShape)
+    val framed = if (fill != null) modifier.background(fill, Shapes.bigButton) else modifier.border(Dimens.stroke, Theme.ring, Shapes.bigButton)
     Box(
-        framed.height(68.dp).clip(BigButtonShape).clickable(enabled = enabled, onClick = onClick).padding(horizontal = contentPadding),
+        framed.height(Dimens.bigButton).clip(Shapes.bigButton).clickable(enabled = enabled, onClick = onClick).padding(horizontal = contentPadding),
         contentAlignment = Alignment.Center,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -116,17 +113,17 @@ fun DashedLine() = Canvas(Modifier.fillMaxWidth().height(1.dp)) {
  */
 @Composable
 fun ConfirmSheet(title: String, detail: String, confirm: String, keep: String, onKeep: () -> Unit, onConfirm: () -> Unit) {
-    Box(Modifier.fillMaxSize().background(Color(0x99000000)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onKeep)) {
+    Box(Modifier.fillMaxSize().background(Theme.scrim).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onKeep)) {
         Column(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                .background(Theme.card, RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
+                .background(Theme.card, Shapes.sheet)
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
-                .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 50.dp),
+                .padding(start = Dimens.gutter, end = Dimens.gutter, top = 24.dp, bottom = Dimens.screenBottom),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            Text(title, style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Black), color = Theme.text)
+            Text(title, style = Type.sheetHeadline, color = Theme.text)
             Text(detail, style = Type.secondaryText, color = Theme.text2)
-            BigButton(confirm, onConfirm, fill = Color(0xFFB83A2E))
+            BigButton(confirm, onConfirm, fill = Theme.destructive)
             BigButton(keep, onKeep, fill = null)
         }
     }

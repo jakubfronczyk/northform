@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,16 +31,14 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.ui.theme.Theme
 import com.jakubfronczyk.northform.ui.theme.Type
-
-private val CardShape = RoundedCornerShape(22.dp)
+import com.jakubfronczyk.northform.ui.theme.Shapes
+import com.jakubfronczyk.northform.ui.theme.Dimens
 
 /**
  * The Today artboard (`Today.dc.html`, today-screen spec): the date, the sensor card, the Run and Walk tiles, the
@@ -59,7 +56,7 @@ fun TodayScreen(
     openSettings: () -> Unit,
 ) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 64.dp, bottom = 50.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Dimens.gutter).padding(top = Dimens.screenTop, bottom = Dimens.screenBottom),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Row(verticalAlignment = Alignment.Bottom) {
@@ -67,13 +64,13 @@ fun TodayScreen(
                 Text(model.date, style = Type.rowLabel, color = Theme.text2)
                 Text("Today", style = Type.homeTitle, color = Theme.text)
             }
-            Box(Modifier.size(44.dp).clip(CircleShape).border(1.5.dp, Theme.ring, CircleShape).clickable(onClick = openSettings), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(Dimens.iconButton).clip(CircleShape).border(Dimens.stroke, Theme.ring, CircleShape).clickable(onClick = openSettings), contentAlignment = Alignment.Center) {
                 NfIcon(NfIcons.gear, Theme.text, size = 20.dp, label = "Settings")
             }
         }
         SensorCard(model.sensor, openSensor)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Tile("Run", NfIcons.runner, fill = Theme.primary, sub = Color.White, Modifier.weight(1f)) { start(RecordingType.Run) }
+            Tile("Run", NfIcons.runner, fill = Theme.primary, sub = Theme.onPrimary, Modifier.weight(1f)) { start(RecordingType.Run) }
             Tile("Walk", NfIcons.walker, fill = null, sub = Theme.text2, Modifier.weight(1f)) { start(RecordingType.Walk) }
         }
         model.last?.let { LastCard(it) { openRecording(it.id) } }
@@ -81,15 +78,15 @@ fun TodayScreen(
         if (model.showsHistory) {
             Column {
                 if (model.recent.isNotEmpty()) {
-                    Text("Recent", style = Type.sheetTitle.copy(fontSize = 17.sp), color = Theme.text, modifier = Modifier.padding(bottom = 6.dp))
+                    Text("Recent", style = Type.cardTitle, color = Theme.text, modifier = Modifier.padding(bottom = 6.dp))
                 }
                 for (row in model.recent) {
                     DashedLine()
                     RecentRow(row) { openRecording(row.id) }
                 }
                 if (model.recent.isNotEmpty()) DashedLine()
-                Box(Modifier.fillMaxWidth().height(48.dp).clickable(onClick = openHistory), contentAlignment = Alignment.Center) {
-                    Text("See all history  ›", style = Type.statusLabel.copy(fontSize = 15.sp), color = Theme.accent)
+                Box(Modifier.fillMaxWidth().height(Dimens.secondaryButton).clickable(onClick = openHistory), contentAlignment = Alignment.Center) {
+                    Text("See all history  ›", style = Type.secondaryStrong, color = Theme.accent)
                 }
             }
         }
@@ -101,14 +98,14 @@ fun TodayScreen(
 private fun SensorCard(sensor: TodayModel.Sensor, onClick: () -> Unit) {
     val color = if (sensor.connected) Theme.ok else Theme.warn
     Row(
-        Modifier.fillMaxWidth().height(64.dp).clip(CardShape).background(Theme.card).clickable(onClick = onClick).padding(horizontal = 16.dp),
+        Modifier.fillMaxWidth().height(Dimens.row).clip(Shapes.card).background(Theme.card).clickable(onClick = onClick).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.size(36.dp).background(Theme.bg, CircleShape), contentAlignment = Alignment.Center) {
             NfIcon(NfIcons.sensor, color, size = 20.dp)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(sensor.name, style = Type.sheetTitle.copy(fontSize = 16.sp), color = Theme.text)
+            Text(sensor.name, style = Type.bodyBold, color = Theme.text)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(Modifier.size(8.dp).background(color, CircleShape))
                 Text(sensor.status, style = Type.tertiaryText, color = color)
@@ -121,15 +118,15 @@ private fun SensorCard(sensor: TodayModel.Sensor, onClick: () -> Unit) {
 /** A start tile: the runner or walker on top, the name below; Run filled in the primary colour, Walk outlined. */
 @Composable
 private fun Tile(title: String, icon: ImageVector, fill: Color?, sub: Color, modifier: Modifier, onClick: () -> Unit) {
-    val framed = if (fill != null) modifier.background(fill, CardShape) else modifier.background(Theme.card, CardShape).border(1.5.dp, Theme.outline, CardShape)
+    val framed = if (fill != null) modifier.background(fill, Shapes.card) else modifier.background(Theme.card, Shapes.card).border(Dimens.stroke, Theme.outline, Shapes.card)
     Column(
-        framed.height(150.dp).clip(CardShape).clickable(onClick = onClick).padding(16.dp),
+        framed.height(150.dp).clip(Shapes.card).clickable(onClick = onClick).padding(16.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
-        val ink = if (fill != null) Color.White else Theme.text
+        val ink = if (fill != null) Theme.onPrimary else Theme.text
         NfIcon(icon, ink, size = 34.dp)
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(title, style = Type.number(26, FontWeight.ExtraBold), color = ink)
+            Text(title, style = Type.tileTitle, color = ink)
             Text("GPS + heart rate", style = Type.tertiaryText, color = sub)
         }
     }
@@ -138,15 +135,15 @@ private fun Tile(title: String, icon: ImageVector, fill: Color?, sub: Color, mod
 @Composable
 private fun LastCard(card: TodayModel.Card, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(CardShape).background(Theme.card).clickable(onClick = onClick).padding(14.dp),
+        Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).clickable(onClick = onClick).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Box(Modifier.size(76.dp).background(Color(0xFF1D1F21), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(76.dp).background(Theme.panel, Shapes.thumbnail), contentAlignment = Alignment.Center) {
             RouteGlyph(Theme.of(card.type))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(card.label, style = Type.tertiaryText, color = Theme.text2)
-            Text(km(card.distance, 14), style = Type.number(28, FontWeight.ExtraBold), color = Theme.text)
+            Text(km(card.distance, Type.cardUnit), style = Type.cardDistance, color = Theme.text)
             Text(card.detail, style = Type.rowLabel, color = Theme.text2)
         }
         Chevron()
@@ -162,12 +159,12 @@ internal fun RecentRow(row: RecordingRow, onClick: () -> Unit) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.size(8.dp).background(Theme.of(row.type), CircleShape))
-                Text(row.title, style = Type.statusLabel.copy(fontSize = 16.sp), color = Theme.text)
+                Text(row.title, style = Type.bodyStrong, color = Theme.text)
             }
             Text(row.date, style = Type.tertiaryText, color = Theme.text2)
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(km(row.distance, 13), style = Type.number22, color = Theme.text)
+            Text(km(row.distance, Type.rowUnit), style = Type.number22, color = Theme.text)
             Text(row.detail, style = Type.tertiaryText, color = Theme.text2)
         }
         Chevron(Theme.text3, size = 16.dp, icon = NfIcons.rowChevron)
@@ -175,9 +172,9 @@ internal fun RecentRow(row: RecordingRow, onClick: () -> Unit) {
 }
 
 /** "10.21 km": the unit smaller and dimmer, on the number's baseline. */
-private fun km(distance: String, unitSize: Int) = buildAnnotatedString {
+private fun km(distance: String, unit: SpanStyle) = buildAnnotatedString {
     append(distance)
-    withStyle(SpanStyle(fontSize = unitSize.sp, fontWeight = FontWeight.Medium, color = Theme.text2)) { append(" km") }
+    withStyle(unit.copy(color = Theme.text2)) { append(" km") }
 }
 
 @Composable

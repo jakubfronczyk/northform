@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,15 +27,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jakubfronczyk.northform.ui.theme.Theme
 import com.jakubfronczyk.northform.ui.theme.Type
-
-private val CardShape = RoundedCornerShape(22.dp)
-private val ButtonShape = RoundedCornerShape(14.dp)
-private val Danger = Color(0xFFFF6961)
+import com.jakubfronczyk.northform.ui.theme.Shapes
+import com.jakubfronczyk.northform.ui.theme.Dimens
 
 /**
  * The Settings artboard (`Settings.dc.html`, profile-settings spec): the profile and heart rates, the zones bar, the
@@ -54,17 +49,17 @@ fun SettingsScreen(
     var confirmForget by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 64.dp, bottom = 50.dp),
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Dimens.gutter).padding(top = Dimens.screenTop, bottom = Dimens.screenBottom),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(Modifier.offset(x = (-10).dp).size(44.dp).clickable(onClick = back), contentAlignment = Alignment.Center) {
+                Box(Modifier.offset(x = (-10).dp).size(Dimens.iconButton).clickable(onClick = back), contentAlignment = Alignment.Center) {
                     NfIcon(NfIcons.back, Theme.text, size = 22.dp, label = "Back to Today")
                 }
-                Text("Settings", style = Type.number(28, FontWeight.ExtraBold), color = Theme.text)
+                Text("Settings", style = Type.pageTitle, color = Theme.text)
             }
             Section("Profile") {
-                Column(Modifier.fillMaxWidth().clip(CardShape).background(Theme.card).padding(horizontal = 16.dp)) {
+                Column(Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).padding(horizontal = 16.dp)) {
                     ValueRow("Profile", model.profileValue, model.profileNote, editProfile)
                     DashedLine()
                     ValueRow("Heart rate", model.heartRate, note = null, editProfile)
@@ -73,12 +68,12 @@ fun SettingsScreen(
             }
             Section("Heart rate zones") {
                 Column(
-                    Modifier.fillMaxWidth().clip(CardShape).background(Theme.card).clickable(onClick = editZones).padding(16.dp),
+                    Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).clickable(onClick = editZones).padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text("Zones", style = Type.statusLabel.copy(fontSize = 16.sp), color = Theme.text)
+                            Text("Zones", style = Type.bodyStrong, color = Theme.text)
                             Text(SettingsModel.ZONES_SUB, style = Type.tertiaryText, color = Theme.text2)
                         }
                         NfIcon(NfIcons.forward, Theme.text2, size = 18.dp)
@@ -86,8 +81,8 @@ fun SettingsScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Theme.zoneColors.forEachIndexed { zone, color ->
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Box(Modifier.fillMaxWidth().height(8.dp).background(color, RoundedCornerShape(4.dp)))
-                                Text("Z$zone", style = Type.tertiaryText.copy(fontSize = 12.sp), color = Theme.text3)
+                                Box(Modifier.fillMaxWidth().height(8.dp).background(color, Shapes.bar))
+                                Text("Z$zone", style = Type.caption, color = Theme.text3)
                             }
                         }
                     }
@@ -95,41 +90,41 @@ fun SettingsScreen(
             }
             Section("Sensor") {
                 val sensor = model.sensor
-                Column(Modifier.fillMaxWidth().clip(CardShape).background(Theme.card).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     if (sensor == null) {
                         Text("No sensor paired", style = Type.secondaryText, color = Theme.text2)
                     } else {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Box(Modifier.size(44.dp).background(Theme.bg, CircleShape), contentAlignment = Alignment.Center) {
+                            Box(Modifier.size(Dimens.sensorDisc).background(Theme.bg, CircleShape), contentAlignment = Alignment.Center) {
                                 NfIcon(NfIcons.sensor, Theme.text, size = 22.dp)
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(sensor.name, style = Type.sheetTitle.copy(fontSize = 17.sp), color = Theme.text)
+                                Text(sensor.name, style = Type.cardTitle, color = Theme.text)
                                 Text(sensor.detail, style = Type.tertiaryText, color = Theme.text2)
                             }
-                            sensor.battery?.let { Text(it, style = Type.statusLabel.copy(fontSize = 15.sp), color = Theme.text) }
+                            sensor.battery?.let { Text(it, style = Type.secondaryStrong, color = Theme.text) }
                         }
-                        OutlinedButton("Forget sensor", Danger) { confirmForget = true }
+                        OutlinedButton("Forget sensor", Theme.danger) { confirmForget = true }
                     }
                 }
             }
             Section("Units") {
-                Row(Modifier.fillMaxWidth().clip(CardShape).background(Theme.card).heightIn(min = 56.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).heightIn(min = 56.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Units", style = Type.secondaryText, color = Theme.text, modifier = Modifier.weight(1f))
                     Text(model.units, style = Type.secondaryText, color = Theme.text2)
                 }
             }
             Section("Data") {
-                Column(Modifier.fillMaxWidth().clip(CardShape).background(Theme.card).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(Modifier.fillMaxWidth().clip(Shapes.card).background(Theme.card).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("Backup", style = Type.sheetTitle.copy(fontSize = 17.sp), color = Theme.text)
+                        Text("Backup", style = Type.cardTitle, color = Theme.text)
                         Text(model.backupDetail, style = Type.tertiaryText, color = Theme.text2)
                     }
                     OutlinedButton(model.export.label, Theme.text, enabled = model.export.enabled, onClick = export)
-                    model.export.line?.let { Text(it, style = Type.tertiaryText.copy(fontSize = 12.sp), color = Theme.text3) }
+                    model.export.line?.let { Text(it, style = Type.caption, color = Theme.text3) }
                 }
             }
-            Text(model.version, style = Type.tertiaryText.copy(fontSize = 12.sp), color = Theme.text3, modifier = Modifier.align(Alignment.CenterHorizontally))
+            Text(model.version, style = Type.caption, color = Theme.text3, modifier = Modifier.align(Alignment.CenterHorizontally))
         }
         if (confirmForget) {
             ConfirmSheet(
@@ -155,7 +150,7 @@ private fun ValueRow(label: String, value: String, note: String?, onClick: () ->
         Text(label, style = Type.secondaryText, color = Theme.text, modifier = Modifier.weight(1f))
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(value, style = Type.secondaryText, color = Theme.text)
-            note?.let { Text(it, style = Type.tertiaryText.copy(fontSize = 12.sp), color = Theme.text3) }
+            note?.let { Text(it, style = Type.caption, color = Theme.text3) }
         }
         NfIcon(NfIcons.forward, Theme.text2, size = 16.dp)
     }
@@ -165,7 +160,7 @@ private fun ValueRow(label: String, value: String, note: String?, onClick: () ->
 @Composable
 private fun OutlinedButton(text: String, color: Color, enabled: Boolean = true, onClick: () -> Unit) {
     Box(
-        Modifier.fillMaxWidth().height(48.dp).clip(ButtonShape).border(1.5.dp, Theme.outline, ButtonShape).clickable(enabled = enabled, onClick = onClick),
+        Modifier.fillMaxWidth().height(Dimens.secondaryButton).clip(Shapes.button).border(Dimens.stroke, Theme.outline, Shapes.button).clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Text(text, style = Type.statusLabel.copy(fontSize = 15.sp), color = if (enabled) color else Theme.dim) }
+    ) { Text(text, style = Type.secondaryStrong, color = if (enabled) color else Theme.dim) }
 }
