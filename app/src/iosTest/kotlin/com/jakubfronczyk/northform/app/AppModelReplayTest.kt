@@ -311,6 +311,33 @@ class AppModelReplayTest {
         assertEquals(mine, profiles.profile())
     }
 
+    /** first-launch-setup: the profile saved on step 1 is what the first run computes with: its config, replay header and metrics. */
+    @Test
+    fun a_run_after_setup_uses_that_profile() = runTest {
+        val store = InMemoryRecordingStore()
+        val metas = ArrayList<ReplayMeta>()
+        val model = appOver(store, makeTap = { meta, _ -> metas += meta; null })
+        model.checkUnfinished(); runCurrent()
+        assertEquals(true, model.needsSetup.value)
+        val mine = AppDeps.sampleProfile.copy(hrMax = 201, hrRest = 52)
+
+        model.saveProfile(mine); runCurrent()
+        val id = saveReplayRun(model)
+
+        assertEquals(listOf(201 to 52), metas.map { it.hrMax to it.hrRest }, "the run's config and replay header")
+        assertTrue(store.records.metrics(id).all { it.profile == mine }, "the run's metrics")
+    }
+
+    /** first-launch-setup story 12: saved runs from before Setup existed, but no profile: Setup once, the runs untouched. */
+    @Test
+    fun recordings_but_no_profile_still_need_setup() = runTest {
+        val model = modelOver(object : SavedRecordings { override suspend fun latest(n: Int) = listOf(savedRun("a")) })
+        model.checkUnfinished(); runCurrent()
+
+        assertEquals(true, model.needsSetup.value)
+        assertEquals(listOf(RecordingId("a")), model.saved.value.recordings.map { it.recording.id })
+    }
+
     @Test
     fun a_stored_profile_never_needs_setup() = runTest {
         val model = appOver(InMemoryRecordingStore(), profiles = InMemoryProfileStore(AppDeps.sampleProfile))

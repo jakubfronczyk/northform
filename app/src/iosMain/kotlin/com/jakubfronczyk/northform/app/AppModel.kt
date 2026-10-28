@@ -69,15 +69,16 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     private val profileRead: Deferred<Unit> = scope.async {
         try {
             val stored = deps.profileStore.profile()
-            if (!profileEdited.load()) {
-                stored?.let { _profile.value = it }
-                _needsSetup.value = stored == null
-            }
+            // Each decision and its write is one compare-and-set, so a save landing in between (from the main thread)
+            // can't be overwritten: `saveProfile` raises `profileEdited` before it writes, and always leaves needsSetup
+            // non-null, so a read that answers after it finds the CAS failing (or the flag up) and keeps the save's values.
+            if (stored != null) _profile.update { now -> if (profileEdited.load()) now else stored }
+            _needsSetup.compareAndSet(null, stored == null)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             deps.log("profile read failed: $e")
-            if (!profileEdited.load()) _needsSetup.value = false
+            _needsSetup.compareAndSet(null, false)
         }
     }
 
@@ -104,9 +105,11 @@ class AppModel(private val deps: AppDeps, private val scope: CoroutineScope) {
     val unfinished: StateFlow<UnfinishedRun?> = _unfinished.asStateFlow()
 
     // Thread safety: the public calls come from the main thread, the launched work runs on the scope's dispatcher
-    // (Dispatchers.Default in the app). Both pieces of state are therefore lock-free and non-suspending — an atomic
-    // flag and an immutable map swapped by CAS (`update {}`) — rather than a Mutex: `appWentToBackground` must stay
-    // synchronous (it begins iOS background tasks before returning), so it cannot suspend on a lock.
+    // (Dispatchers.Default in the app). The state both touch is therefore lock-free and non-suspending — the atomic flags
+    // below and `profileEdited`, and state flows written by compare-and-set (`update {}` / `compareAndSet`: `finishing`'s
+    // immutable map, the saved list, the profile and needsSetup against the launch read) — rather than a Mutex:
+    // `appWentToBackground` must stay synchronous (it begins iOS background tasks before returning), so it cannot suspend
+    // on a lock. Only the profile *writes* to the store take one (`profileWrites`), off the main thread.
 
     /** A run is being opened (permission prompts): Start does nothing until it is (`:27`). */
     private val opening = AtomicBoolean(false)
