@@ -193,7 +193,7 @@ object NorthformApp {
         AppRoot(
             activeRun = activeRun?.session,
             today = TodayModel.from(saved.recordings, gateSensor, sensorName, deps.wallClock.now(), deps.tzOffset()),
-            history = HistoryModel.from(saved, deps.wallClock.now(), deps.tzOffset()),
+            history = { filter -> HistoryModel.from(saved, filter, deps.wallClock.now(), deps.tzOffset()) },
             retryHistory = model::refreshSaved,
             onStartRun = model::startRun,
             onCloseRun = model::closeRun,

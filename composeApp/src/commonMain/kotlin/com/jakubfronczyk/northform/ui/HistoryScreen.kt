@@ -1,6 +1,7 @@
 package com.jakubfronczyk.northform.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -16,14 +18,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jakubfronczyk.northform.core.RecordingId
+import com.jakubfronczyk.northform.core.RecordingType
+import com.jakubfronczyk.northform.core.RunTag
+import com.jakubfronczyk.northform.ui.run.SummaryModel
 
 /**
  * The History artboard (`Home.dc.html`, history-screen spec): Back, the title, the count and every saved recording
@@ -33,6 +41,8 @@ import com.jakubfronczyk.northform.core.RecordingId
 @Composable
 fun HistoryScreen(
     model: HistoryModel,
+    /** A pill tapped: the new filter (the root holds it). */
+    onFilter: (HistoryFilter) -> Unit,
     back: () -> Unit,
     retry: () -> Unit,
     openRecording: (RecordingId) -> Unit = {},
@@ -44,6 +54,7 @@ fun HistoryScreen(
                 Text("‹", style = Type.number(30), color = Theme.text)
             }
             Text("History", style = Type.number(28, FontWeight.ExtraBold), color = Theme.text)
+            if (model is HistoryModel.Listed) Filters(model, onFilter)
         }
         when (model) {
             HistoryModel.Loading -> Unit
@@ -67,5 +78,33 @@ fun HistoryScreen(
                 }
             }
         }
+    }
+}
+
+/** All / Run / Walk, then the run tags (not for walks), as on the artboard. */
+@Composable
+private fun Filters(model: HistoryModel.Listed, onFilter: (HistoryFilter) -> Unit) {
+    val f = model.filter
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (type in listOf(null, RecordingType.Run, RecordingType.Walk)) {
+                FilterPill(type?.let(SummaryModel::title) ?: "All", selected = f.type == type, horizontal = 20.dp) { onFilter(f.pick(type)) }
+            }
+        }
+        if (model.showsTags) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (tag in RunTag.entries) FilterPill(tag.name, selected = f.tag == tag, horizontal = 14.dp) { onFilter(f.toggle(tag)) }
+            }
+        }
+    }
+}
+
+private val PillShape = RoundedCornerShape(22.dp)
+
+@Composable
+private fun FilterPill(text: String, selected: Boolean, horizontal: Dp, onClick: () -> Unit) {
+    val framed = if (selected) Modifier.background(Theme.text, PillShape) else Modifier.border(1.5.dp, Theme.ring, PillShape)
+    Box(framed.height(44.dp).clip(PillShape).clickable(onClick = onClick).padding(horizontal = horizontal), contentAlignment = Alignment.Center) {
+        Text(text, style = Type.statusLabel.copy(fontSize = 15.sp), color = if (selected) Theme.bg else Theme.text)
     }
 }

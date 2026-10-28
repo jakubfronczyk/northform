@@ -47,8 +47,11 @@ private fun preview(saved: List<SavedRecording>, sensor: GateSensor? = connected
 
 // History (history-screen/01) on the same fake week.
 @Composable
-private fun previewHistory(saved: SavedList) = HistoryScreen(HistoryModel.from(saved, now, TZ), back = {}, retry = {})
+private fun previewHistory(saved: SavedList, filter: HistoryFilter = HistoryFilter()) =
+    HistoryScreen(HistoryModel.from(saved, filter, now, TZ), onFilter = {}, back = {}, retry = {})
 
 @Preview @Composable fun HistoryPreview() = previewHistory(SavedList.Loaded(week))
 @Preview @Composable fun HistoryNothingSavedPreview() = previewHistory(SavedList.Loaded(emptyList()))
 @Preview @Composable fun HistoryFailedPreview() = previewHistory(SavedList.Failed(week, "disk"))
+@Preview @Composable fun HistoryTempoPreview() = previewHistory(SavedList.Loaded(week), HistoryFilter(tag = RunTag.Tempo))
+@Preview @Composable fun HistoryNoMatchPreview() = previewHistory(SavedList.Loaded(week), HistoryFilter(type = RecordingType.Run, tag = RunTag.Intervals))

@@ -27,8 +27,8 @@ fun AppRoot(
     activeRun: RunSessionHandle?,
     /** What Today shows (today-screen spec); the root builds it from the saved list and the sensor link. */
     today: TodayModel,
-    /** What History shows (history-screen spec), from the same saved list as [today]. */
-    history: HistoryModel,
+    /** What History shows under a filter (history-screen spec), from the same saved list as [today]. */
+    history: (HistoryFilter) -> HistoryModel,
     /** History's Retry after a failed read. */
     retryHistory: () -> Unit,
     /** The Run or Walk tile: starts a recording of that type. */
@@ -50,6 +50,7 @@ fun AppRoot(
     // scroll position lives here, not in the screen, to survive that trip; a fresh one each time History opens.
     var showHistory by remember { mutableStateOf(false) }
     var historyList by remember { mutableStateOf(LazyListState()) }
+    var historyFilter by remember { mutableStateOf(HistoryFilter()) }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         when {
             // The Sensor sheet first: the gate's "Pair a sensor" opens it over a run still at the gate, and Close returns there.
@@ -59,9 +60,9 @@ fun AppRoot(
                 pairSensor = { showSensor = true },
             )
             summary != null -> summary()
-            showHistory -> HistoryScreen(history, back = { showHistory = false }, retry = retryHistory, listState = historyList)
+            showHistory -> HistoryScreen(history(historyFilter), onFilter = { historyFilter = it }, back = { showHistory = false }, retry = retryHistory, listState = historyList)
             else -> {
-                TodayScreen(today, start = onStartRun, openSensor = { showSensor = true }, openHistory = { historyList = LazyListState(); showHistory = true })
+                TodayScreen(today, start = onStartRun, openSensor = { showSensor = true }, openHistory = { historyList = LazyListState(); historyFilter = HistoryFilter(); showHistory = true })
                 crashPrompt?.invoke()
             }
         }

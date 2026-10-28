@@ -28,7 +28,8 @@ class HistoryModelTest {
     private val tempo = saved("tempo", RecordingType.Run, RunTag.Tempo, "2025-09-30T05:12:00Z", 10.21, (52.minutes + 40.seconds).inWholeSeconds.toInt(), 156)
     private val walk = saved("walk", RecordingType.Walk, null, "2025-09-27T15:45:00Z", 4.10, (48.minutes + 12.seconds).inWholeSeconds.toInt(), null)
 
-    private fun listed(vararg saved: SavedRecording) = assertIs<HistoryModel.Listed>(HistoryModel.from(SavedList.Loaded(saved.toList()), now, tz))
+    private fun listed(vararg saved: SavedRecording, filter: HistoryFilter = HistoryFilter()) =
+        assertIs<HistoryModel.Listed>(HistoryModel.from(SavedList.Loaded(saved.toList()), filter, now, tz))
 
     @Test
     fun every_saved_recording_is_a_row_newest_first_formatted_as_today_s_recent() {
@@ -55,8 +56,8 @@ class HistoryModelTest {
 
     @Test
     fun loading_shows_nothing_and_a_failed_read_offers_retry() {
-        assertEquals(HistoryModel.Loading, HistoryModel.from(SavedList.Loading, now, tz))
-        assertEquals(HistoryModel.Failed, HistoryModel.from(SavedList.Failed(listOf(tempo), "disk"), now, tz))
+        assertEquals(HistoryModel.Loading, HistoryModel.from(SavedList.Loading, HistoryFilter(), now, tz))
+        assertEquals(HistoryModel.Failed, HistoryModel.from(SavedList.Failed(listOf(tempo), "disk"), HistoryFilter(), now, tz))
         assertEquals("Couldn't load history", HistoryModel.Failed.line)
     }
 
@@ -78,5 +79,51 @@ class HistoryModelTest {
     fun the_year_is_read_in_the_recording_s_own_zone() {
         val nye = saved("nye", RecordingType.Run, null, "2025-01-01T01:30:00Z", 5.0, 30 * 60, 140, zone = -3 * 3600)
         assertEquals("Tue 31 Dec 2024 · 22:30", listed(nye).rows.single().date)
+    }
+
+    // ── Filters (history-screen/02) ──
+
+    private val long = saved("long", RecordingType.Run, RunTag.Long, "2025-09-28T06:30:00Z", 16.80, 92 * 60, 148)
+    private val easy = saved("easy", RecordingType.Run, RunTag.Easy, "2025-09-23T05:10:00Z", 6.92, 38 * 60, 139)
+    private val week = arrayOf(tempo, long, walk, easy)
+
+    private fun ids(m: HistoryModel.Listed) = m.rows.map { it.id.value }
+
+    @Test
+    fun all_run_and_walk_pick_by_type() {
+        assertEquals(listOf("tempo", "long", "walk", "easy"), ids(listed(*week)))
+        assertEquals(listOf("tempo", "long", "easy"), ids(listed(*week, filter = HistoryFilter(type = RecordingType.Run))))
+        assertEquals(listOf("walk"), ids(listed(*week, filter = HistoryFilter(type = RecordingType.Walk))))
+    }
+
+    @Test
+    fun a_tag_combines_with_the_type_and_the_count_follows() {
+        val tempoOnly = listed(*week, filter = HistoryFilter(tag = RunTag.Tempo))
+        assertEquals(listOf("tempo"), ids(tempoOnly))
+        assertEquals("1 recording", tempoOnly.count)
+        assertEquals(listOf("easy"), ids(listed(*week, filter = HistoryFilter(type = RecordingType.Run, tag = RunTag.Easy))))
+    }
+
+    @Test
+    fun the_tag_pills_show_except_for_walks() {
+        assertEquals(true, listed(*week).showsTags)
+        assertEquals(true, listed(*week, filter = HistoryFilter(type = RecordingType.Run)).showsTags)
+        assertEquals(false, listed(*week, filter = HistoryFilter(type = RecordingType.Walk)).showsTags)
+    }
+
+    @Test
+    fun picking_walk_clears_the_tag_and_tapping_the_tag_again_clears_it() {
+        val tempoRuns = HistoryFilter(type = RecordingType.Run, tag = RunTag.Tempo)
+        assertEquals(HistoryFilter(type = RecordingType.Walk), tempoRuns.pick(RecordingType.Walk))
+        assertEquals(HistoryFilter(tag = RunTag.Tempo), tempoRuns.pick(null))
+        assertEquals(HistoryFilter(type = RecordingType.Run), tempoRuns.toggle(RunTag.Tempo))
+        assertEquals(tempoRuns.copy(tag = RunTag.Long), tempoRuns.toggle(RunTag.Long))
+    }
+
+    @Test
+    fun filters_that_hide_everything_say_so_and_not_nothing_here_yet() {
+        val m = listed(tempo, walk, filter = HistoryFilter(tag = RunTag.Intervals))
+        assertEquals("No recordings match these filters", m.emptyLine)
+        assertEquals("0 recordings", m.count)
     }
 }
