@@ -35,7 +35,10 @@ import kotlin.time.Instant
  * WRITE parity: [encode] matches the Swift writer's sorted keys and millisecond offsets. Numbers are
  * Kotlin's shortest round-trip form with integral values printed as integers, which equals Swift's
  * `JSONEncoder` output for the bundled corpus but is not guaranteed byte-identical in general
- * (v1.0 only reads fixtures).
+ * (v1.0 only reads fixtures). The JVM byte pin checks the shared writer's structure (key order,
+ * integer printing, millisecond offsets). The phone (Kotlin/Native) writes the same values but may
+ * differ in the last digit of a 17-digit tie, and nothing compares those bytes: RecordingTap output
+ * is only parsed back, and RealRecordingsTest hashes formatted pace, not fixture bytes.
  */
 object Fixture {
     const val version = 1

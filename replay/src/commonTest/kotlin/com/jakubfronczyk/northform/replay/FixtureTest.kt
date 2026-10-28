@@ -131,12 +131,16 @@ class FixtureTest {
         }
     }
 
-    /** Not required for v1.0 (read-only), but worth knowing: the Kotlin writer reproduces the Swift bytes for the corpus. */
+    /**
+     * Not required for v1.0 (read-only), but worth knowing: the Kotlin writer reproduces the Swift bytes for the
+     * corpus. Pinned byte for byte where [swiftByteParity] holds; elsewhere the re-encoding must decode to the same fixture.
+     */
     @Test
     fun bundled_fixtures_re_encode_byte_identical() {
         val differing = listOf("run-1-park", "run-2-walk", "sitting-still-10min", "slow-walk-5min", "straight-run-3min").filter { name ->
             val text = resourceText("fixtures/$name.jsonl")
-            Fixture.encode(Fixture.parse(text)) != text
+            val encoded = Fixture.encode(Fixture.parse(text))
+            if (swiftByteParity) encoded != text else Fixture.parse(encoded) != Fixture.parse(text)
         }
         assertEquals(emptyList(), differing, "fixtures whose re-encoding differs from the Swift-written bytes")
     }

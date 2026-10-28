@@ -10,5 +10,8 @@ fun bundled(name: String): ReplayScript = parsed.getOrPut(name) { Fixture.parse(
 
 fun bundledExpected(name: String): String = resourceText("fixtures/$name.expected.json")
 
+/** Whether [Fixture.encode] reproduces the Swift-written bytes on this platform, or only the same decoded values. */
+expect val swiftByteParity: Boolean
+
 /** A Swift-written fixture outside the repo (`NORTHFORM_SWIFT_FIXTURE`), or null when none is given. JVM only. */
 expect fun swiftFixtureText(): String?
