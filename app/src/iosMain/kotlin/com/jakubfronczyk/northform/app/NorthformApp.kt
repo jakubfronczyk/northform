@@ -177,7 +177,7 @@ object NorthformApp {
     }
 
     /**
-     * adapters/03, for the gate (run-flow-ui/07): mapped by [forSetup] into the gate's model, which says why GPS is ✗
+     * adapters/03, for the gate (run-flow-ui/07): mapped by `asPermission()` into the gate's model, which says why GPS is ✗
      * while location is denied or restricted. Changes live as the person flips the switch in Settings.
      */
     fun locationAuthorizationState(): StateFlow<LocationAuthorization> = locationAuthorization.state
@@ -212,20 +212,12 @@ object NorthformApp {
             .collectAsState(sensor.linkState.value.reported !is SensorState.Unauthorized)
         SetupScreen(
             profile = profile, now = deps.wallClock.now(), tzOffset = deps.tzOffset(), onSaveProfile = model::saveProfile,
-            permissions = SetupPermissions.of(bluetoothAllowed, location.forSetup()),
+            permissions = SetupPermissions.of(bluetoothAllowed, location.asPermission()),
             allowLocation = { scope.launch { DeviceLog.app.notice("location authorization answered: ${requestWhenInUseAuthorization()}") } },
             openSettings = ::openAppSettings,
             pairing = { rememberSetupPairing { SensorScreenModel(sensor, sensorDetails) } },
             finish = finish,
         )
-    }
-
-    /** The platform's authorization in the UI's words, for Setup's Location row and the gate's reason (run-flow-ui/07). */
-    private fun LocationAuthorization.forSetup() = when (this) {
-        LocationAuthorization.NotDetermined -> SetupPermissions.Location.NotAsked
-        LocationAuthorization.WhenInUse -> SetupPermissions.Location.Allowed
-        LocationAuthorization.Denied -> SetupPermissions.Location.Denied
-        LocationAuthorization.Restricted -> SetupPermissions.Location.Restricted
     }
 
     /** "Version 1.0 (14)" from the bundle (Info.plist), as the Settings artboard prints it. */
@@ -290,7 +282,7 @@ object NorthformApp {
             gateSensor = gateSensor,
             connectSensor = ::connectPairedSensor,
             // Replay feeds its own fixes whatever iOS says, so the gate has no location reason there (null = unknown).
-            gateLocation = if (live) locationAuth.forSetup() else null,
+            gateLocation = if (live) locationAuth.asPermission() else null,
             openLocationSettings = ::openLocationSettings,
             crashPrompt = unfinished?.let { run -> { CrashPromptScreen(run.facts, now = IosWallClock::now, onChoice = model::resolveUnfinished) } },
             summary = summary?.let { session -> { SummaryScreen(session.state.collectAsState().value, edits = session.edits.collectAsState().value, onEdit = model::editSummary, onSave = model::saveSummary, onDelete = model::deleteSummary, onAcceptHrMax = model::acceptHrMax, onRetry = model::retrySummary, map = { route -> RouteMap(route, showsUserLocation = false) }, review = session.review, onBack = model::closeSummary) } },
