@@ -29,7 +29,17 @@ object NfIcons {
     val rowChevron = stroked(2.2f, "M9 6l6 6-6 6")
     /** The tick on the Gate's green disc. */
     val check = stroked(3f, "M5 12.5l4.5 4.5L19 7.5")
+    /** The green tick beside "Allowed" and an OK fact (`SetupPermissions.dc.html`, `SetupPair.dc.html`). */
+    val tick = stroked(2.4f, "M5 12.5l4.5 4.5L19 7.5")
     val warning = stroked(2f, "M12 3l10 18H2z", "M12 10v5", "M12 18h.01")
+    /** The birth-date control's calendar (`SetupProfile.dc.html`). */
+    val calendar = stroked(2f, roundedRect(3.5f, 5f, 17f, 15f, 3f), "M3.5 10h17", "M8 3v4", "M16 3v4")
+    /** Setup's Bluetooth permission row. */
+    val bluetooth = stroked(2f, "M7 7l10 10-5 5V2l5 5L7 17")
+    /** Setup's Location permission row. */
+    val location = stroked(2f, "M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z", circle(12f, 10f, 2.4f))
+    /** The three-quarter ring beside "Scanning…" (`SetupPair.dc.html`); the caller turns it. */
+    val spinner = stroked(2.4f, "M12 3a9 9 0 1 0 9 9")
     /** The crash prompt's "Interrupted" line. */
     val interrupted = stroked(2.2f, "M12 3.5L2.5 20h19z", "M12 10v4.5", "M12 17.5v.01")
     val bin = stroked(2f, "M4 7h16", "M10 11v6", "M14 11v6", "M6 7l1 13h10l1-13", "M9 7V4h6v3")

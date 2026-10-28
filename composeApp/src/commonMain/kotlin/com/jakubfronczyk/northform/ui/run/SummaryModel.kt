@@ -122,8 +122,6 @@ data class SummaryModel(
             Band(zone.number, lowBpm = zone.lowerFraction?.let { profile.bpmAt(it) } ?: range.first, highBpm = zone.upperFraction?.let { profile.bpmAt(it) } ?: range.last)
         }
 
-        private fun Profile.bpmAt(reserveFraction: Double): Int = (hrRest + reserveFraction * (hrMax - hrRest)).roundedHalfAwayFromZero().toInt()
-
         private fun zoneRows(timeInZone: Map<Zone, Duration>): List<ZoneRow> {
             val longest = timeInZone.values.maxOrNull()?.takeIf { it > Duration.ZERO }
             return timeInZone.entries.sortedBy { it.key.number }.map { (zone, time) ->

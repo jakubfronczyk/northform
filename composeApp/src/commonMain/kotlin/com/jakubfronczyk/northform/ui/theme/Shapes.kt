@@ -21,7 +21,7 @@ object Shapes {
     val button = RoundedCornerShape(14.dp)
     /** Today's last-recording thumbnail. */
     val thumbnail = RoundedCornerShape(14.dp)
-    /** A small filled button inside a row: the Gate's Connect / Pair, the Sensor screen's Pair. */
+    /** A small control inside a row: the Gate's Connect / Pair, Pair, Allow, Open Settings, the birth-date control. */
     val inlineButton = RoundedCornerShape(12.dp)
     /** One option of the Summary's Type and RPE rows. */
     val option = RoundedCornerShape(12.dp)
@@ -40,6 +40,10 @@ object Shapes {
     val fixSegment = RoundedCornerShape(3.dp)
     /** One of the two drawn pause bars. */
     val pauseBar = RoundedCornerShape(2.dp)
+    /** One of Setup's four 4 dp progress segments. */
+    val progressSegment = RoundedCornerShape(2.dp)
+    /** A box inset in a card: the Pair step's firmware warning. */
+    val inset = RoundedCornerShape(16.dp)
     /** A bottom sheet's top corners: the confirm sheet, the crash prompt, the Gate and live sheets over the map. */
     val sheet = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
     // Near-duplicate: `capsule` (50 %) and `tag` (999 dp) both draw fully round ends; kept apart for the owner to decide.

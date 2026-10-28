@@ -243,5 +243,5 @@ private fun BackButton(onClick: () -> Unit) {
     Box(
         Modifier.padding(start = Dimens.gutter, top = Dimens.screenTop).size(Dimens.iconButton).background(Theme.overlay, CircleShape).clip(CircleShape).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { NfIcon(NfIcons.back, Theme.text, size = 22.dp, label = "Back") }
+    ) { NfIcon(NfIcons.back, Theme.text, size = Dimens.icon, label = "Back") }
 }

@@ -34,4 +34,23 @@ class ProfileTest {
         val b = LocationFix(Instant.fromEpochSeconds(0), 53.0, 13.0, 5.0)
         assertTrue(abs(Geo.distance(a, b) - 111_195) < 1, "${Geo.distance(a, b)} m")
     }
+
+    /** first-launch-setup (D54, SU6): HRmax from age, Tanaka's 208 − 0.7 × age, rounded half away from zero. */
+    @Test
+    fun the_hrmax_estimate_is_208_minus_0_7_times_age() {
+        assertEquals(187, Profile.estimatedHrMax(age = 30))
+        assertEquals(199, Profile.estimatedHrMax(age = 13), "198.9")
+        assertEquals(138, Profile.estimatedHrMax(age = 100))
+        assertEquals(173, Profile.estimatedHrMax(age = 50), "173.0")
+        assertEquals(191, Profile.estimatedHrMax(age = 25), "190.5 rounds up")
+    }
+
+    /** Karvonen's inverse: the bpm at a fraction of heart-rate reserve, the one rule the zone tables and the Summary share. */
+    @Test
+    fun the_bpm_at_a_reserve_fraction_is_rest_plus_that_much_reserve_rounded_half_away_from_zero() {
+        assertEquals(124, profile.bpmAt(0.5), "60 + 0.5 × 127 = 123.5 rounds up")
+        assertEquals(136, profile.bpmAt(0.6), "136.2")
+        assertEquals(60, profile.bpmAt(0.0))
+        assertEquals(187, profile.bpmAt(1.0))
+    }
 }

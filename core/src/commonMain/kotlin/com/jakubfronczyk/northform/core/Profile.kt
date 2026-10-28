@@ -50,7 +50,7 @@ data class Profile(
     val heightCm: Double,
     val hrMax: Int,
     /** 60 bpm until measured or set. */
-    val hrRest: Int = 60,
+    val hrRest: Int = DEFAULT_REST,
     val zones: HRZones = HRZones.standard,
 ) {
     /** The messages mirror Swift's enum descriptions ("hrMax(60)"), which the fixture errors quote. */
@@ -72,9 +72,25 @@ data class Profile(
     /** `Zones.swift:3` — heart-rate reserve fraction: (HR − HRrest) / (HRmax − HRrest) (Karvonen). */
     fun reserveFraction(bpm: Int): Double = (bpm - hrRest).toDouble() / (hrMax - hrRest).toDouble()
 
+    /**
+     * The inverse of [reserveFraction]: the bpm at a fraction of heart-rate reserve, HRrest + fraction × (HRmax − HRrest),
+     * rounded half away from zero. The one rule behind every zone boundary shown in bpm (Setup's zones, the zone editor,
+     * the Summary's bands), so they always agree.
+     */
+    fun bpmAt(reserveFraction: Double): Int = (hrRest + reserveFraction * (hrMax - hrRest)).roundedHalfAwayFromZero().toInt()
+
     // The zone of a bpm is `profile.zoneOf(bpm)` (`core/metrics/Zone.kt`, D23): a `Zone` value, never a bare Int.
 
     companion object {
+        /** A resting heart rate until measured or set (first-launch-setup: what a blank resting field saves). */
+        const val DEFAULT_REST = 60
+
+        /**
+         * HRmax from age when the runner doesn't know it (D54, SU6; first-launch-setup): Tanaka's 208 − 0.7 × age,
+         * rounded half away from zero. A starting point only: SU6 suggests the real one when a run goes higher.
+         */
+        fun estimatedHrMax(age: Int): Int = (208 - 0.7 * age).roundedHalfAwayFromZero().toInt()
+
         /**
          * `Profile.swift:101` — the one definition of valid profile heart rates, shared with replay
          * fixtures. The bounds are the valid-sample range ([HeartRate.valid], metrics/06): a resting HR
