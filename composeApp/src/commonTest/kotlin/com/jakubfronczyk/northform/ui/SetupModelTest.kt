@@ -6,6 +6,8 @@ import com.jakubfronczyk.northform.core.Sex
 import com.jakubfronczyk.northform.ui.SetupPermissions.Location
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.test.assertNull
 import kotlin.time.Instant
 
@@ -45,12 +47,16 @@ class SetupModelTest {
         assertEquals(SetupPermissions.Row(allowed = true, action = null), asked.bluetooth)
         assertEquals(SetupPermissions.Row(allowed = false, action = SetupPermissions.Action.Allow), asked.location)
         assertNull(asked.locationNote)
-        assertEquals("Not allowed", asked.location.status)
+        assertFalse(asked.location.showsNotAllowed, "not asked yet: only Allow, no \"Not allowed\" line (SetupPermissions.dc.html)")
 
         val denied = SetupPermissions.of(bluetoothAllowed = false, location = Location.Denied)
         assertEquals(SetupPermissions.Row(allowed = false, action = SetupPermissions.Action.OpenSettings), denied.bluetooth)
         assertEquals(SetupPermissions.Row(allowed = false, action = SetupPermissions.Action.OpenSettings), denied.location)
         assertEquals("Location is off for this app. Turn it on in iOS Settings, then come back.", denied.locationNote)
+        assertTrue(denied.location.showsNotAllowed)
+        assertTrue(denied.bluetooth.showsNotAllowed)
+        assertTrue(SetupPermissions.of(true, Location.Restricted).location.showsNotAllowed, "restricted: said, with no button")
+        assertFalse(SetupPermissions.of(true, Location.Allowed).location.showsNotAllowed)
 
         assertEquals(SetupPermissions.Row(allowed = false, action = null), SetupPermissions.of(true, Location.Restricted).location, "restricted: nothing the runner can change")
         assertEquals(SetupPermissions.Row(allowed = true, action = null), SetupPermissions.of(true, Location.Allowed).location)

@@ -1,6 +1,6 @@
 package com.jakubfronczyk.northform.app
 
-import androidx.compose.runtime.LaunchedEffect
+import com.jakubfronczyk.northform.ui.rememberSetupPairing
 import androidx.compose.runtime.Composable
 import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.ui.SetupPermissions
@@ -195,21 +195,22 @@ object NorthformApp {
     /**
      * first-launch-setup: the four steps over the real ports — the profile through the app model, Location through the
      * same request a run start makes (it does nothing once decided, so never two prompts), the sensor through the Sensor
-     * screen's model. [profile] is null until step 1 has saved one (the fallback must not prefill the form).
+     * screen's model, created and followed only while the Pair step is up. [profile] is null until step 1 has saved one
+     * (the fallback must not prefill the form).
      */
     @Composable
     private fun Setup(profile: Profile?, finish: () -> Unit) {
-        val sensorModel = remember { SensorScreenModel(sensor, sensorDetails) }
-        LaunchedEffect(sensorModel) { sensorModel.follow() }
-        val sensorUi by sensorModel.ui.collectAsState()
         val location by locationAuthorization.state.collectAsState()
-        val bluetoothAllowed by remember { sensor.states().map { it.state !is SensorState.Unauthorized } }.collectAsState(true)
+        // Starts from what the link reports now, so an unauthorized device never shows "Allowed" for a frame.
+        val bluetoothAllowed by remember { sensor.linkState.map { it.reported !is SensorState.Unauthorized } }
+            .collectAsState(sensor.linkState.value.reported !is SensorState.Unauthorized)
         SetupScreen(
             profile = profile, now = deps.wallClock.now(), tzOffset = deps.tzOffset(), onSaveProfile = model::saveProfile,
             permissions = SetupPermissions.of(bluetoothAllowed, location.forSetup()),
             allowLocation = { scope.launch { DeviceLog.app.notice("location authorization answered: ${requestWhenInUseAuthorization()}") } },
             openSettings = ::openAppSettings,
-            sensor = sensorUi, search = sensorModel::connect, pair = sensorModel::pair, finish = finish,
+            pairing = { rememberSetupPairing { SensorScreenModel(sensor, sensorDetails) } },
+            finish = finish,
         )
     }
 
@@ -270,7 +271,7 @@ object NorthformApp {
             exportBackup = model::exportBackup,
             needsSetup = needsSetup,
             setup = { finish -> Setup(if (needsSetup == true) null else profile, finish) },
-            zoneEditor = { close -> ZoneEditorScreen(profile, onSave = { model.saveProfile(it); close() }, back = close) },
+            zoneEditor = { close -> ZoneEditorScreen(profile, backLabel = "Back to Settings", onSave = { model.saveProfile(it); close() }, back = close) },
             profileEditor = { close -> ProfileEditScreen(profile, deps.wallClock.now(), deps.tzOffset(), onSave = { model.saveProfile(it); close() }, back = close) },
             forgetSensor = { scope.launch { runCatching { sensorDetails.forget() }.onFailure { DeviceLog.app.notice("forget failed: $it") } } },
             onStartRun = model::startRun,

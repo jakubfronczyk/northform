@@ -50,9 +50,12 @@ data class SetupPermissions(val bluetooth: Row, val location: Row, val locationN
     /** What the row's button does. */
     enum class Action { Allow, OpenSettings }
 
-    /** Whether iOS allows it, and the button beside it, if any. */
+    /**
+     * Whether iOS allows it, and the button beside it, if any. [showsNotAllowed]: the amber "Not allowed" line under the
+     * reason, once iOS has said no (denied, restricted); never before the runner was asked, where Allow says it all.
+     */
     data class Row(val allowed: Boolean, val action: Action?) {
-        val status: String get() = if (allowed) "Allowed" else "Not allowed"
+        val showsNotAllowed: Boolean get() = !allowed && action != Action.Allow
     }
 
     companion object {

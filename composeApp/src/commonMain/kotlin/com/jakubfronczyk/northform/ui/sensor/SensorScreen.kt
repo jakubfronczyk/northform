@@ -40,6 +40,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.jakubfronczyk.northform.core.DiscoveredSensor
+import com.jakubfronczyk.northform.core.SensorId
+import com.jakubfronczyk.northform.ui.InlineButton
+import com.jakubfronczyk.northform.ui.NfIcon
+import com.jakubfronczyk.northform.ui.NfIcons
+import com.jakubfronczyk.northform.ui.Spinner
 import com.jakubfronczyk.northform.ui.BigButton
 import com.jakubfronczyk.northform.ui.DashedLine
 import com.jakubfronczyk.northform.ui.theme.Theme
@@ -68,7 +73,7 @@ fun SensorScreen(model: SensorScreenModel, onClose: () -> Unit) {
 fun SensorScreenContent(
     ui: SensorScreenModel.Ui,
     connect: () -> Unit,
-    pair: (com.jakubfronczyk.northform.core.SensorId) -> Unit,
+    pair: (SensorId) -> Unit,
     cancel: () -> Unit,
     disconnect: () -> Unit,
     close: () -> Unit,
@@ -202,7 +207,7 @@ private fun ConnectedCard(ui: SensorScreenModel.Ui) = Card {
         }
         Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
-            Box(Modifier.size(8.dp).background(if (ui.bpm != null) Theme.ok else Theme.text3, CircleShape))
+            Box(Modifier.size(Dimens.statusDot).background(if (ui.bpm != null) Theme.ok else Theme.text3, CircleShape))
             Spacer(Modifier.width(6.dp))
             Text(if (ui.bpm != null) "updating every second" else "waiting for the first beat", style = Type.tertiaryText, color = if (ui.bpm != null) Theme.ok else Theme.text3)
         }
@@ -222,18 +227,18 @@ private fun Stat(label: String, value: String, color: Color, modifier: Modifier)
 @Composable
 private fun RowScope.Divider() = VDivider(Modifier.height(40.dp).align(Alignment.CenterVertically))
 
+/**
+ * E16's warning: firmware [version] is below 2.1.0. A card of its own under the Sensor screen's (`Sensor.dc.html`), or
+ * [inset] in Setup's pairing card as a darker box (`SetupPair.dc.html`, oldFirmware).
+ */
 @Composable
-private fun FirmwareWarning(version: String) {
-    Row(Modifier.fillMaxWidth().background(Theme.card, Shapes.card).padding(horizontal = 16.dp, vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Canvas(Modifier.size(22.dp).padding(top = 1.dp)) {
-            val tri = Path().apply { moveTo(size.width / 2, size.height * 0.12f); lineTo(size.width * 0.92f, size.height * 0.88f); lineTo(size.width * 0.08f, size.height * 0.88f); close() }
-            drawPath(tri, Theme.warn, style = Stroke(2.dp.toPx(), join = StrokeJoin.Round))
-            drawLine(Theme.warn, Offset(size.width / 2, size.height * 0.42f), Offset(size.width / 2, size.height * 0.62f), 2.dp.toPx(), StrokeCap.Round)
-            drawCircle(Theme.warn, 1.2.dp.toPx(), Offset(size.width / 2, size.height * 0.75f))
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Firmware $version is too old", style = Type.bodyBold, color = Theme.warn)
-            Text("Live runs work. Recording without the phone needs 2.1.0. Update in Polar Flow.", style = Type.rowLabel, color = Theme.text2)
+internal fun FirmwareWarning(version: String, inset: Boolean = false) {
+    val box = if (inset) Modifier.background(Theme.inset, Shapes.inset).padding(14.dp) else Modifier.background(Theme.card, Shapes.card).padding(horizontal = 16.dp, vertical = 14.dp)
+    Row(Modifier.fillMaxWidth().then(box), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        NfIcon(NfIcons.warning, Theme.warn, size = if (inset) Dimens.iconMedium else Dimens.icon, modifier = Modifier.padding(top = 1.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(if (inset) 2.dp else 4.dp)) {
+            Text("Firmware $version is too old", style = if (inset) Type.secondaryBold else Type.bodyBold, color = Theme.warn)
+            Text("Live runs work. Recording without the phone needs 2.1.0. Update in Polar Flow.", style = if (inset) Type.tertiaryText else Type.rowLabel, color = Theme.text2)
         }
     }
 }
@@ -246,27 +251,30 @@ private fun SearchingCard(code: String) = Card {
     }
 }
 
-/** `SetupPair.dc.html` scanning rows: every Polar advert, a Pair button each; nothing connects by itself. */
+/**
+ * `SetupPair.dc.html` scanning rows: "Scanning…" with its spinner while the scan runs, then every Polar advert with a
+ * Pair button each; nothing connects by itself. Shared by the Sensor screen (nothing paired) and Setup's Pair step.
+ */
 @Composable
-private fun NearbyCard(nearby: List<DiscoveredSensor>, pair: (com.jakubfronczyk.northform.core.SensorId) -> Unit, scanning: Boolean) = Card {
+internal fun NearbyCard(nearby: List<DiscoveredSensor>, pair: (SensorId) -> Unit, scanning: Boolean) = Card {
     Column {
-        Text(if (scanning) "Scanning…" else "Found nearby", style = Type.secondaryStrong, color = Theme.text, modifier = Modifier.padding(bottom = 12.dp))
+        Row(Modifier.padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (scanning) Spinner()
+            Text(if (scanning) "Scanning…" else "Found nearby", style = Type.secondaryStrong, color = Theme.text)
+        }
         if (nearby.isEmpty()) Text("Nothing yet. Press the sensor button until its light blinks.", style = Type.rowLabel, color = Theme.text2)
         for (d in nearby) {
             val info = PairedSensorInfo(d.id, d.name)
             DashedLine()
-            Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(Modifier.size(40.dp).background(Theme.track, CircleShape), contentAlignment = Alignment.Center) {
-                    Canvas(Modifier.size(20.dp)) { sensorGlyph(Theme.text2, 20.dp.toPx(), 1.6.dp.toPx()) }
+            Row(Modifier.fillMaxWidth().heightIn(min = Dimens.factRow).padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.size(Dimens.nearbyDisc).background(Theme.track, CircleShape), contentAlignment = Alignment.Center) {
+                    NfIcon(NfIcons.sensor, Theme.text, size = Dimens.iconMedium)
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(info.displayName, style = Type.bodyStrong, color = Theme.text)
                     Text(nearbyDetail(info.code, d.rssi, scanning), style = Type.tertiaryText, color = Theme.text2)
                 }
-                Box(
-                    Modifier.height(Dimens.inlineButton).background(Theme.primary, Shapes.inlineButton).clickable { pair(d.id) }.padding(horizontal = 18.dp),
-                    contentAlignment = Alignment.Center,
-                ) { Text("Pair", style = Type.secondaryBold, color = Theme.onPrimary) }
+                InlineButton("Pair", { pair(d.id) })
             }
         }
     }

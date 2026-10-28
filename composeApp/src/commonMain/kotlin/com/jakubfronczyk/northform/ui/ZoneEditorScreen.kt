@@ -40,19 +40,15 @@ import com.jakubfronczyk.northform.ui.theme.Type
 
 /**
  * The zone editor (`ZoneEditor.dc.html`, profile-settings/04): each zone's start in % of heart-rate reserve with ±1
- * steppers and live bpm, Reset to default, Save. Lays out a [ZoneEditor]; Back discards.
+ * steppers and live bpm, Reset to default, Save pinned at the bottom. Lays out a [ZoneEditor]; Back discards and says
+ * where it returns to ([backLabel]: "Back to Settings", or "Back" to Setup's zones step).
  */
 @Composable
-fun ZoneEditorScreen(profile: Profile, onSave: (Profile) -> Unit, back: () -> Unit) {
+fun ZoneEditorScreen(profile: Profile, backLabel: String, onSave: (Profile) -> Unit, back: () -> Unit) {
     var editor by remember(profile) { mutableStateOf(ZoneEditor.of(profile)) }
-    Column(
-        Modifier.fillMaxSize().background(Theme.bg).verticalScroll(rememberScrollState()).padding(horizontal = Dimens.gutter).padding(top = Dimens.screenTop, bottom = Dimens.screenBottom),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    PinnedScreen(button = { BigButton("Save", { onSave(profile.copy(zones = editor.zones)) }, textColor = Theme.onPrimary) }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.offset(x = (-10).dp).size(Dimens.iconButton).clickable(onClick = back), contentAlignment = Alignment.Center) {
-                NfIcon(NfIcons.back, Theme.text, size = 22.dp, label = "Back to Settings")
-            }
+            BackButton(backLabel, back)
             Box(Modifier.weight(1f))
             Text("Reset to default", style = Type.secondaryStrong, color = Theme.accent, modifier = Modifier.clickable { editor = editor.reset() }.padding(8.dp))
         }
@@ -64,7 +60,7 @@ fun ZoneEditorScreen(profile: Profile, onSave: (Profile) -> Unit, back: () -> Un
             editor.rows.forEachIndexed { i, row ->
                 if (i > 0) DashedLine()
                 Row(Modifier.fillMaxWidth().heightIn(min = Dimens.rowTall), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(Modifier.size(10.dp).background(Theme.zoneColors[i + 1], CircleShape))
+                    Box(Modifier.size(Dimens.zoneDot).background(Theme.zoneColors[i + 1], CircleShape))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(row.label, style = Type.secondaryStrong, color = Theme.text)
                         Text("from ${row.bpm} bpm", style = Type.tertiaryText, color = Theme.text2)
@@ -75,22 +71,21 @@ fun ZoneEditorScreen(profile: Profile, onSave: (Profile) -> Unit, back: () -> Un
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().height(10.dp).clip(Shapes.barTall), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(Modifier.fillMaxWidth().height(Dimens.barTall).clip(Shapes.barTall), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             editor.bar.forEachIndexed { zone, weight -> Box(Modifier.weight(weight.toFloat()).fillMaxHeight().background(Theme.zoneColors[zone])) }
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(editor.preview, style = Type.tertiaryText, color = Theme.text2)
             Text("Karvonen · stored as % so bpm follow your max", style = Type.caption, color = Theme.text3)
         }
-        BigButton("Save", { onSave(profile.copy(zones = editor.zones)) })
     }
 }
 
-/** A 36 dp round ±1 button; off (dim, no tap) at its limit. */
+/** A round ±1 button; off (dim, no tap) at its limit. */
 @Composable
 private fun Stepper(symbol: String, label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.size(36.dp).clip(CircleShape).border(Dimens.stroke, if (enabled) Theme.outline else Theme.track, CircleShape)
+        Modifier.size(Dimens.stepper).clip(CircleShape).border(Dimens.stroke, if (enabled) Theme.outline else Theme.track, CircleShape)
             .clickable(enabled = enabled, onClick = onClick).clearAndSetSemantics { contentDescription = label; role = Role.Button },
         contentAlignment = Alignment.Center,
     ) { Text(symbol, style = Type.stepperSymbol, color = if (enabled) Theme.text else Theme.dim) }
