@@ -295,6 +295,20 @@ class AppModelReplayTest {
         assertTrue(store.records.metrics(id).all { it.profile == mine }, "the run's metrics carry the stored profile")
     }
 
+    /** For now: the hard-coded profile stands in for an empty store, so the app opens on Today with it; a saved one wins. */
+    @Test
+    fun the_hardcoded_profile_skips_setup_until_one_is_saved() = runTest {
+        val stored = InMemoryProfileStore()
+        val model = appOver(InMemoryRecordingStore(), profiles = HardcodedProfile(stored, AppDeps.sampleProfile))
+        runCurrent()
+        assertEquals(false, model.needsSetup.value)
+        assertEquals(AppDeps.sampleProfile, model.profile.value)
+
+        val mine = AppDeps.sampleProfile.copy(hrMax = 199)
+        model.saveProfile(mine); runCurrent()
+        assertEquals(mine, HardcodedProfile(stored, AppDeps.sampleProfile).profile())
+    }
+
     /** first-launch-setup/01: with no stored profile the app needs Setup, unknown until the launch read lands. */
     @Test
     fun no_stored_profile_needs_setup_and_saving_step_one_ends_it() = runTest {
