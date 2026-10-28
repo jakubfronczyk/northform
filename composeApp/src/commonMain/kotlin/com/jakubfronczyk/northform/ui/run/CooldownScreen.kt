@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import com.jakubfronczyk.northform.core.ports.WallClock
+import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
 import com.jakubfronczyk.northform.ui.NfIcon
 import com.jakubfronczyk.northform.ui.NfIcons
@@ -46,7 +47,7 @@ import kotlinx.coroutines.delay
 
 /**
  * The cool-down (`Cooldown.dc.html`, run-flow-artboards; `RunView.swift:70` was the bare text). Reads the run's clock
- * ten times a second and folds what it sees into a [CooldownTrace] that lives as long as this screen; the layout is
+ * as each second turns ([untilNextSecond]) and folds what it sees into a [CooldownTrace] that lives as long as this screen; the layout is
  * [CooldownContent]. [skip] sends the existing `SkipCooldown`.
  */
 @Composable
@@ -58,7 +59,9 @@ fun CooldownScreen(snapshot: RunSnapshot, wallClock: WallClock, skip: () -> Unit
         while (true) {
             now = wallClock.now()
             trace = trace.add(latest, now)
-            delay(100)
+            // Wake as the shown second changes (one model, one trace point per second); the stop is `until` − 60 s.
+            val until = (latest.phase as? RunPhase.Cooldown)?.until ?: now
+            delay(untilNextSecond(until, now))
         }
     }
     CooldownContent(CooldownModel.from(snapshot, now, trace), skip)

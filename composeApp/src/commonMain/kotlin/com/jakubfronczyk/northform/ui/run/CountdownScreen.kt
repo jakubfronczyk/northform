@@ -38,17 +38,17 @@ import kotlin.time.Instant
 /**
  * The countdown (`Countdown.dc.html`, run-flow-artboards; `RunView.swift:56` was the bare number): ✕ and the type chip
  * on top, the ring with the seconds, "Put your phone in your pocket", five tick dots and "A buzz every second". It reads
- * the run's clock ten times a second; every value comes from [CountdownModel]. [cancel] is the flow's close: the run
+ * the run's clock as each second turns ([untilNextSecond]); every value comes from [CountdownModel]. [cancel] is the flow's close: the run
  * ends with nothing recorded and is discarded (D116). The artboard's "Start now" is not drawn: it needs a `UserAction`
  * the frozen reducer does not have (the spec's Out of Scope).
  */
 @Composable
 fun CountdownScreen(endsAt: Instant, type: RecordingType, wallClock: WallClock, cancel: () -> Unit) {
     var now by remember { mutableStateOf(wallClock.now()) }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(endsAt) {
         while (true) {
             now = wallClock.now()
-            delay(100)
+            delay(untilNextSecond(endsAt, now)) // wake as the shown second changes: one model per second
         }
     }
     val model = CountdownModel.from(endsAt, now, type)
