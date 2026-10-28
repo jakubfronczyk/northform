@@ -110,7 +110,7 @@ private fun SensorCard(sensor: TodayModel.Sensor, onClick: () -> Unit) {
 /** A start tile: Run filled in the primary colour, Walk outlined. */
 @Composable
 private fun Tile(title: String, fill: Color?, sub: Color, modifier: Modifier, onClick: () -> Unit) {
-    val framed = if (fill != null) modifier.background(fill, CardShape) else modifier.background(Theme.card, CardShape).border(1.5.dp, Theme.ring, CardShape)
+    val framed = if (fill != null) modifier.background(fill, CardShape) else modifier.background(Theme.card, CardShape).border(1.5.dp, Theme.outline, CardShape)
     Column(
         framed.height(150.dp).clip(CardShape).clickable(onClick = onClick).padding(16.dp),
         verticalArrangement = Arrangement.Bottom,

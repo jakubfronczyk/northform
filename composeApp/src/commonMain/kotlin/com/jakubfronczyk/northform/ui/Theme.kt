@@ -20,6 +20,8 @@ object Theme {
     val text3 = Color(0xFF8E8F8B)
     val dim = Color(0xFF8A8B88)
     val ring = Color(0xFF6A6B6E)
+    /** The outline of an unselected pill and the Walk tile (`#707175` on the Today and History artboards). */
+    val outline = Color(0xFF707175)
     val accent = Color(0xFFFF6B2C)
     val primary = Color(0xFFC2461C)
     val warn = Color(0xFFE9C46A)

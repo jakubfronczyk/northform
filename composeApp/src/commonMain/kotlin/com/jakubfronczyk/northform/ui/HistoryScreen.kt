@@ -49,7 +49,7 @@ fun HistoryScreen(
     listState: LazyListState = rememberLazyListState(),
 ) {
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 54.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 64.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.offset(x = (-10).dp).size(44.dp).clickable(onClick = back), contentAlignment = Alignment.Center) {
                 Text("‹", style = Type.number(30), color = Theme.text)
             }
@@ -64,9 +64,10 @@ fun HistoryScreen(
             }
             is HistoryModel.Listed -> LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 50.dp)) {
                 item {
-                    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
-                        Text(model.count, style = Type.tertiaryText, color = Theme.text2)
-                        Text("Newest first", style = Type.tertiaryText.copy(fontSize = 12.sp), color = Theme.text3)
+                    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        // Different sizes on one baseline, as the artboard's `align-items: baseline`.
+                        Text(model.count, style = Type.tertiaryText, color = Theme.text2, modifier = Modifier.alignByBaseline())
+                        Text("Newest first", style = Type.tertiaryText.copy(fontSize = 12.sp), color = Theme.text3, modifier = Modifier.alignByBaseline())
                     }
                 }
                 model.empty?.let { empty ->
@@ -92,15 +93,15 @@ fun HistoryScreen(
 @Composable
 private fun Filters(model: HistoryModel.Listed, onFilter: (HistoryFilter) -> Unit) {
     val f = model.filter
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (type in listOf(null, RecordingType.Run, RecordingType.Walk)) {
-                FilterPill(type?.let(SummaryModel::title) ?: "All", selected = f.type == type, horizontal = 20.dp) { onFilter(f.pick(type)) }
+                FilterPill(type?.let(SummaryModel::title) ?: "All", selected = f.type == type, horizontal = 20.dp, fontSize = 15) { onFilter(f.pick(type)) }
             }
         }
         if (model.showsTags) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                for (tag in RunTag.entries) FilterPill(tag.name, selected = f.tag == tag, horizontal = 14.dp) { onFilter(f.toggle(tag)) }
+                for (tag in RunTag.entries) FilterPill(tag.name, selected = f.tag == tag, horizontal = 14.dp, fontSize = 14) { onFilter(f.toggle(tag)) }
             }
         }
     }
@@ -109,9 +110,9 @@ private fun Filters(model: HistoryModel.Listed, onFilter: (HistoryFilter) -> Uni
 private val PillShape = RoundedCornerShape(22.dp)
 
 @Composable
-private fun FilterPill(text: String, selected: Boolean, horizontal: Dp, onClick: () -> Unit) {
-    val framed = if (selected) Modifier.background(Theme.text, PillShape) else Modifier.border(1.5.dp, Theme.ring, PillShape)
+private fun FilterPill(text: String, selected: Boolean, horizontal: Dp, fontSize: Int, onClick: () -> Unit) {
+    val framed = if (selected) Modifier.background(Theme.text, PillShape) else Modifier.border(1.5.dp, Theme.outline, PillShape)
     Box(framed.height(44.dp).clip(PillShape).clickable(onClick = onClick).padding(horizontal = horizontal), contentAlignment = Alignment.Center) {
-        Text(text, style = Type.statusLabel.copy(fontSize = 15.sp), color = if (selected) Theme.bg else Theme.text)
+        Text(text, style = Type.statusLabel.copy(fontSize = fontSize.sp), color = if (selected) Theme.bg else Theme.text)
     }
 }
