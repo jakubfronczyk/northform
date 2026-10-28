@@ -5,6 +5,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.sp
 
 /**
@@ -21,8 +22,18 @@ object Type {
     private fun number(size: Int, weight: FontWeight = FontWeight.Bold, family: FontFamily = Fonts.normal) =
         text(size, weight, family).copy(fontFeatureSettings = "tnum")
 
+    /** The artboards' `line-height: 1` on a big number: the line is the font size, trimmed, so a ring centres the digits. */
+    private fun TextStyle.tight() = copy(
+        lineHeight = fontSize,
+        lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
+    )
+
+    /** The countdown's "Put your phone in your pocket". */
+    val countdownHeadline = text(20, FontWeight.SemiBold)
+
     // Hoisted once: these sit on the 1 Hz live screen.
-    val countdown = number(160, FontWeight.Black, family = Fonts.narrowest)
+    /** The countdown's number inside its ring (`Countdown.dc.html`: 190 px, 800, 78 %, line-height 1). */
+    val countdown = number(190, FontWeight.ExtraBold, family = Fonts.narrowest).tight()
     val number54Black = number(54, FontWeight.Black, family = Fonts.narrowest)
     val number40 = number(40, family = Fonts.narrowest)
     val number24 = number(24, family = Fonts.condensed)

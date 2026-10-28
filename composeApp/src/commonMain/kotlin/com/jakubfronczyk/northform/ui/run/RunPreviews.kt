@@ -3,6 +3,7 @@ package com.jakubfronczyk.northform.ui.run
 import androidx.compose.runtime.Composable
 import com.jakubfronczyk.northform.engine.run.RunPhase
 import com.jakubfronczyk.northform.engine.run.RunSnapshot
+import com.jakubfronczyk.northform.core.RecordingType
 import com.jakubfronczyk.northform.core.RunTag
 import com.jakubfronczyk.northform.engine.run.SummaryEdits
 import com.jakubfronczyk.northform.engine.run.SummarySession
@@ -31,7 +32,9 @@ private fun previewGate(snapshot: RunSnapshot, sensor: GateSensor? = null) {
 @Preview @Composable fun GateNoSensorPreview() = previewGate(gate.copy(gpsLost = false), GateSensor(false, null, paired = true))
 @Preview @Composable fun GateLowBatteryPreview() = previewGate(gate.copy(hrLost = false, hrNow = 74, gpsLost = false), GateSensor(true, 14, paired = true, name = "Verity Sense"))
 @Preview @Composable fun GateNothingPairedPreview() = previewGate(gate.copy(gpsLost = false), GateSensor(false, null, paired = false))
-@Preview @Composable fun CountdownPreview() = previewRun(RunSnapshot(RunPhase.Countdown(Clock.System.now() + 4.seconds)))
+// Countdown (run-flow-artboards): the artboard's "3" for a run, and a walk's grey chip at the last second.
+@Preview @Composable fun CountdownPreview() = previewRun(RunSnapshot(RunPhase.Countdown(Clock.System.now() + 2.5.seconds)))
+@Preview @Composable fun CountdownWalkPreview() = previewRun(RunSnapshot(RunPhase.Countdown(Clock.System.now() + 0.5.seconds), type = RecordingType.Walk))
 @Preview @Composable fun ActivePreview() = previewRun(FakeRunSession.running)
 @Preview @Composable fun PausedPreview() = previewRun(FakeRunSession.running.copy(phase = RunPhase.Paused(Clock.System.now()), currentPace = null))
 /** Sensor dropped mid-run: HR now is "—", the averages so far stay (H1). */

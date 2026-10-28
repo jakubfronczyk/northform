@@ -27,6 +27,8 @@ object NfIcons {
     val forward = stroked(2.2f, "M9 5l7 7-7 7")
     /** A list row's smaller chevron (Today's Recent, History). */
     val rowChevron = stroked(2.2f, "M9 6l6 6-6 6")
+    /** The countdown's ✕ Cancel (`Countdown.dc.html`). */
+    val close = stroked(2.4f, "M6 6l12 12", "M18 6L6 18")
     /** The tick on the Gate's green disc. */
     val check = stroked(3f, "M5 12.5l4.5 4.5L19 7.5")
     /** The green tick beside "Allowed" and an OK fact (`SetupPermissions.dc.html`, `SetupPair.dc.html`). */

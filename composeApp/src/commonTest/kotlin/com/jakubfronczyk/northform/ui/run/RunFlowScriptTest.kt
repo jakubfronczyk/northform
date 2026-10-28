@@ -90,6 +90,25 @@ class RunFlowScriptTest {
         assertEquals(listOf(UserAction.Start, UserAction.Pause, UserAction.Resume, UserAction.Stop), fake.sent.map { it.first })
     }
 
+    /**
+     * run-flow-artboards: the countdown counts on the run's clock, and its ✕ is the flow's close (`onClose` →
+     * `AppModel.closeRun`), which sends nothing: the session ends with nothing recorded and is discarded (D116).
+     */
+    @Test
+    fun cancel_during_the_countdown_closes_the_flow_and_discards_the_run() = runTest {
+        val fake = ScriptedFakeRunSession(clock())
+        fake.tap(UserAction.Start)
+        advanceTimeBy(2_400); fake.advanceTo(fake.wallClock.now())
+        val phase = assertIs<RunPhase.Countdown>(fake.snapshots.value.phase)
+        val shown = CountdownModel.from(phase.endsAt, fake.wallClock.now(), fake.snapshots.value.type)
+        assertEquals("3", shown.number)
+        assertEquals(2, shown.litDots)
+        assertFalse(RunFlow.closesAt(fake.snapshots.value), "the flow closes on ✕, not by itself")
+
+        assertEquals(EndResult.Discarded, fake.end(), "✕ before the countdown ends records nothing")
+        assertEquals(listOf<UserAction>(UserAction.Start), fake.sent.map { it.first }, "✕ sends no action")
+    }
+
     @Test
     fun skip_cooldown_ends_the_run_at_once() = runTest {
         val fake = ScriptedFakeRunSession(clock())

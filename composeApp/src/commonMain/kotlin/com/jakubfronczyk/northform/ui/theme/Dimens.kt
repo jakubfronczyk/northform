@@ -78,4 +78,14 @@ object Dimens {
     val zoneColumn = 140.dp
     /** The zones step's BPM column (`… 96px`). */
     val bpmColumn = 96.dp
+
+    // The run flow's rings (`Countdown.dc.html`, `Cooldown.dc.html`): the box the ring sits in, its circle, its stroke.
+    /** The countdown ring's 300 dp box (the svg's size); the circle inside is [countdownRing]. */
+    val countdownRingBox = 300.dp
+    /** The countdown ring's circle: r 130, so 260 dp across the stroke's centre line. */
+    val countdownRing = 260.dp
+    /** The countdown ring's stroke. */
+    val countdownRingStroke = 10.dp
+    /** One of the countdown's five tick dots. */
+    val tickDot = 10.dp
 }
