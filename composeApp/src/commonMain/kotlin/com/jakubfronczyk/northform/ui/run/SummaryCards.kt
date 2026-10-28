@@ -25,8 +25,8 @@ import androidx.compose.ui.unit.dp
 import com.jakubfronczyk.northform.ui.theme.Theme
 import com.jakubfronczyk.northform.ui.theme.Type
 import com.jakubfronczyk.northform.ui.ValueCell
-import com.jakubfronczyk.northform.ui.theme.Shapes
 import com.jakubfronczyk.northform.ui.theme.Dimens
+import com.jakubfronczyk.northform.ui.theme.Shapes
 
 // The Summary's "Heart rate" card and "Splits" table (summary-screen/03), drawn from [SummaryModel] only.
 

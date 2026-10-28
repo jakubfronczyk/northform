@@ -38,10 +38,10 @@ import com.jakubfronczyk.northform.core.Profile
 import com.jakubfronczyk.northform.core.Sex
 import com.jakubfronczyk.northform.ui.ProfileForm.Field
 import kotlin.time.Instant
+import com.jakubfronczyk.northform.ui.theme.Dimens
+import com.jakubfronczyk.northform.ui.theme.Shapes
 import com.jakubfronczyk.northform.ui.theme.Theme
 import com.jakubfronczyk.northform.ui.theme.Type
-import com.jakubfronczyk.northform.ui.theme.Shapes
-import com.jakubfronczyk.northform.ui.theme.Dimens
 
 /**
  * The profile editor (`SetupProfile.dc.html` in its edit context, profile-settings/03): every field checked as typed

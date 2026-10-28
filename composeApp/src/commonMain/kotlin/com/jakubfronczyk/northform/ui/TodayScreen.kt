@@ -35,10 +35,10 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.jakubfronczyk.northform.core.RecordingId
 import com.jakubfronczyk.northform.core.RecordingType
+import com.jakubfronczyk.northform.ui.theme.Dimens
+import com.jakubfronczyk.northform.ui.theme.Shapes
 import com.jakubfronczyk.northform.ui.theme.Theme
 import com.jakubfronczyk.northform.ui.theme.Type
-import com.jakubfronczyk.northform.ui.theme.Shapes
-import com.jakubfronczyk.northform.ui.theme.Dimens
 
 /**
  * The Today artboard (`Today.dc.html`, today-screen spec): the date, the sensor card, the Run and Walk tiles, the

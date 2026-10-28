@@ -51,8 +51,8 @@ import com.jakubfronczyk.northform.ui.VDivider
 import com.jakubfronczyk.northform.ui.ValueCell
 import kotlinx.coroutines.delay
 import kotlin.time.Instant
-import com.jakubfronczyk.northform.ui.theme.Shapes
 import com.jakubfronczyk.northform.ui.theme.Dimens
+import com.jakubfronczyk.northform.ui.theme.Shapes
 
 /** The hold-to-stop duration (R27, `LiveRunView.swift:106`). */
 internal const val HOLD_TO_STOP_MS = 1500

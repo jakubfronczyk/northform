@@ -11,7 +11,8 @@ import androidx.compose.ui.unit.sp
  * names a role. Numbers use tabular digits so a changing value doesn't jitter.
  */
 object Type {
-    fun number(size: Int, weight: FontWeight = FontWeight.Bold) =
+    /** A tabular-digit style; private so every number size on screen is a named role below. */
+    private fun number(size: Int, weight: FontWeight = FontWeight.Bold) =
         TextStyle(fontSize = size.sp, fontWeight = weight, fontFeatureSettings = "tnum")
 
     // Hoisted once: these sit on the 1 Hz live screen.

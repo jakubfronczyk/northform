@@ -28,10 +28,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.jakubfronczyk.northform.ui.theme.Dimens
+import com.jakubfronczyk.northform.ui.theme.Shapes
 import com.jakubfronczyk.northform.ui.theme.Theme
 import com.jakubfronczyk.northform.ui.theme.Type
-import com.jakubfronczyk.northform.ui.theme.Shapes
-import com.jakubfronczyk.northform.ui.theme.Dimens
 
 /**
  * The Settings artboard (`Settings.dc.html`, profile-settings spec): the profile and heart rates, the zones bar, the

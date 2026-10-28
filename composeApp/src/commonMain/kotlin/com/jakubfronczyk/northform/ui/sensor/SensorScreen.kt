@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,11 +37,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jakubfronczyk.northform.core.DiscoveredSensor
 import com.jakubfronczyk.northform.ui.BigButton
 import com.jakubfronczyk.northform.ui.DashedLine
@@ -51,6 +47,8 @@ import com.jakubfronczyk.northform.ui.theme.Type
 import com.jakubfronczyk.northform.ui.VDivider
 import com.jakubfronczyk.northform.ui.ValueCell
 import com.jakubfronczyk.northform.ui.sensor.SensorScreenModel.Mode
+import com.jakubfronczyk.northform.ui.theme.Dimens
+import com.jakubfronczyk.northform.ui.theme.Shapes
 
 /**
  * The Sensor screen (SU10, D72), built from `design/canvas/project/Sensor.dc.html` and its
@@ -77,7 +75,7 @@ fun SensorScreenContent(
 ) {
     val look = Look.of(ui)
     Column(
-        Modifier.fillMaxSize().background(Theme.bg).padding(horizontal = 16.dp).padding(top = 64.dp, bottom = 50.dp),
+        Modifier.fillMaxSize().background(Theme.bg).padding(horizontal = Dimens.gutter).padding(top = Dimens.screenTop, bottom = Dimens.screenBottom),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Header(close)
@@ -134,14 +132,14 @@ private class Look(val ring: Color, val status: Color, val title: String, val su
 @Composable
 private fun Header(close: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(44.dp).clickable(onClick = close), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(Dimens.iconButton).clickable(onClick = close), contentAlignment = Alignment.Center) {
             Canvas(Modifier.size(22.dp)) {
                 val p = Path().apply { moveTo(size.width * 0.62f, size.height * 0.2f); lineTo(size.width * 0.33f, size.height * 0.5f); lineTo(size.width * 0.62f, size.height * 0.8f) }
                 drawPath(p, Theme.text, style = Stroke(2.4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
         }
         Spacer(Modifier.weight(1f))
-        Text("Sensor", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Theme.text)
+        Text("Sensor", style = Type.cardTitle, color = Theme.text)
         Spacer(Modifier.weight(1f))
         Spacer(Modifier.width(34.dp))
     }
@@ -153,9 +151,9 @@ private fun Hero(look: Look) {
         Box(Modifier.size(190.dp), contentAlignment = Alignment.Center) {
             Canvas(Modifier.size(190.dp)) {
                 val c = center
-                drawCircle(look.ring.copy(alpha = 0.18f), radius = 92.dp.toPx(), center = c, style = Stroke(2.dp.toPx()))
+                drawCircle(look.ring.copy(alpha = Theme.HALO_OUTER_ALPHA), radius = 92.dp.toPx(), center = c, style = Stroke(2.dp.toPx()))
                 drawCircle(
-                    look.ring.copy(alpha = 0.35f), radius = 72.dp.toPx(), center = c,
+                    look.ring.copy(alpha = Theme.HALO_INNER_ALPHA), radius = 72.dp.toPx(), center = c,
                     style = Stroke(2.dp.toPx(), pathEffect = look.dash?.let { PathEffect.dashPathEffect(floatArrayOf(it[0].dp.toPx(), it[1].dp.toPx())) }),
                 )
                 drawCircle(Theme.card, radius = 52.dp.toPx(), center = c)
@@ -163,7 +161,7 @@ private fun Hero(look: Look) {
                 sensorGlyph(look.ring, 46.dp.toPx(), 1.8.dp.toPx())
             }
         }
-        Text(look.title, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = look.status)
+        Text(look.title, style = Type.heroTitle, color = look.status)
         Text(look.sub, style = Type.secondaryText, color = Theme.text2, textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 300.dp))
     }
 }
@@ -184,13 +182,13 @@ private fun DrawScope.sensorGlyph(color: Color, side: Float, stroke: Float) {
 
 @Composable
 private fun Card(content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxWidth().background(Theme.card, RoundedCornerShape(22.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) { content() }
+    Column(Modifier.fillMaxWidth().background(Theme.card, Shapes.card).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) { content() }
 }
 
 @Composable
 private fun ConnectedCard(ui: SensorScreenModel.Ui) = Card {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-        Text(ui.paired?.displayName ?: "Polar sensor", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Theme.text)
+        Text(ui.paired?.displayName ?: "Polar sensor", style = Type.cardTitle, color = Theme.text)
         Spacer(Modifier.weight(1f))
         Text(ui.paired?.code ?: "", style = Type.tertiaryText, color = Theme.text3)
     }
@@ -199,7 +197,7 @@ private fun ConnectedCard(ui: SensorScreenModel.Ui) = Card {
             Text("Live heart rate", style = Type.rowLabel, color = Theme.text2)
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(ui.bpm?.toString() ?: "–", style = Type.number54Black, color = Theme.text)
-                Text(" bpm", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Theme.text2, modifier = Modifier.padding(bottom = 10.dp))
+                Text(" bpm", style = Type.liveUnit, color = Theme.text2, modifier = Modifier.padding(bottom = 10.dp))
             }
         }
         Spacer(Modifier.weight(1f))
@@ -226,7 +224,7 @@ private fun RowScope.Divider() = VDivider(Modifier.height(40.dp).align(Alignment
 
 @Composable
 private fun FirmwareWarning(version: String) {
-    Row(Modifier.fillMaxWidth().background(Theme.card, RoundedCornerShape(22.dp)).padding(horizontal = 16.dp, vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(Modifier.fillMaxWidth().background(Theme.card, Shapes.card).padding(horizontal = 16.dp, vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Canvas(Modifier.size(22.dp).padding(top = 1.dp)) {
             val tri = Path().apply { moveTo(size.width / 2, size.height * 0.12f); lineTo(size.width * 0.92f, size.height * 0.88f); lineTo(size.width * 0.08f, size.height * 0.88f); close() }
             drawPath(tri, Theme.warn, style = Stroke(2.dp.toPx(), join = StrokeJoin.Round))
@@ -234,7 +232,7 @@ private fun FirmwareWarning(version: String) {
             drawCircle(Theme.warn, 1.2.dp.toPx(), Offset(size.width / 2, size.height * 0.75f))
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Firmware $version is too old", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Theme.warn)
+            Text("Firmware $version is too old", style = Type.bodyBold, color = Theme.warn)
             Text("Live runs work. Recording without the phone needs 2.1.0. Update in Polar Flow.", style = Type.rowLabel, color = Theme.text2)
         }
     }
@@ -243,7 +241,7 @@ private fun FirmwareWarning(version: String) {
 @Composable
 private fun SearchingCard(code: String) = Card {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Looking for $code", style = Type.secondaryText.copy(fontWeight = FontWeight.Bold), color = Theme.text)
+        Text("Looking for $code", style = Type.secondaryBold, color = Theme.text)
         Text("Usually takes a few seconds. Keep the sensor close to the phone.", style = Type.rowLabel, color = Theme.text2)
     }
 }
@@ -252,7 +250,7 @@ private fun SearchingCard(code: String) = Card {
 @Composable
 private fun NearbyCard(nearby: List<DiscoveredSensor>, pair: (com.jakubfronczyk.northform.core.SensorId) -> Unit, scanning: Boolean) = Card {
     Column {
-        Text(if (scanning) "Scanning…" else "Found nearby", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Theme.text, modifier = Modifier.padding(bottom = 12.dp))
+        Text(if (scanning) "Scanning…" else "Found nearby", style = Type.secondaryStrong, color = Theme.text, modifier = Modifier.padding(bottom = 12.dp))
         if (nearby.isEmpty()) Text("Nothing yet. Press the sensor button until its light blinks.", style = Type.rowLabel, color = Theme.text2)
         for (d in nearby) {
             val info = PairedSensorInfo(d.id, d.name)
@@ -262,13 +260,13 @@ private fun NearbyCard(nearby: List<DiscoveredSensor>, pair: (com.jakubfronczyk.
                     Canvas(Modifier.size(20.dp)) { sensorGlyph(Theme.text2, 20.dp.toPx(), 1.6.dp.toPx()) }
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(info.displayName, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Theme.text)
+                    Text(info.displayName, style = Type.bodyStrong, color = Theme.text)
                     Text(nearbyDetail(info.code, d.rssi, scanning), style = Type.tertiaryText, color = Theme.text2)
                 }
                 Box(
-                    Modifier.height(44.dp).background(Theme.primary, RoundedCornerShape(12.dp)).clickable { pair(d.id) }.padding(horizontal = 18.dp),
+                    Modifier.height(Dimens.inlineButton).background(Theme.primary, Shapes.inlineButton).clickable { pair(d.id) }.padding(horizontal = 18.dp),
                     contentAlignment = Alignment.Center,
-                ) { Text("Pair", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White) }
+                ) { Text("Pair", style = Type.secondaryBold, color = Theme.onPrimary) }
             }
         }
     }
@@ -281,7 +279,7 @@ private fun PairedCard(paired: PairedSensorInfo, firmware: String?) = Card {
             Canvas(Modifier.size(20.dp)) { sensorGlyph(Theme.text2, 20.dp.toPx(), 1.6.dp.toPx()) }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(paired.displayName, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Theme.text)
+            Text(paired.displayName, style = Type.cardTitle, color = Theme.text)
             Text(listOfNotNull("Paired", paired.code, firmware?.let { "firmware $it" }).joinToString(" · "), style = Type.tertiaryText, color = Theme.text2)
         }
     }
@@ -291,7 +289,7 @@ private fun PairedCard(paired: PairedSensorInfo, firmware: String?) = Card {
 @Composable
 private fun TipsCard() = Card {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Try this", style = Type.secondaryText.copy(fontWeight = FontWeight.Bold), color = Theme.text)
+        Text("Try this", style = Type.secondaryBold, color = Theme.text)
         listOf(
             "Press the sensor button. A blinking light means it is on.",
             "Wear it on your arm. Off the skin it can go to sleep.",
@@ -309,7 +307,7 @@ private fun TipsCard() = Card {
 
 @Composable
 private fun FilledButton(title: String, action: () -> Unit, modifier: Modifier) =
-    BigButton(title, action, modifier, textColor = Color.White, contentPadding = 22.dp)
+    BigButton(title, action, modifier, textColor = Theme.onPrimary, contentPadding = 22.dp)
 
 @Composable
 private fun LightButton(title: String, action: () -> Unit, modifier: Modifier) =
@@ -317,9 +315,7 @@ private fun LightButton(title: String, action: () -> Unit, modifier: Modifier) =
 
 @Composable
 private fun OutlineButton(title: String, action: () -> Unit, modifier: Modifier) =
-    BigButton(title, action, modifier, fill = null, textStyle = OutlineLabel, contentPadding = 22.dp)
-
-private val OutlineLabel = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+    BigButton(title, action, modifier, fill = null, textStyle = Type.bodyStrong, contentPadding = 22.dp)
 
 /** A nearby row's second line: the advert's signal only while the scan runs (D34: a last-seen dBm is not current). */
 internal fun nearbyDetail(code: String, rssi: Int, scanning: Boolean): String = if (scanning) "$code · $rssi dBm" else code

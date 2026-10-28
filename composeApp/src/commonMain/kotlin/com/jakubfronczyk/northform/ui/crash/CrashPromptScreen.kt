@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,10 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jakubfronczyk.northform.core.RecordingState
 import com.jakubfronczyk.northform.engine.run.CrashChoice
 import com.jakubfronczyk.northform.engine.run.CrashFacts
@@ -45,6 +41,8 @@ import kotlinx.coroutines.delay
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
+import com.jakubfronczyk.northform.ui.theme.Dimens
+import com.jakubfronczyk.northform.ui.theme.Shapes
 
 /**
  * The R28 crash prompt (`design/canvas/project/CrashPrompt.dc.html`, `CrashPromptLate` = the same board
@@ -64,11 +62,11 @@ fun CrashPromptScreen(facts: CrashFacts, now: () -> Instant, onChoice: (CrashCho
     // A background alone has no pointer node, so hit-testing would fall through to the screen below. A no-op,
     // no-indication clickable is a hit target that yields to the sheet's own buttons (they consume the down first);
     // a pointerInput that consumed everything would instead cancel those buttons' taps in the Final pass.
-    Box(Modifier.fillMaxSize().background(Scrim).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}) {
+    Box(Modifier.fillMaxSize().background(Theme.scrimStrong).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}) {
         Column(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                .background(Theme.card, RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 50.dp),
+                .background(Theme.card, Shapes.sheet)
+                .padding(start = Dimens.gutter, end = Dimens.gutter, top = 24.dp, bottom = Dimens.screenBottom),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -76,7 +74,7 @@ fun CrashPromptScreen(facts: CrashFacts, now: () -> Instant, onChoice: (CrashCho
                     NfIcon(NfIcons.interrupted, Theme.warn, size = 18.dp)
                     Text("Interrupted $minutesAgo min ago · run started ${RunFormat.localTime(facts.startedAt, facts.tzOffset)}", style = Type.statusLabel, color = Theme.warn)
                 }
-                Text("Your run was interrupted", style = SheetHeadline, color = Theme.text)
+                Text("Your run was interrupted", style = Type.sheetHeadline, color = Theme.text)
                 Text(
                     if (facts.state == RecordingState.Active) "The app closed. This part is saved." else "The app closed after you stopped. This part is saved.",
                     style = Type.secondaryText, color = Theme.text2,
@@ -94,7 +92,7 @@ fun CrashPromptScreen(facts: CrashFacts, now: () -> Instant, onChoice: (CrashCho
             if (facts.state == RecordingState.Active) {
                 HorizontalDivider(color = Theme.line)
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Gap until now counts as sensor + GPS lost", style = GapTitle, color = Theme.text)
+                    Text("Gap until now counts as sensor + GPS lost", style = Type.secondaryStrong, color = Theme.text)
                     Text(
                         "${RunFormat.localTime(facts.savedUntil, facts.tzOffset)} to ${RunFormat.localTime(at, facts.tzOffset)} · total time keeps running",
                         style = Type.tertiaryText, color = Theme.text2,
@@ -109,8 +107,8 @@ fun CrashPromptScreen(facts: CrashFacts, now: () -> Instant, onChoice: (CrashCho
                     CrashChoice.Save -> ChoiceButton("Save and finish", main = prompt.main == choice, mainColors = Save) { onChoice(choice) }
                     CrashChoice.Delete -> Text(
                         if (confirmDelete) "Tap again to delete this run" else "Delete run",
-                        style = DeleteLabel, color = Danger,
-                        modifier = Modifier.fillMaxWidth().height(44.dp)
+                        style = Type.bodyStrong, color = Theme.danger,
+                        modifier = Modifier.fillMaxWidth().height(Dimens.textButton)
                             .clickable { if (confirmDelete) onChoice(choice) else confirmDelete = true }
                             .padding(top = 12.dp),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -133,13 +131,8 @@ private fun RowScope.Fact(label: String, value: String, unit: String? = null) =
 @Composable
 private fun FactDivider() = VDivider(Modifier.padding(end = 12.dp).height(40.dp))
 
-private val Scrim = Color(0xB8080809) // rgba(8,8,9,0.72)
-private val Danger = Color(0xFFFF6961)
 private val Continue = Theme.text to Theme.bg
-private val Save = Theme.primary to Color.White
-private val SheetHeadline = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Black)
-private val GapTitle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-private val DeleteLabel = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+private val Save = Theme.primary to Theme.onPrimary
 
 /**
  * The offered answers in the one order the screen draws them (D39: Garmin and Strava never swap buttons under the finger):

@@ -33,10 +33,10 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.unit.dp
 import com.jakubfronczyk.northform.core.Profile
+import com.jakubfronczyk.northform.ui.theme.Dimens
+import com.jakubfronczyk.northform.ui.theme.Shapes
 import com.jakubfronczyk.northform.ui.theme.Theme
 import com.jakubfronczyk.northform.ui.theme.Type
-import com.jakubfronczyk.northform.ui.theme.Shapes
-import com.jakubfronczyk.northform.ui.theme.Dimens
 
 /**
  * The zone editor (`ZoneEditor.dc.html`, profile-settings/04): each zone's start in % of heart-rate reserve with ±1

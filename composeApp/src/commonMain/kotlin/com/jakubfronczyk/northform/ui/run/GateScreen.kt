@@ -33,8 +33,8 @@ import com.jakubfronczyk.northform.ui.DashedLine
 import com.jakubfronczyk.northform.ui.theme.Theme
 import com.jakubfronczyk.northform.ui.theme.Type
 import com.jakubfronczyk.northform.ui.ValueCell
-import com.jakubfronczyk.northform.ui.theme.Shapes
 import com.jakubfronczyk.northform.ui.theme.Dimens
+import com.jakubfronczyk.northform.ui.theme.Shapes
 
 /**
  * The start gate (Gate artboard; R24, E1, E13; `RunView.swift:38` was the bare version): the map

@@ -41,8 +41,8 @@ import com.jakubfronczyk.northform.ui.BigButton
 import com.jakubfronczyk.northform.ui.theme.Theme
 import com.jakubfronczyk.northform.ui.theme.Type
 import com.jakubfronczyk.northform.ui.ValueCell
-import com.jakubfronczyk.northform.ui.theme.Shapes
 import com.jakubfronczyk.northform.ui.theme.Dimens
+import com.jakubfronczyk.northform.ui.theme.Shapes
 
 /**
  * The Summary (R27, `SummaryDark.dc.html`, `SummaryWalk` = the same board for a walk): draws one
