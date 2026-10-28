@@ -20,8 +20,8 @@ class SettingsModelTest {
 
     private fun model(
         profile: Profile = this.profile, sensor: PairedSensorInfo? = verity, battery: Int? = 82, firmware: String? = "2.2.1",
-        export: ExportState = ExportState.Idle,
-    ) = SettingsModel.from(profile, now, 7200, sensor, battery, firmware, export, version = "Version 1.0 (14)")
+        export: ExportState = ExportState.Idle, connected: Boolean = true,
+    ) = SettingsModel.from(profile, now, 7200, sensor, connected, battery, firmware, export, version = "Version 1.0 (14)")
 
     @Test
     fun the_profile_and_heart_rate_rows_read_as_on_the_artboard() {
@@ -80,7 +80,14 @@ class SettingsModelTest {
 
     @Test
     fun a_failed_profile_save_shows_under_the_profile() {
-        assertEquals("Couldn't save your profile: disk full", SettingsModel.from(profile, now, 7200, null, null, null, ExportState.Idle, "v", profileSaveError = "disk full").profileError)
+        assertEquals("Couldn't save your profile: disk full", SettingsModel.from(profile, now, 7200, null, false, null, null, ExportState.Idle, "v", profileSaveError = "disk full").profileError)
         assertNull(model().profileError)
+    }
+
+    /** The sensor card says whether the paired sensor is connected now, as Today's card does. */
+    @Test
+    fun the_sensor_card_says_whether_it_is_connected() {
+        assertEquals(SettingsModel.Status("Connected", ok = true), model().sensor!!.status)
+        assertEquals(SettingsModel.Status("Not connected", ok = false), model(connected = false, battery = null).sensor!!.status)
     }
 }

@@ -267,7 +267,7 @@ object NorthformApp {
             history = { filter -> HistoryModel.from(saved, filter, deps.wallClock.now()) },
             retryHistory = model::refreshSaved,
             openRecording = model::openRecording,
-            settings = SettingsModel.from(profile, deps.wallClock.now(), deps.tzOffset(), paired, gateSensor?.batteryPercent, firmware, export, appVersion(), profileSaveError),
+            settings = SettingsModel.from(profile, deps.wallClock.now(), deps.tzOffset(), paired, gateSensor?.connected == true, gateSensor?.batteryPercent, firmware, export, appVersion(), profileSaveError),
             exportBackup = model::exportBackup,
             needsSetup = needsSetup,
             setup = { finish -> Setup(if (needsSetup == true) null else profile, finish) },
